@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test";
 import { extractTikTokGiftData } from "../../../src/utils/tiktok-data-extraction";
-import testClock from "../../helpers/test-clock";
 describe("TikTok Gift Count Field Normalization", () => {
   describe("Real TikTok API Gift Events", () => {
     it("should extract count from repeatCount for standard single gift", () => {
@@ -193,7 +192,7 @@ describe("TikTok Gift Count Field Normalization", () => {
     });
   });
 
-  describe("Performance and Data Types", () => {
+  describe("Repeated extraction and data types", () => {
     it("normalizes numeric-string repeatCount without consulting other count fields", () => {
       const stringCountEvent = {
         giftDetails: { giftName: "Gift", diamondCount: 1, giftType: 0 },
@@ -204,23 +203,19 @@ describe("TikTok Gift Count Field Normalization", () => {
       expect(extractTikTokGiftData(stringCountEvent)).toMatchObject({ giftCount: 5, amount: 5 });
     });
 
-    it("should complete extraction in under 5ms", () => {
+    it("preserves exact gift values across repeated extraction without mutating the payload", () => {
       const event = {
         giftDetails: { giftName: "Rose", diamondCount: 1, giftType: 0 },
         repeatCount: 10,
         repeatEnd: 1,
       };
 
-      const startTime = testClock.now();
-      for (let i = 0; i < 1000; i++) {
-        extractTikTokGiftData(event);
+      const original = structuredClone(event);
+      for (let index = 0; index < 2; index++) {
+        expect(extractTikTokGiftData(event)).toMatchObject({ giftType: "Rose", giftCount: 10,
+          amount: 10, unitAmount: 1, currency: "coins", repeatEnd: true });
       }
-      const simulatedDurationMs = 5;
-      testClock.advance(simulatedDurationMs);
-      const endTime = testClock.now();
-      const avgTime = (endTime - startTime) / 1000;
-
-      expect(avgTime).toBeLessThan(0.01);
+      expect(event).toEqual(original);
     });
   });
 });

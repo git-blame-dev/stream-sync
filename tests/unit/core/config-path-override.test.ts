@@ -73,7 +73,7 @@ function buildMinimalConfig(
       innertubeInstanceTtlMs: "60000",
       innertubeMinTtlMs: "30000",
       userAgents: "smoke-agent",
-      streamDetectionMethod: "api",
+      streamDetectionMethod: "youtubei",
     },
     handcam: {
       enabled: "false",

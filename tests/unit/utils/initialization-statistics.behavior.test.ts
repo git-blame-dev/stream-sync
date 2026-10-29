@@ -1,11 +1,31 @@
-import { describe, expect, it, afterEach } from "bun:test";
+import { describe, expect, it, afterEach, beforeEach, spyOn } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import testClock from "../../helpers/test-clock";
 import { InitializationStatistics } from "../../../src/utils/initialization-statistics.ts";
 describe("InitializationStatistics behavior", () => {
+  beforeEach(() => {
+    spyOn(performance, 'now').mockImplementation(() => testClock.now());
+  });
   afterEach(() => {
     restoreAllMocks();
+  });
+
+  it('keeps elapsed and success age monotonic while retaining stepped wall timestamps', () => {
+    let elapsed = 10;
+    spyOn(performance, 'now').mockImplementation(() => elapsed);
+    const stats = new InitializationStatistics('synthetic-clock', noOpLogger);
+    testClock.set(1000);
+    const attempt = stats.startInitializationAttempt();
+    testClock.set(500);
+    elapsed = 35;
+    stats.recordSuccess(attempt);
+    elapsed = 45;
+    testClock.set(100);
+    expect(stats.getTimingHistory()).toMatchObject([{ startTime: 1000, endTime: 500, duration: 25 }]);
+    expect(stats.getStatistics()).toMatchObject({ averageInitializationTime: 25, lastSuccessTime: 500, timeSinceLastSuccess: 10 });
+    stats.reset();
+    expect(stats.getStatistics().timeSinceLastSuccess).toBeNull();
   });
 
   it("tracks successful initialization timing and metrics", () => {

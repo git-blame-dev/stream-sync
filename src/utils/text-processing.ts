@@ -1,3 +1,4 @@
+import { formatTimestampCompact } from './timestamp';
 import { formatUsername12 } from './validation';
 import { resolveLogger } from './logger-resolver';
 
@@ -436,18 +437,6 @@ function createTextProcessingManager(dependencies?: { logger?: unknown }): TextP
     return new TextProcessingManager(dependencies);
 }
 
-function formatTimestampCompact(ts: Date | string | number): string {
-    const date = new Date(ts);
-    if (Number.isNaN(date.getTime())) {
-        return '00:00:00';
-    }
-
-    const pad = (value: number) => value.toString().padStart(2, '0');
-    const hours = pad(date.getUTCHours());
-    const minutes = pad(date.getUTCMinutes());
-    const seconds = pad(date.getUTCSeconds());
-    return `${hours}:${minutes}:${seconds}`;
-}
 
 export {
     TextProcessingManager,

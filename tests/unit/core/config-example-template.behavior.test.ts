@@ -1,10 +1,13 @@
 import { describe, it, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import ini from "ini";
 
 import { DEFAULTS } from "../../../src/core/config-schema";
+import { loadConfig, _resetConfigForTesting } from "../../../src/core/config";
+import { buildLoggingConfig } from "../../../src/core/config-builders";
 import { ConfigValidator } from "../../../src/utils/config-validator";
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -29,7 +32,7 @@ describe("config example template behavior", () => {
     );
 
     const normalized = ConfigValidator.normalize({ gui: guiConfig });
-    expect(normalized.gui).toEqual(DEFAULTS.gui);
+    expect<unknown>(normalized.gui).toEqual(DEFAULTS.gui);
   });
 
   it("defines display queue section with schema-aligned defaults", () => {
@@ -71,6 +74,10 @@ describe("config example template behavior", () => {
     expect(normalized.http.enhancedTimeoutMs).toBe(6000);
     expect(normalized.http.enhancedTimeoutMs).toBe(DEFAULTS.http.enhancedTimeoutMs);
     expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
+    expect(normalized.logging.consoleLevel).toBe("warn");
+    expect(buildLoggingConfig(normalized).console.level).toBe("warn");
+    expect(buildLoggingConfig(normalized, { debugMode: true }).console.level).toBe("debug");
+    expect(buildLoggingConfig(ConfigValidator.normalize({ ...readConfigExample(), logging: { consoleLevel: "invalid" } })).console.level).toBe("warn");
   });
 
   it("defines exactly the approved monetization values in the example", () => {
@@ -80,4 +87,36 @@ describe("config example template behavior", () => {
       "twitchMembershipUsd", "youtubeJewelUsd", "youtubeMembershipUsd",
     ].sort());
   });
+});
+
+
+describe("YouTube supported configuration", () => {
+  for (const setting of ["enableAPI = true", "streamDetectionMethod = api", "viewerCountMethod = api"]) {
+    it(`rejects unsupported ${setting} from parsed INI`, () => {
+      const raw = readConfigExample();
+      raw.youtube = { ...raw.youtube, ...ini.parse(`[youtube]\n${setting}`).youtube };
+      expect(() => ConfigValidator.normalize(raw)).toThrow(/YouTube Data API.*not supported.*youtubei/);
+      const validation = ConfigValidator.validate(raw);
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.join(" ")).toMatch(/YouTube Data API.*not supported.*youtubei/);
+
+      const previousPath = process.env.CHAT_BOT_CONFIG_PATH;
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stream-sync-youtube-capability-"));
+      try {
+        raw.general.envFileReadEnabled = false;
+        raw.general.envFileWriteEnabled = false;
+        raw.logging.fileLoggingEnabled = false;
+        const configPath = path.join(directory, "synthetic.ini");
+        fs.writeFileSync(configPath, ini.stringify(raw));
+        process.env.CHAT_BOT_CONFIG_PATH = configPath;
+        _resetConfigForTesting();
+        expect(() => loadConfig()).toThrow(/YouTube Data API.*not supported.*youtubei/);
+      } finally {
+        if (previousPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
+        else process.env.CHAT_BOT_CONFIG_PATH = previousPath;
+        _resetConfigForTesting();
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  }
 });

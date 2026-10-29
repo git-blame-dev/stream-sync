@@ -3,7 +3,7 @@ import { shouldLogAtThreshold } from './logger/levels';
 import type { AppLogger, LogLevel, LogThreshold } from './logger/types';
 import { safeObjectStringify, sanitizeLogData, sanitizeLogText } from './logger/safe-log-serializer';
 import { LineFileAppender } from '../utils/line-file-appender';
-import { formatTimestampCompact } from '../utils/text-processing';
+import { formatTimestampCompact } from '../utils/timestamp';
 import {
     createOperatorLogSource,
     type JsonLogValue,

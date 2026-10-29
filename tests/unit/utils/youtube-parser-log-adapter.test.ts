@@ -194,7 +194,7 @@ describe("youtube parser log adapter", () => {
       if (unhandled) throw new Error('unhandled rejection escaped');
       if (collectParserWarningsDuring(() => 'test-sync-result').result !== 'test-sync-result') throw new Error('collector scope leaked');
     `;
-    const child = spawnSync(process.execPath, ["--eval", script], { encoding: "utf8", timeout: 10000 });
+    const child = spawnSync(process.execPath, ["--no-env-file", "--eval", script], { env: { PATH: process.env.PATH, NODE_ENV: "test", CHAT_BOT_CONFIG_PATH: process.env.CHAT_BOT_CONFIG_PATH }, encoding: "utf8", timeout: 10000 });
     expect(child.status).toBe(0);
     expect(child.stderr).toBe("");
   });

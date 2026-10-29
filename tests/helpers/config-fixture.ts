@@ -112,6 +112,8 @@ type ConfigFixtureOverrides = Partial<{
 const RAW_TEST_CONFIG = {
     general: {
         debugEnabled: 'false',
+        envFileReadEnabled: 'false',
+        envFileWriteEnabled: 'false',
         viewerCountPollingInterval: '60',
         maxMessageLength: '500'
     },
@@ -254,24 +256,24 @@ function createYouTubeConfigFixture(overrides: ConfigSectionFixture = {}) {
     };
 }
 
-function applyInheritableOverrides(
+function applyInheritableOverrides<P extends ConfigSectionFixture>(
     generalOverrides: ConfigFixtureOverrides['general'] | undefined,
-    platformConfig: TestConfigFixture['tiktok'],
+    platformConfig: P,
     platformOverrides: ConfigFixtureOverrides['tiktok'] | undefined
-): TestConfigFixture['tiktok'] {
+): P {
     if (!generalOverrides) return { ...platformConfig, ...platformOverrides };
     
     const inheritableFlags = Object.keys(ConfigValidator._parseInheritableFlags({}));
-    const propagated: ConfigSectionFixture = { ...platformConfig };
+    const propagated = { ...platformConfig };
     
     for (const flag of inheritableFlags) {
         if (generalOverrides[flag] !== undefined) {
-            propagated[flag] = generalOverrides[flag];
+            Object.assign(propagated, { [flag]: generalOverrides[flag] });
         }
     }
 
     if (Object.prototype.hasOwnProperty.call(platformConfig, 'sharesEnabled') && generalOverrides.sharesEnabled !== undefined) {
-        propagated.sharesEnabled = generalOverrides.sharesEnabled;
+        Object.assign(propagated, { sharesEnabled: generalOverrides.sharesEnabled });
     }
     
     return { ...propagated, ...platformOverrides };

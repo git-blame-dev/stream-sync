@@ -1,3 +1,4 @@
+import { utf16BudgetPrefix } from './utf16-budget-prefix';
 import { config } from '../core/config';
 import { DEFAULTS } from '../core/config-schema';
 
@@ -91,12 +92,11 @@ function sanitizeForDisplay(text: unknown, maxLength = 200): string {
         return '';
     }
     
-    return text
+    return utf16BudgetPrefix(text
         .replace(REGEX_PATTERNS.HTML_TAGS, '')
         .replace(REGEX_PATTERNS.JAVASCRIPT_URLS, '')
         .replace(REGEX_PATTERNS.WHITESPACE_NORMALIZE, ' ')
-        .trim()
-        .substring(0, maxLength);
+        .trim(), maxLength);
 }
 
 export {

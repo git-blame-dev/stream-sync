@@ -146,5 +146,18 @@ function parseTimestampISO(value: unknown, options: TimestampParseOptions = {}):
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+function formatTimestampCompact(ts: Date | string | number): string {
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) {
+        return '00:00:00';
+    }
+
+    const pad = (value: number) => value.toString().padStart(2, '0');
+    const hours = pad(date.getUTCHours());
+    const minutes = pad(date.getUTCMinutes());
+    const seconds = pad(date.getUTCSeconds());
+    return `${hours}:${minutes}:${seconds}`;
+}
+
 export type { TimestampNumericUnit, TimestampParseOptions };
-export { isIsoTimestamp, getSystemTimestampISO, parseTimestampMs, parseTimestampISO };
+export { formatTimestampCompact, isIsoTimestamp, getSystemTimestampISO, parseTimestampMs, parseTimestampISO };

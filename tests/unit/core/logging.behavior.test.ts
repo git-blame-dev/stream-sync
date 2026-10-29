@@ -36,6 +36,34 @@ describe('core/logging behavior', () => {
         expect(logging.getOperatorLogSource()).toBeNull();
     });
 
+    it('removes punctuation-bearing URL credentials before console and operator publication', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const capture = captureStdout();
+        try {
+            logging.getUnifiedLogger().info('failed https://example.invalid/?opaque=synthetic-prefix,synthetic-tail',
+                'https://synthetic-user:synthetic-password,synthetic-tail@example.invalid/',
+                { message: 'wss://example.invalid/ws#synthetic-fragment,synthetic-tail' });
+            const entry = logging.getOperatorLogSource()?.history().entries.at(-1);
+            expect(JSON.stringify(entry)).not.toContain('synthetic-');
+            expect(capture.output.join('')).not.toContain('synthetic-');
+            logging.getUnifiedLogger().info(JSON.stringify({
+                url: 'ht\ttps://example.invalid/?opaque=synthetic-whitespace', diagnostic: 'scope missing',
+            }));
+            expect(JSON.stringify(logging.getOperatorLogSource()?.history().entries.at(-1))).not.toContain('synthetic-');
+            expect(capture.output.join('')).not.toContain('synthetic-');
+            expect(entry?.message).toContain('failed https://example.invalid/');
+            logging.getUnifiedLogger().info(JSON.stringify({
+                url: 'https://example.invalid/?opaque=synthetic-escaped', diagnostic: 'scope missing',
+            }).replace(/\//g, '\\/'));
+            const encodedEntry = logging.getOperatorLogSource()?.history().entries.at(-1);
+            expect(JSON.stringify(encodedEntry)).not.toContain('synthetic-');
+            expect(JSON.parse(encodedEntry?.message ?? '{}').diagnostic).toBe('scope missing');
+            expect(capture.output.join('')).not.toContain('synthetic-');
+        } finally {
+            capture.restore();
+        }
+    });
+
     it('retains sanitized console-visible entries in the operator source', () => {
         logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
         const stdoutCapture = captureStdout();

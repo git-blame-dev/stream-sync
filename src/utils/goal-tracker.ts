@@ -166,9 +166,15 @@ class GoalTracker {
             }
 
             const oldCurrent = this.goalState[platformKey].current;
-            this.goalState[platformKey].current += contributionAmount;
+            const newCurrent = oldCurrent + contributionAmount;
+            if (!Number.isFinite(newCurrent)) {
+                return {
+                    success: false,
+                    error: 'Donation would exceed the finite goal balance range'
+                };
+            }
+            this.goalState[platformKey].current = newCurrent;
 
-            const newCurrent = this.goalState[platformKey].current;
             const target = this.goalState[platformKey].target;
             const displayCurrency = this.goalState[platformKey].currency;
 

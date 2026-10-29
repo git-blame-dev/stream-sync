@@ -1,13 +1,11 @@
 import { DEFAULTS } from './config-schema';
+import type { NormalizedConfig } from './types/config-types';
+import type { LogThreshold } from './logger/types';
 import { isLogThreshold } from './logger/levels';
 
-type NormalizedConfig = Record<string, Record<string, unknown>>;
-type GenericRecord = Record<string, unknown>;
-type PlatformConfigRecord = Record<string, unknown>;
-
 const DEFAULT_LOGGING_CONFIG = {
-    console: { enabled: true, level: 'warn' },
-    file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
+    console: { enabled: true, level: 'warn' as LogThreshold },
+    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY },
     platforms: {
         twitch: { enabled: true, fileLogging: true },
         youtube: { enabled: true, fileLogging: true },
@@ -16,16 +14,10 @@ const DEFAULT_LOGGING_CONFIG = {
     chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
 };
 
-function buildLoggingConfig(normalized: NormalizedConfig, options: { debugMode?: boolean } = {}) {
+function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
     const config = structuredClone(DEFAULT_LOGGING_CONFIG);
-    const logging = (normalized.logging || {}) as {
-        consoleLevel?: string;
-        fileLevel?: string;
-        fileLoggingEnabled?: boolean | null;
-    };
-    const general = (normalized.general || {}) as {
-        debugEnabled?: boolean;
-    };
+    const logging = normalized.logging || {};
+    const general = normalized.general || {};
 
     if (isLogThreshold(logging.consoleLevel)) {
         config.console.level = logging.consoleLevel;
@@ -49,58 +41,42 @@ function buildLoggingConfig(normalized: NormalizedConfig, options: { debugMode?:
     return config;
 }
 
-function buildGeneralConfig(normalized: NormalizedConfig): GenericRecord {
-    const g = normalized.general as GenericRecord & {
-        viewerCountPollingInterval: number;
-    };
-
-    return {
-        ...g,
-        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
-    };
+function buildGeneralConfig<G extends { viewerCountPollingInterval: number }>(normalized: { general: G }) {
+    const g = normalized.general;
+    return { ...g, viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000 };
 }
 
-function buildPlatformConfig(platformName: string, normalized: NormalizedConfig, generalConfig: GenericRecord): PlatformConfigRecord {
-    const platform = (normalized[platformName] || {}) as PlatformConfigRecord & {
-        pollInterval?: number;
-    };
-    const generalViewerPollMs = generalConfig.viewerCountPollingIntervalMs as number;
+type PlatformName = 'tiktok' | 'twitch' | 'youtube';
+type InheritedPlatform<P, G> = {
+    [K in keyof P]: null extends P[K] ? K extends keyof G ? Exclude<P[K], null> | G[K] : P[K] : P[K]
+};
 
-    const result: PlatformConfigRecord = {
+function buildPlatformConfig<P extends PlatformName, N extends Partial<Record<P, { pollInterval?: number | null; [key: string]: unknown }>>, G extends { viewerCountPollingIntervalMs: number }>(platformName: P, normalized: N, generalConfig: G) {
+    const platform = normalized[platformName];
+    const result = {
         ...platform,
-        pollIntervalMs: platform.pollInterval == null ? generalViewerPollMs : platform.pollInterval * 1000,
+        pollIntervalMs: platform?.pollInterval == null ? generalConfig.viewerCountPollingIntervalMs : platform.pollInterval * 1000,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };
-
-    for (const [key, value] of Object.entries(result)) {
-        if (value === null && generalConfig[key] !== undefined) {
-            result[key] = generalConfig[key];
-        }
+    // Only null fields inherit; explicit false and zero are retained.
+    const fields: Record<string, unknown> = result;
+    const general: Record<string, unknown> = generalConfig;
+    for (const [key, value] of Object.entries(fields)) {
+        if (value === null && general[key] !== undefined) fields[key] = general[key];
     }
-
-    return result;
+    return result as InheritedPlatform<NonNullable<N[P]>, G> & { pollIntervalMs: number; dataLoggingPath: string };
 }
 
-function buildYoutubeConfig(normalized: NormalizedConfig, generalConfig: GenericRecord): PlatformConfigRecord {
+function buildYoutubeConfig(normalized: NormalizedConfig, generalConfig: ReturnType<typeof buildGeneralConfig<NormalizedConfig['general']>>) {
     return buildPlatformConfig('youtube', normalized, generalConfig);
 }
 
-function buildObsConfig(normalized: NormalizedConfig): GenericRecord {
+function buildObsConfig<O extends object>(normalized: { obs: O }) {
     return { ...normalized.obs };
 }
 
-function buildHandcamConfig(normalized: NormalizedConfig): GenericRecord {
-    const h = normalized.handcam as GenericRecord & {
-        enabled: boolean;
-        sourceName: string;
-        glowFilterName: string;
-        maxSize: number;
-        rampUpDuration: number;
-        holdDuration: number;
-        rampDownDuration: number;
-        totalSteps: number;
-        easingEnabled: boolean;
-    };
+function buildHandcamConfig(normalized: Pick<NormalizedConfig, 'handcam'>) {
+    const h = normalized.handcam;
 
     return {
         enabled: h.enabled,
@@ -115,17 +91,13 @@ function buildHandcamConfig(normalized: NormalizedConfig): GenericRecord {
     };
 }
 
-function buildVfxConfig(normalized: NormalizedConfig): { filePath: unknown } {
-    const vfx = normalized.vfx as { filePath: unknown };
+function buildVfxConfig(normalized: Pick<NormalizedConfig, 'vfx'>) {
+    const vfx = normalized.vfx;
     return { filePath: vfx.filePath };
 }
 
-function buildGiftConfig(normalized: NormalizedConfig): GenericRecord {
-    const gifts = normalized.gifts as GenericRecord & {
-        command: string;
-        giftVideoSource: string;
-        giftAudioSource: string;
-    };
+function buildGiftConfig(normalized: Pick<NormalizedConfig, 'gifts'>) {
+    const gifts = normalized.gifts;
 
     return {
         command: gifts.command,
@@ -134,18 +106,13 @@ function buildGiftConfig(normalized: NormalizedConfig): GenericRecord {
     };
 }
 
-function buildEnvelopeConfig(normalized: NormalizedConfig): { command: unknown } {
-    const envelopes = normalized.envelopes as { command: unknown };
+function buildEnvelopeConfig(normalized: Pick<NormalizedConfig, 'envelopes'>) {
+    const envelopes = normalized.envelopes;
     return { command: envelopes.command };
 }
 
-function buildStreamElementsConfig(normalized: NormalizedConfig): GenericRecord {
-    const se = normalized.streamelements as GenericRecord & {
-        enabled: boolean;
-        youtubeChannelId: string;
-        twitchChannelId: string;
-        dataLoggingEnabled: boolean;
-    };
+function buildStreamElementsConfig(normalized: Pick<NormalizedConfig, 'streamelements'>) {
+    const se = normalized.streamelements;
 
     return {
         enabled: se.enabled,
@@ -156,19 +123,8 @@ function buildStreamElementsConfig(normalized: NormalizedConfig): GenericRecord 
     };
 }
 
-function buildSpamConfig(normalized: NormalizedConfig): GenericRecord {
-    const s = normalized.spam as GenericRecord & {
-        enabled: boolean;
-        lowValueThreshold: number;
-        detectionWindow: number;
-        maxIndividualNotifications: number;
-        tiktokEnabled: boolean;
-        tiktokLowValueThreshold: number;
-        twitchEnabled: boolean;
-        twitchLowValueThreshold: number;
-        youtubeEnabled: boolean;
-        youtubeLowValueThreshold: number;
-    };
+function buildSpamConfig(normalized: Pick<NormalizedConfig, 'spam'>) {
+    const s = normalized.spam;
 
     return {
         enabled: s.enabled,
@@ -184,16 +140,8 @@ function buildSpamConfig(normalized: NormalizedConfig): GenericRecord {
     };
 }
 
-function buildCooldownsConfig(normalized: NormalizedConfig): GenericRecord {
-    const c = normalized.cooldowns as GenericRecord & {
-        cmdCooldown: number;
-        globalCmdCooldown: number;
-        defaultCooldown: number;
-        heavyCommandCooldown: number;
-        heavyCommandThreshold: number;
-        heavyCommandWindow: number;
-        maxEntries: number;
-    };
+function buildCooldownsConfig(normalized: Pick<NormalizedConfig, 'cooldowns'>) {
+    const c = normalized.cooldowns;
 
     return {
         cmdCooldown: c.cmdCooldown,
@@ -213,11 +161,11 @@ function buildCooldownsConfig(normalized: NormalizedConfig): GenericRecord {
 
 function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolean } = {}) {
     const general = buildGeneralConfig(normalized);
-    const follows = normalized.follows as { command: unknown };
-    const raids = normalized.raids as { command: unknown };
-    const paypiggies = normalized.paypiggies as { command: unknown };
-    const greetings = normalized.greetings as GenericRecord & { command: unknown };
-    const shares = normalized.shares as { command: unknown };
+    const follows = normalized.follows;
+    const raids = normalized.raids;
+    const paypiggies = normalized.paypiggies;
+    const greetings = normalized.greetings;
+    const shares = normalized.shares;
 
     return {
         general,

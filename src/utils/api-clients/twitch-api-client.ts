@@ -4,6 +4,7 @@ import { createEnhancedHttpClient } from '../enhanced-http-client';
 import { createHttpRetryExecutor, type RetryExecutor } from '../http-retry-executor';
 import { createPlatformErrorHandler } from '../platform-error-handler';
 import { parseNotificationCount } from '../notification-count';
+import { withOperationDeadline } from '../timeout-wrapper';
 
 type LoggerLike = {
     debug: (message: string, scope?: string, payload?: unknown) => void;
@@ -13,7 +14,7 @@ type LoggerLike = {
 };
 
 type TwitchAuthLike = {
-    refreshTokens: () => Promise<boolean>;
+    refreshTokens: (signal?: AbortSignal) => Promise<boolean>;
 };
 
 type TwitchApiClientConfig = {
@@ -24,6 +25,9 @@ type TwitchApiClientConfig = {
 
 type RequestOptions = {
     headers?: Record<string, string>;
+    signal?: AbortSignal;
+    parentAbortSignal?: AbortSignal;
+    overallBudgetMs?: number;
     [key: string]: unknown;
 };
 
@@ -85,62 +89,73 @@ class TwitchApiClient {
     }
 
     async makeRequest(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
-        const url = `${this.baseUrl}${endpoint}`;
+        const parentSignal = options.signal && options.parentAbortSignal
+            ? AbortSignal.any([options.signal, options.parentAbortSignal])
+            : options.signal ?? options.parentAbortSignal;
+        return withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
+            const url = `${this.baseUrl}${endpoint}`;
 
-        const executeRequest = async (disableRetry = false) => {
-            const accessToken = secrets.twitch.accessToken;
-            if (!accessToken) {
-                throw new Error('No access token available for Twitch API');
-            }
+            const executeRequest = async (disableRetry = false) => {
+                signal.throwIfAborted();
+                const accessToken = secrets.twitch.accessToken;
+                if (!accessToken) {
+                    throw new Error('No access token available for Twitch API');
+                }
 
-            const requestOptions = {
-                ...options,
-                auth: null,
-                headers: {
-                    ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) =>
-                        !['authorization', 'client-id'].includes(name.toLowerCase()))),
-                    'Authorization': `Bearer ${accessToken}`,
-                    ...(typeof this.config.clientId === 'string' ? { 'Client-Id': this.config.clientId } : {}),
-                },
-                authToken: accessToken,
-                authType: 'app',
-                clientId: typeof this.config.clientId === 'string' ? this.config.clientId : undefined
+                const requestOptions = {
+                    ...options,
+                    signal,
+                    parentAbortSignal: signal,
+                    ...(options.overallBudgetMs === undefined ? {} : { overallBudgetMs: remainingBudgetMs() }),
+                    auth: null,
+                    headers: {
+                        ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) =>
+                            !['authorization', 'client-id'].includes(name.toLowerCase()))),
+                        'Authorization': `Bearer ${accessToken}`,
+                        ...(typeof this.config.clientId === 'string' ? { 'Client-Id': this.config.clientId } : {}),
+                    },
+                    authToken: accessToken,
+                    authType: 'app',
+                    clientId: typeof this.config.clientId === 'string' ? this.config.clientId : undefined
+                };
+
+                return this.httpClient.get(url, {
+                    ...requestOptions,
+                    ...(disableRetry ? { disableRetry: true } : {})
+                });
             };
 
-            return this.httpClient.get(url, {
-                ...requestOptions,
-                ...(disableRetry ? { disableRetry: true } : {})
-            });
-        };
+            this.logger.debug('Making Twitch API request', 'twitch-api');
 
-        this.logger.debug('Making Twitch API request', 'twitch-api');
-
-        try {
-            const response = await executeRequest();
-            this.logger.debug(`Twitch API response received`, 'twitch-api');
-            return response.data;
-        } catch (error) {
-            const isAuthError = getResponseStatus(error) === 401;
-            if (!isAuthError || !this.twitchAuth) {
-                throw error;
-            }
-
-            this.logger.info('Received 401 from Twitch API, refreshing token and retrying once', 'twitch-api');
             try {
-                const refreshed = await this.twitchAuth.refreshTokens();
-                if (!refreshed) {
+                const response = await executeRequest();
+                this.logger.debug(`Twitch API response received`, 'twitch-api');
+                return response.data;
+            } catch (error) {
+                signal.throwIfAborted();
+                const isAuthError = getResponseStatus(error) === 401;
+                if (!isAuthError || !this.twitchAuth) {
                     throw error;
                 }
-                const retryResponse = await executeRequest(true);
-                this.logger.debug('Twitch API retry after refresh succeeded', 'twitch-api');
-                return retryResponse.data;
-            } catch (retryError) {
-                this.logger.warn('Twitch API retry after refresh failed', 'twitch-api', {
-                    status: getResponseStatus(retryError)
-                });
-                throw retryError;
+
+                this.logger.info('Received 401 from Twitch API, refreshing token and retrying once', 'twitch-api');
+                try {
+                    const refreshed = await this.twitchAuth.refreshTokens(signal);
+                    signal.throwIfAborted();
+                    if (!refreshed) {
+                        throw error;
+                    }
+                    const retryResponse = await executeRequest(true);
+                    this.logger.debug('Twitch API retry after refresh succeeded', 'twitch-api');
+                    return retryResponse.data;
+                } catch (retryError) {
+                    this.logger.warn('Twitch API retry after refresh failed', 'twitch-api', {
+                        status: getResponseStatus(retryError)
+                    });
+                    throw retryError;
+                }
             }
-        }
+        }, { budgetMs: options.overallBudgetMs, parentAbortSignal: parentSignal, operationName: 'Twitch API request' });
     }
 
     async getStreamInfo(channelName: string) {

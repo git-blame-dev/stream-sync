@@ -18,16 +18,23 @@ type BootstrapEmergencyLogger = {
 };
 
 function formatBootstrapErrorDetails(error: unknown): string {
-    if (error instanceof Error) {
-        return sanitizeLogText(error.stack || error.message);
+    try {
+        if (error instanceof Error) {
+            return sanitizeLogText(error.stack || error.message);
+        }
+        if (typeof error === 'string') {
+            return sanitizeLogText(error);
+        }
+        if (error && typeof error === 'object') {
+            const constructor = error.constructor;
+            const type = typeof constructor === 'function' && typeof constructor.name === 'string'
+                ? constructor.name : 'Object';
+            return safeObjectStringify({ type, fieldCount: Object.keys(error).length });
+        }
+        return sanitizeLogText(String(error));
+    } catch {
+        return '[Unformattable error]';
     }
-    if (typeof error === 'string') {
-        return sanitizeLogText(error);
-    }
-    if (error && typeof error === 'object') {
-        return safeObjectStringify({ type: error.constructor.name, fieldCount: Object.keys(error as Record<string, unknown>).length });
-    }
-    return sanitizeLogText(String(error));
 }
 
 function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDependencies): BootstrapEmergencyLogger {
@@ -35,6 +42,10 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
     const fileExistsSync = dependencies.existsSync ?? existsSync;
     const createDirectorySync = dependencies.mkdirSync ?? mkdirSync;
     const appendLogFileSync = dependencies.appendFileSync ?? appendFileSync;
+
+    const writeStderr = (line: string): void => {
+        try { stderr.write(line); } catch { /* Other emergency sinks must still be attempted. */ }
+    };
 
     const writeProgramLog = (line: string, fallbackPrefix: string): void => {
         try {
@@ -44,23 +55,23 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
             });
             appendLogFileSync(join(dependencies.logsDir, 'program-log.txt'), `${line}\n`);
         } catch (error) {
-            stderr.write(`${fallbackPrefix} ${formatBootstrapErrorDetails(error)}\n`);
+            writeStderr(`${fallbackPrefix} ${formatBootstrapErrorDetails(error)}\n`);
         }
     };
 
     return {
         writeUncaughtException(error: unknown): void {
-            stderr.write(`[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}\n`);
+            writeStderr(`[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}\n`);
             writeProgramLog(`[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}`, '[FATAL] Failed to write to log file:');
         },
 
         writeUnhandledRejection(reason: unknown): void {
-            stderr.write(`[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}\n`);
+            writeStderr(`[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}\n`);
             writeProgramLog(`[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}`, '[BOOTSTRAP] Failed to write to log file:');
         },
 
         writeMainFailure(error: unknown): void {
-            stderr.write(`[FATAL] [Bootstrap] Main function failed: ${formatBootstrapErrorDetails(error)}\n`);
+            writeStderr(`[FATAL] [Bootstrap] Main function failed: ${formatBootstrapErrorDetails(error)}\n`);
         }
     };
 }

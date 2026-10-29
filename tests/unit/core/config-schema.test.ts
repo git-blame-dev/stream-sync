@@ -15,7 +15,7 @@ describe('HTTP schema numeric policy', () => {
             const schemaResult = ConfigValidator.normalizeFromSchema('http', raw);
             const runtimeResult = ConfigValidator.normalize({ http: raw }, {}).http;
             for (const field of Object.keys(raw)) {
-                expect(runtimeResult?.[field]).toBe(schemaResult[field]);
+                expect(Reflect.get(runtimeResult, field)).toBe(Reflect.get(schemaResult, field));
             }
         }
     });
@@ -85,7 +85,7 @@ describe('buildDefaultsFromSchema()', () => {
     it('returns object with all sections from schema except dynamic', () => {
         const defaults = buildDefaultsFromSchema();
         const schemaSections = (Object.keys(CONFIG_SCHEMA) as Array<keyof ConfigSchema>).filter(
-            name => !CONFIG_SCHEMA[name]?._dynamic
+            name => !Reflect.get(CONFIG_SCHEMA, name)?._dynamic
         );
 
         for (const sectionName of schemaSections) {
@@ -198,7 +198,7 @@ describe('DEFAULTS constant', () => {
         const generated = buildDefaultsFromSchema();
 
         for (const [sectionName, sectionDefaults] of Object.entries(generated) as Array<[ConfigDefaultSectionName, ConfigDefaults[ConfigDefaultSectionName]]>) {
-            expect(DEFAULTS[sectionName]).toEqual(sectionDefaults);
+            expect<unknown>(DEFAULTS[sectionName]).toEqual(sectionDefaults);
         }
     });
 });

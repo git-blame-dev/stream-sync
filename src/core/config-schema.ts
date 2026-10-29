@@ -1,9 +1,9 @@
-import type { ConfigDefaults, ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
+import type { ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
 import { GUI_CONFIG_DEFAULTS } from './constants';
 
 const DEFAULT_ENHANCED_TIMEOUT_MS = 6_000;
 
-const CONFIG_SCHEMA: ConfigSchema = {
+const CONFIG_SCHEMA = {
     general: {
         debugEnabled: { type: 'boolean', default: false },
         messagesEnabled: { type: 'boolean', default: true },
@@ -46,8 +46,8 @@ const CONFIG_SCHEMA: ConfigSchema = {
         fullCheckInterval: { type: 'number', default: 300000 },
         dataLoggingEnabled: { type: 'boolean', default: false },
         enableAPI: { type: 'boolean', default: false },
-        streamDetectionMethod: { type: 'string', default: 'youtubei', enum: ['youtubei', 'api'] },
-        viewerCountMethod: { type: 'string', default: 'youtubei', enum: ['youtubei', 'api'] },
+        streamDetectionMethod: { type: 'string', default: 'youtubei', enum: ['youtubei'] },
+        viewerCountMethod: { type: 'string', default: 'youtubei', enum: ['youtubei'] },
         chatMode: { type: 'string', default: 'live', enum: ['live', 'top'] },
         messagesEnabled: { type: 'boolean', inheritFrom: 'general' },
         commandsEnabled: { type: 'boolean', inheritFrom: 'general' },
@@ -279,14 +279,14 @@ const CONFIG_SCHEMA: ConfigSchema = {
     greetings: {
         command: { type: 'string', userDefined: true }
     }
-};
+} as const satisfies ConfigSchema;
 
 function isConfigFieldSpec(value: ConfigSectionSpec[string]): value is ConfigFieldSpec {
     return typeof value === 'object' && value !== null && 'type' in value;
 }
 
 function getFieldsRequiredWhenEnabled(sectionName: string): string[] {
-    const sectionSchema = CONFIG_SCHEMA[sectionName];
+    const sectionSchema = (CONFIG_SCHEMA as ConfigSchema)[sectionName];
     if (!sectionSchema) {
         return [];
     }
@@ -296,10 +296,10 @@ function getFieldsRequiredWhenEnabled(sectionName: string): string[] {
         .map(([fieldName]) => fieldName);
 }
 
-function buildDefaultsFromSchema(): Partial<ConfigDefaults> {
+function buildDefaultsFromSchema(): SchemaDefaults {
     const defaults: Record<string, Record<string, unknown>> = {};
     for (const [sectionName, sectionSpec] of Object.entries(CONFIG_SCHEMA)) {
-        if (sectionSpec._dynamic) continue;
+        if ('_dynamic' in sectionSpec && sectionSpec._dynamic) continue;
         defaults[sectionName] = {};
         for (const [fieldName, fieldSpec] of Object.entries(sectionSpec)) {
             if (isConfigFieldSpec(fieldSpec) && fieldSpec.default !== undefined) {
@@ -307,13 +307,21 @@ function buildDefaultsFromSchema(): Partial<ConfigDefaults> {
             }
         }
     }
-    return defaults as Partial<ConfigDefaults>;
+    return defaults as SchemaDefaults;
 }
+
+type SchemaDefaults = {
+    [S in Exclude<keyof typeof CONFIG_SCHEMA, 'commands'>]: {
+        [F in keyof typeof CONFIG_SCHEMA[S]]: typeof CONFIG_SCHEMA[S][F] extends { default: infer D }
+            ? D extends string ? string : D extends number ? number : D extends boolean ? boolean : D
+            : undefined
+    }
+};
 
 const DEFAULTS = {
     LOG_DIRECTORY: './logs',
     ...buildDefaultsFromSchema()
-} as ConfigDefaults;
+} as SchemaDefaults & { LOG_DIRECTORY: string };
 
 export {
     CONFIG_SCHEMA,
@@ -323,3 +331,18 @@ export {
     DEFAULT_ENHANCED_TIMEOUT_MS,
     DEFAULTS
 };
+
+// Legacy selectors remain readable so unsupported requests fail before normalization
+// can replace them with a working default or secret collection can prompt for a key.
+export function getYouTubeCapabilityErrors(config: Record<string, unknown> = {}): string[] {
+    const errors: string[] = [];
+    if (config.enableAPI === true || String(config.enableAPI).trim().toLowerCase() === 'true') {
+        errors.push('YouTube Data API is not supported: set youtube.enableAPI=false and use youtubei for stream detection and viewer counts.');
+    }
+    for (const field of ['streamDetectionMethod', 'viewerCountMethod']) {
+        if (String(config[field]).trim().toLowerCase() === 'api') {
+            errors.push(`YouTube Data API is not supported: set youtube.${field}=youtubei; no YouTube API key is required.`);
+        }
+    }
+    return errors;
+}

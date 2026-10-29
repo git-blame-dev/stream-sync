@@ -40,8 +40,8 @@ describe('config-builders', () => {
             };
             const result = buildGeneralConfig(normalized);
 
-            expect(result.cmdCooldownMs).toBeUndefined();
-            expect(result.globalCmdCooldownMs).toBeUndefined();
+            expect(result).not.toHaveProperty('cmdCooldownMs');
+            expect(result).not.toHaveProperty('globalCmdCooldownMs');
         });
 
         it('spreads remaining general fields through', () => {
@@ -158,6 +158,8 @@ describe('config-builders', () => {
         it('converts seconds to milliseconds for cooldown fields', () => {
             const normalized = {
                 cooldowns: {
+                    cmdCooldown: 60,
+                    globalCmdCooldown: 60,
                     defaultCooldown: 60,
                     heavyCommandCooldown: 300,
                     heavyCommandThreshold: 4,

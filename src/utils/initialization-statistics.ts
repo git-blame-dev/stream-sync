@@ -93,7 +93,8 @@ class InitializationStatistics {
     performanceMetrics: PerformanceBuckets;
     firstInitializationTime: number | null;
     lastInitializationTime: number | null;
-    private readonly activeAttempts = new Map<string, number>();
+    private readonly activeAttempts = new Map<string, { wallTime: number; monotonicTime: number }>();
+    private lastSuccessMonotonicTime: number | null = null;
 
     get isCurrentlyInitializing(): boolean {
         return this.activeAttempts.size > 0;
@@ -101,7 +102,7 @@ class InitializationStatistics {
 
     get currentAttemptStartTime(): number | null {
         let latest: number | null = null;
-        for (const startTime of this.activeAttempts.values()) latest = startTime;
+        for (const startTime of this.activeAttempts.values()) latest = startTime.wallTime;
         return latest;
     }
 
@@ -122,6 +123,7 @@ class InitializationStatistics {
         this.errorTypes = new Map();
         this.consecutiveFailures = 0;
         this.lastSuccessTime = null;
+        this.lastSuccessMonotonicTime = null;
         this.performanceMetrics = {
             connectionEstablishmentTime: [],
             serviceInitializationTime: [],
@@ -139,7 +141,7 @@ class InitializationStatistics {
         const attemptId = `${this.platformName}-${startTime}-${randomUUID()}`;
 
         this.totalAttempts += 1;
-        this.activeAttempts.set(attemptId, startTime);
+        this.activeAttempts.set(attemptId, { wallTime: startTime, monotonicTime: performance.now() });
 
         if (this.firstInitializationTime === null) {
             this.firstInitializationTime = startTime;
@@ -155,19 +157,22 @@ class InitializationStatistics {
     }
 
     recordSuccess(attemptId: string, metrics: AttemptMetrics = {}): void {
-        const startTime = this.activeAttempts.get(attemptId);
-        if (startTime === undefined) {
+        const attempt = this.activeAttempts.get(attemptId);
+        if (attempt === undefined) {
             this.logger.warn('recordSuccess called but no active initialization attempt', this.platformName);
             return;
         }
 
+        const startTime = attempt.wallTime;
         const endTime = Date.now();
-        const duration = endTime - startTime;
+        const completedAt = performance.now();
+        const duration = completedAt - attempt.monotonicTime;
         this.activeAttempts.delete(attemptId);
 
         this.successfulAttempts += 1;
         this.consecutiveFailures = 0;
         this.lastSuccessTime = endTime;
+        this.lastSuccessMonotonicTime = completedAt;
         this.lastInitializationTime = endTime;
         this.totalInitializationTime += duration;
         this.averageInitializationTime = this.totalInitializationTime / this.successfulAttempts;
@@ -203,14 +208,16 @@ class InitializationStatistics {
     }
 
     recordFailure(attemptId: string, error: unknown, context: Record<string, unknown> = {}): void {
-        const startTime = this.activeAttempts.get(attemptId);
-        if (startTime === undefined) {
+        const attempt = this.activeAttempts.get(attemptId);
+        if (attempt === undefined) {
             this.logger.warn('recordFailure called but no active initialization attempt', this.platformName);
             return;
         }
 
+        const startTime = attempt.wallTime;
         const endTime = Date.now();
-        const duration = endTime - startTime;
+        const completedAt = performance.now();
+        const duration = completedAt - attempt.monotonicTime;
         this.activeAttempts.delete(attemptId);
 
         this.failedAttempts += 1;
@@ -277,7 +284,7 @@ class InitializationStatistics {
         isHealthy: boolean;
         platform: string;
     } {
-        const now = Date.now();
+        const now = performance.now();
         const successRate = this.totalAttempts > 0 ? (this.successfulAttempts / this.totalAttempts) * 100 : 0;
 
         return {
@@ -294,7 +301,7 @@ class InitializationStatistics {
             firstInitializationTime: this.firstInitializationTime,
             lastInitializationTime: this.lastInitializationTime,
             lastSuccessTime: this.lastSuccessTime,
-            timeSinceLastSuccess: this.lastSuccessTime ? now - this.lastSuccessTime : null,
+            timeSinceLastSuccess: this.lastSuccessMonotonicTime === null ? null : now - this.lastSuccessMonotonicTime,
             errorTypes: Object.fromEntries(this.errorTypes),
             recentErrors: this.errorHistory.slice(-10),
             performanceMetrics: this.calculatePerformanceAverages(),
@@ -358,6 +365,7 @@ class InitializationStatistics {
         this.errorTypes.clear();
         this.consecutiveFailures = 0;
         this.lastSuccessTime = null;
+        this.lastSuccessMonotonicTime = null;
         this.performanceMetrics = {
             connectionEstablishmentTime: [],
             serviceInitializationTime: [],

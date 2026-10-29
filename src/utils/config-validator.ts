@@ -1,12 +1,13 @@
-import { CONFIG_SCHEMA, DEFAULTS, getFieldsRequiredWhenEnabled, isConfigFieldSpec } from '../core/config-schema';
+import { CONFIG_SCHEMA, DEFAULTS, getYouTubeCapabilityErrors, getFieldsRequiredWhenEnabled, isConfigFieldSpec } from '../core/config-schema';
 import type {
     ConfigFieldSpec,
     ConfigDefaultSectionName,
     ConfigSectionName,
     ConfigValidationResult,
     MemberProfile,
-    NormalizedConfig,
     NormalizedConfigSection,
+    NormalizedSchemaSection,
+    ConfigSchema,
     ParseNumberOptions,
     RawConfig,
     RawConfigSection,
@@ -17,6 +18,10 @@ import { isLogThreshold } from '../core/logger/levels';
 import { isRowVisualEffectId, normalizeRowSpriteUrl, normalizeRowTheme } from '../core/row-presentation';
 import { normalizeProfileIdentityKey } from './profile-identity-key-normalizer';
 
+type NumericDefaultField<S extends ConfigDefaultSectionName> = {
+    [F in keyof typeof CONFIG_SCHEMA[S]]: typeof CONFIG_SCHEMA[S][F] extends { type: 'number'; default: number } ? F : never
+}[keyof typeof CONFIG_SCHEMA[S]];
+
 const PROFILE_FIELDS = new Set(['identities', 'greetingCommand', 'rowTheme', 'rowEffects', 'rowSpriteUrl']);
 
 class ConfigValidator {
@@ -26,6 +31,8 @@ class ConfigValidator {
         return String(value).trim();
     }
 
+    static parseBoolean(value: unknown, defaultValue: boolean): boolean;
+    static parseBoolean(value: unknown, defaultValue: unknown): boolean | null;
     static parseBoolean(value: unknown, defaultValue: unknown): boolean | null {
         const fallback = typeof defaultValue === 'boolean' ? defaultValue : null;
         if (value === undefined || value === null) return fallback;
@@ -39,6 +46,8 @@ class ConfigValidator {
         return fallback;
     }
 
+    static parseString(value: unknown, defaultValue: string): string;
+    static parseString(value: unknown, defaultValue: unknown): string | null;
     static parseString(value: unknown, defaultValue: unknown): string | null {
         if (value === undefined || value === null) {
             return defaultValue === undefined || defaultValue === null ? null : String(defaultValue).trim();
@@ -46,6 +55,8 @@ class ConfigValidator {
         return String(value).trim();
     }
 
+    static parseNumber(value: unknown, options: ParseNumberOptions & { defaultValue: number }): number;
+    static parseNumber(value: unknown, options?: ParseNumberOptions): number | null;
     static parseNumber(value: unknown, options: ParseNumberOptions = {}): number | null {
         const { defaultValue, min, max, allowZero = true, requireInteger = false } = options;
         const fallback = typeof defaultValue === 'number' ? defaultValue : null;
@@ -60,14 +71,16 @@ class ConfigValidator {
         return parsed;
     }
 
+    static _parseNumberFromSchema<S extends ConfigDefaultSectionName>(section: S, field: NumericDefaultField<S>, value: unknown): number;
+    static _parseNumberFromSchema(section: ConfigDefaultSectionName, field: string, value: unknown): number | null;
     static _parseNumberFromSchema(section: ConfigDefaultSectionName, field: string, value: unknown): number | null {
-        const spec = CONFIG_SCHEMA[section]?.[field];
+        const spec = (CONFIG_SCHEMA as ConfigSchema)[section]?.[field];
         if (!isConfigFieldSpec(spec)) {
             return null;
         }
 
         return ConfigValidator.parseNumber(value, {
-            defaultValue: DEFAULTS[section][field],
+            defaultValue: (DEFAULTS[section] as Record<string, unknown>)[field],
             ...(spec.min === undefined ? {} : { min: spec.min }),
             ...(spec.max === undefined ? {} : { max: spec.max }),
             ...(spec.allowZero === undefined ? {} : { allowZero: spec.allowZero }),
@@ -75,16 +88,20 @@ class ConfigValidator {
         });
     }
 
-    static normalizeFromSchema(sectionName: ConfigSectionName, rawData: RawConfigSection): NormalizedConfigSection {
-        const sectionSchema = CONFIG_SCHEMA[sectionName];
-        if (!sectionSchema || sectionSchema._dynamic) return {};
+    static normalizeFromSchema<S extends ConfigSectionName>(sectionName: S, rawData: RawConfigSection): NormalizedSchemaSection<S> {
+        if (sectionName === 'youtube') {
+            const errors = getYouTubeCapabilityErrors(rawData);
+            if (errors.length) throw new Error(errors.join(' '));
+        }
+        const sectionSchema = (CONFIG_SCHEMA as ConfigSchema)[sectionName];
+        if (!sectionSchema || sectionSchema._dynamic) return {} as NormalizedSchemaSection<S>;
 
         const result: NormalizedConfigSection = {};
         for (const [fieldName, spec] of Object.entries(sectionSchema)) {
             if (!isConfigFieldSpec(spec)) continue;
             result[fieldName] = ConfigValidator._normalizeFieldFromSpec(rawData[fieldName], spec);
         }
-        return result;
+        return result as NormalizedSchemaSection<S>;
     }
 
     static _normalizeFieldFromSpec(value: unknown, spec: ConfigFieldSpec): unknown {
@@ -120,7 +137,7 @@ class ConfigValidator {
         }
     }
 
-    static _parseInheritableFlags(raw: RawConfigSection): NormalizedConfigSection {
+    static _parseInheritableFlags(raw: RawConfigSection) {
         return {
             messagesEnabled: ConfigValidator.parseBoolean(raw.messagesEnabled, null),
             commandsEnabled: ConfigValidator.parseBoolean(raw.commandsEnabled, null),
@@ -134,13 +151,13 @@ class ConfigValidator {
         };
     }
 
-    static _parseShareFlag(raw: RawConfigSection): NormalizedConfigSection {
+    static _parseShareFlag(raw: RawConfigSection) {
         return {
             sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, null)
         };
     }
 
-    static normalize(rawConfig: RawConfig, environment: Readonly<Record<string, string | undefined>> = process.env): NormalizedConfig {
+    static normalize(rawConfig: RawConfig, environment: Readonly<Record<string, string | undefined>> = process.env) {
         return {
             general: ConfigValidator._normalizeGeneralSection(rawConfig.general || {}),
             http: ConfigValidator._normalizeHttpSection(rawConfig.http || {}),
@@ -172,7 +189,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGeneralSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeGeneralSection(raw: RawConfigSection) {
         return {
             debugEnabled: ConfigValidator.parseBoolean(raw.debugEnabled, DEFAULTS.general.debugEnabled),
             messagesEnabled: ConfigValidator.parseBoolean(raw.messagesEnabled, DEFAULTS.general.messagesEnabled),
@@ -198,7 +215,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeHttpSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeHttpSection(raw: RawConfigSection) {
         const parsedAgents = parseUserAgentList(raw.userAgents);
 
         return {
@@ -210,7 +227,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeObsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeObsSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.obs.enabled),
             address: ConfigValidator.parseString(raw.address, DEFAULTS.obs.address),
@@ -225,7 +242,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeTiktokSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeTiktokSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.tiktok.enabled),
             username: ConfigValidator.parseString(raw.username, ''),
@@ -239,7 +256,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeTwitchSection(raw: RawConfigSection, environment: Readonly<Record<string, string | undefined>> = process.env): NormalizedConfigSection {
+    static _normalizeTwitchSection(raw: RawConfigSection, environment: Readonly<Record<string, string | undefined>> = process.env) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.twitch.enabled),
             username: ConfigValidator.parseString(raw.username, ''),
@@ -254,7 +271,9 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeYoutubeSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeYoutubeSection(raw: RawConfigSection) {
+        const errors = getYouTubeCapabilityErrors(raw);
+        if (errors.length) throw new Error(errors.join(' '));
         const method = (ConfigValidator.parseString(raw.streamDetectionMethod, DEFAULTS.youtube.streamDetectionMethod) ?? '').toLowerCase();
         const viewerMethod = (ConfigValidator.parseString(raw.viewerCountMethod, DEFAULTS.youtube.viewerCountMethod) ?? '').toLowerCase();
         const chatMode = (ConfigValidator.parseString(raw.chatMode, DEFAULTS.youtube.chatMode) ?? '').toLowerCase();
@@ -269,16 +288,16 @@ class ConfigValidator {
             fullCheckInterval: ConfigValidator.parseNumber(raw.fullCheckInterval, { defaultValue: DEFAULTS.youtube.fullCheckInterval }),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.youtube.dataLoggingEnabled),
             enableAPI: ConfigValidator.parseBoolean(raw.enableAPI, DEFAULTS.youtube.enableAPI),
-            streamDetectionMethod: ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod,
-            viewerCountMethod: ['youtubei', 'api'].includes(viewerMethod) ? viewerMethod : DEFAULTS.youtube.viewerCountMethod,
+            streamDetectionMethod: ['youtubei'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod,
+            viewerCountMethod: ['youtubei'].includes(viewerMethod) ? viewerMethod : DEFAULTS.youtube.viewerCountMethod,
             chatMode: ['live', 'top'].includes(chatMode) ? chatMode : DEFAULTS.youtube.chatMode,
             ...ConfigValidator._parseInheritableFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
     }
 
-    static _normalizeHandcamSection(raw: RawConfigSection): NormalizedConfigSection {
-        const num = (field: string) => ConfigValidator._parseNumberFromSchema('handcam', field, raw[field]);
+    static _normalizeHandcamSection(raw: RawConfigSection) {
+        const num = (field: NumericDefaultField<'handcam'>) => ConfigValidator._parseNumberFromSchema('handcam', field, raw[field]);
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.handcam.enabled),
             sourceName: ConfigValidator.parseString(raw.sourceName, DEFAULTS.handcam.sourceName),
@@ -292,7 +311,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGoalsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeGoalsSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.goals.enabled),
             tiktokGoalEnabled: ConfigValidator.parseBoolean(raw.tiktokGoalEnabled, DEFAULTS.goals.tiktokGoalEnabled),
@@ -310,7 +329,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeFundingGoalSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeFundingGoalSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.fundingGoal.enabled),
             id: ConfigValidator.parseString(raw.id, DEFAULTS.fundingGoal.id) || DEFAULTS.fundingGoal.id,
@@ -319,7 +338,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGiftsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeGiftsSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
@@ -327,14 +346,14 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeEnvelopesSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeEnvelopesSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
-    static _normalizeCooldownsSection(raw: RawConfigSection): NormalizedConfigSection {
-        const num = (field: string) => ConfigValidator._parseNumberFromSchema('cooldowns', field, raw[field]);
+    static _normalizeCooldownsSection(raw: RawConfigSection) {
+        const num = (field: NumericDefaultField<'cooldowns'>) => ConfigValidator._parseNumberFromSchema('cooldowns', field, raw[field]);
         return {
             cmdCooldown: num('cmdCooldown'),
             globalCmdCooldown: num('globalCmdCooldown'),
@@ -346,7 +365,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeSpamSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeSpamSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.spam.enabled),
             lowValueThreshold: ConfigValidator.parseNumber(raw.lowValueThreshold, { defaultValue: DEFAULTS.spam.lowValueThreshold, min: 0, allowZero: false }),
@@ -361,7 +380,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeDisplayQueueSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeDisplayQueueSection(raw: RawConfigSection) {
         return {
             autoProcess: ConfigValidator.parseBoolean(raw.autoProcess, DEFAULTS.displayQueue.autoProcess),
             maxQueueSize: ConfigValidator.parseNumber(raw.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize }),
@@ -369,7 +388,7 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeLoggingSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeLoggingSection(raw: RawConfigSection) {
         const normalizeLevel = (value: unknown): string | null => {
             const level = ConfigValidator.parseString(value, null)?.toLowerCase() ?? null;
             return isLogThreshold(level) ? level : null;
@@ -382,23 +401,23 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGuiSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeGuiSection(raw: RawConfigSection) {
         const configuredTheme = normalizeRowTheme(raw.memberRowTheme);
         if (raw.memberRowTheme !== undefined && configuredTheme === undefined) {
             throw new Error(`Unknown member row theme: ${String(raw.memberRowTheme)}`);
         }
 
         const normalized = ConfigValidator.normalizeFromSchema('gui', raw);
-        normalized.memberRowEffects = ConfigValidator._parseEffects(raw.memberRowEffects, ['sheen']);
+        const memberRowEffects = ConfigValidator._parseEffects(raw.memberRowEffects, ['sheen']);
 
         if (normalized.host === '') {
             normalized.host = DEFAULTS.gui.host;
         }
 
-        return normalized;
+        return { ...normalized, memberRowEffects };
     }
 
-    static _normalizeFarewellSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeFarewellSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, ''),
             timeout: ConfigValidator.parseNumber(raw.timeout, { defaultValue: 300, min: 1, requireInteger: true })
@@ -418,13 +437,13 @@ class ConfigValidator {
         return normalized;
     }
 
-    static _normalizeVfxSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeVfxSection(raw: RawConfigSection) {
         return {
             filePath: ConfigValidator.parseString(raw.filePath, '')
         };
     }
 
-    static _normalizeStreamElementsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeStreamElementsSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.streamelements.enabled),
             youtubeChannelId: ConfigValidator.parseString(raw.youtubeChannelId, ''),
@@ -433,25 +452,25 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeFollowsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeFollowsSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
-    static _normalizeRaidsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeRaidsSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
-    static _normalizePaypiggiesSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizePaypiggiesSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
-    static _normalizeGreetingsSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeGreetingsSection(raw: RawConfigSection) {
         return { command: ConfigValidator.parseString(raw.command, '') };
     }
 
@@ -533,15 +552,16 @@ class ConfigValidator {
         return profiles;
     }
 
-    static _normalizeSharesSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeSharesSection(raw: RawConfigSection) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
-    static validate(config: NormalizedConfig): ConfigValidationResult {
+    static validate(config: RawConfig): ConfigValidationResult {
         const errors: string[] = [];
 
+        errors.push(...getYouTubeCapabilityErrors(config.youtube));
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator.validateRequiredFields(config, errors);
         ConfigValidator._validateStreamElements(config, errors);
@@ -552,7 +572,7 @@ class ConfigValidator {
         };
     }
 
-    static validateRequiredFields(config: NormalizedConfig, errors: string[]): void {
+    static validateRequiredFields(config: RawConfig, errors: string[]): void {
         const platformSections: ConfigSectionName[] = ['youtube', 'twitch', 'tiktok'];
 
         for (const sectionName of platformSections) {
@@ -573,13 +593,13 @@ class ConfigValidator {
         }
     }
 
-    static _validateRequiredSections(config: NormalizedConfig, errors: string[]): void {
+    static _validateRequiredSections(config: RawConfig, errors: string[]): void {
         if (!config.general || typeof config.general !== 'object') {
             errors.push('Missing required configuration section: general');
         }
     }
 
-    static _validateStreamElements(config: NormalizedConfig, errors: string[]): void {
+    static _validateStreamElements(config: RawConfig, errors: string[]): void {
         if (config.streamelements && config.streamelements.enabled) {
             const youtubeChannelId = config.streamelements.youtubeChannelId;
             const twitchChannelId = config.streamelements.twitchChannelId;

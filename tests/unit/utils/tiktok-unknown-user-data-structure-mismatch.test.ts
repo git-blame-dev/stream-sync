@@ -170,9 +170,9 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
     );
   });
 
-  describe("Performance and Memory Impact", () => {
+  describe("Repeated nested user normalization", () => {
     it(
-      "should maintain performance with nested user structures",
+      "preserves every nested identity across 100 inputs",
       () => {
         const multipleEvents = Array.from({ length: 100 }, (_, i) => ({
           user: {
@@ -184,20 +184,17 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
           common: { createTime: testClock.now() + i },
         }));
 
-        const startTime = testClock.now();
-
         const results = multipleEvents.map((event) => {
           const normalized = normalizeTikTokMessage(event, "tiktok");
           const userData = extractTikTokUserData(event);
           return { normalized, userData };
         });
 
-        const simulatedProcessingMs = 120;
-        testClock.advance(simulatedProcessingMs);
-        const processingTime = testClock.now() - startTime;
-
-        expect(processingTime).toBeLessThan(1000);
         expect(results).toHaveLength(100);
+        expect(results.map(result => result.userData)).toEqual(multipleEvents.map(event => ({
+          userId: event.user.uniqueId, username: event.user.nickname,
+        })));
+        expect(results.map(result => result.normalized.username)).toEqual(multipleEvents.map(event => event.user.nickname));
         expect(results[0]?.normalized.username).toBe("TestRapidUser0");
         expect(results[99]?.normalized.username).toBe("TestRapidUser99");
 

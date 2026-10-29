@@ -77,3 +77,13 @@ describe("notification-template-interpolator", () => {
     });
   });
 });
+
+
+it("preserves UTF-16 pairs at the interpolation budget after brace stripping", () => {
+  const prefix = "A".repeat(999);
+  expect(interpolateTemplate("{name}", { name: prefix + "😀B" })).toBe(prefix);
+  expect(interpolateTemplate("{name}", { name: "A".repeat(998) + "😀B" })).toBe("A".repeat(998) + "😀");
+  expect(interpolateTemplate("{name}", { name: "A".repeat(1000) + "😀" })).toBe("A".repeat(1000));
+  expect(interpolateTemplate("{name}", { name: "A".repeat(1001) })).toBe("A".repeat(1000));
+  expect(interpolateTemplate("{name}", { name: "A".repeat(998) + "{remove}😀B" })).toBe("A".repeat(998) + "😀");
+});

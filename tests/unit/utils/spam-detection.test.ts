@@ -9,6 +9,7 @@ import {
   createDonationSpamDetection,
 } from "../../../src/utils/spam-detection";
 import testClock from "../../helpers/test-clock";
+import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from "../../helpers/bun-timers";
 import { safeSetTimeout } from "../../../src/utils/timeout-validator";
 type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
@@ -619,12 +620,27 @@ describe("Spam Detection", () => {
       }
     });
 
-    it("should cleanup periodically", () => {
-      detection.setupPeriodicCleanup();
-
-      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
-
-      expect(detection.cleanupInterval).toBeDefined();
+    it("scheduled cleanup removes expired history and retains an active donor", () => {
+      useFakeTimers();
+      try {
+        detection.setupPeriodicCleanup();
+        expect(detection.cleanupInterval).not.toBeNull();
+        expect(detection.handleDonationSpam("synthetic-expired", "Synthetic Expired", 5, "Synthetic Rose", 1, "tiktok").shouldShow).toBe(true);
+        advanceTimersByTime(29999);
+        expect(detection.handleDonationSpam("synthetic-active", "Synthetic Active", 5, "Synthetic Rose", 1, "tiktok").shouldShow).toBe(true);
+        expect(detection.getStatistics()).toMatchObject({ trackedUsers: 2, totalNotifications: 2 });
+        advanceTimersByTime(1);
+        expect(Object.values(detection.donationSpamTracker).map(tracker => tracker.userId)).toEqual(["synthetic-active"]);
+        expect(detection.getStatistics()).toMatchObject({ trackedUsers: 1, totalNotifications: 1 });
+        detection.destroy();
+        expect(detection.cleanupInterval).toBeNull();
+        expect(getTimerCount()).toBe(0);
+        advanceTimersByTime(30000);
+        expect(detection.getStatistics()).toMatchObject({ trackedUsers: 0, totalNotifications: 0 });
+      } finally {
+        detection.destroy();
+        useRealTimers();
+      }
     });
   });
 

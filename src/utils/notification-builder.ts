@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { utf16BudgetPrefix } from './utf16-budget-prefix';
 import { interpolateTemplate } from './notification-template-interpolator';
 import { normalizeCurrency } from './currency-utils';
 import { getAnonymousUsername } from './validation';
@@ -430,11 +431,11 @@ class NotificationBuilder {
         if (userName.length <= effectiveMaxLength) {
             return userName;
         }
-        const truncated = userName.substring(0, effectiveMaxLength - 3) + '...';
+        const truncated = utf16BudgetPrefix(userName, effectiveMaxLength - 3) + '...';
         return truncated;
     }
 
-    static _getErrorLabel(type: unknown) {
+    static _getErrorLabel(type: unknown, giftType: unknown = undefined) {
         switch (type) {
             case 'platform:gift':
                 return 'gift';
@@ -442,16 +443,18 @@ class NotificationBuilder {
                 return 'gift';
             case 'platform:paypiggy':
                 return 'subscription';
-            case 'platform:envelope':
-                return 'treasure chest';
+            case 'platform:envelope': {
+                const label = typeof giftType === 'string' ? giftType.trim().toLowerCase() : '';
+                return label === 'treasure chest' || label === 'super fan box' ? label : 'envelope';
+            }
             default:
                 return 'notification';
         }
     }
 
-    static _buildErrorMessage(type: unknown, username: unknown) {
+    static _buildErrorMessage(type: unknown, username: unknown, giftType: unknown = undefined) {
         const hasUsername = typeof username === 'string' && username.trim();
-        const label = this._getErrorLabel(type);
+        const label = this._getErrorLabel(type, giftType);
         if (hasUsername) {
             return `Error processing ${label} from ${username}`;
         }
@@ -463,7 +466,7 @@ class NotificationBuilder {
         const userName = this.getTruncatedUsername(username);
 
         if (input.isError) {
-            return this._buildErrorMessage(type, userName);
+            return this._buildErrorMessage(type, userName, input.giftType);
         }
 
         if (type === 'platform:giftpaypiggy') {
@@ -574,7 +577,7 @@ class NotificationBuilder {
         const userName = this.sanitizeUsernameForTts(username);
 
         if (input.isError) {
-            return this._buildErrorMessage(type, userName);
+            return this._buildErrorMessage(type, userName, input.giftType);
         }
 
         if (type === 'platform:giftpaypiggy') {
@@ -679,7 +682,7 @@ class NotificationBuilder {
         const userName = username;
         
         if (input.isError) {
-            return this._buildErrorMessage(type, userName);
+            return this._buildErrorMessage(type, userName, input.giftType);
         }
 
         if (type === 'platform:giftpaypiggy') {
@@ -817,8 +820,12 @@ class NotificationBuilder {
             throw new Error('formatCurrencyForTts requires currency');
         }
 
-        const main = Math.floor(amount);
-        const sub = Math.round((amount - main) * 100);
+        let main = Math.floor(amount);
+        let sub = Math.round((amount - main) * 100);
+        if (sub === 100) {
+            main += 1;
+            sub = 0;
+        }
 
         let currencyName;
         try {

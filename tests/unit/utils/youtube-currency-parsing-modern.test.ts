@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach } from "bun:test";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { getSyntheticFixture } from "../../helpers/platform-test-data";
 import * as YouTubeCurrencyParser from "../../../src/platforms/youtube/youtubei-currency-parser";
-import testClock from "../../helpers/test-clock";
 type YouTubeiCurrencyParser = InstanceType<
   typeof YouTubeCurrencyParser.YouTubeiCurrencyParser
 >;
@@ -156,23 +155,4 @@ describe("YouTube Currency Parsing - Modern (Production Data)", () => {
     });
   });
 
-  describe("Performance", () => {
-    it("parses currency in under 50ms for 1000 iterations", () => {
-      const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-        logger: noOpLogger,
-      });
-
-      const start = testClock.now();
-
-      for (let i = 0; i < 1000; i++) {
-        parser.parse("$25.00");
-      }
-
-      const simulatedDurationMs = 25;
-      testClock.advance(simulatedDurationMs);
-      const duration = testClock.now() - start;
-
-      expect(duration).toBeLessThan(50);
-    });
-  });
 });

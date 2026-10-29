@@ -1,6 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { parseEnvContent } from "../../../src/utils/env-file-parser";
 describe("env-file-parser behavior", () => {
+  it("removes only matching paired delimiters and preserves literal edge quotes", () => {
+    expect(parseEnvContent('A=synthetic"\nB=\'synthetic\nC=`synthetic\'"`')).toEqual({
+      A: 'synthetic"', B: "'synthetic", C: 'synthetic\'"',
+    });
+  });
   it("returns empty object when content is null", () => {
     const parsed = parseEnvContent(null);
 

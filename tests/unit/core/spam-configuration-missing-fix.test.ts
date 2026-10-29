@@ -1,526 +1,122 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
-import { createConfigFixture } from "../../helpers/config-fixture";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
-import { initializeTestLogging } from "../../helpers/test-setup";
-import { config as mainConfig } from "../../../src/core/config";
-import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import NotificationManager from "../../../src/notifications/NotificationManager";
-
-type LoggerLike = {
-  debug: (...args: unknown[]) => void;
-  info: (...args: unknown[]) => void;
-  warn: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-};
-
-type SpamConfig = {
-  enabled: boolean;
-  detectionWindow: number;
-  maxIndividualNotifications: number;
-  lowValueThreshold: number;
-};
-
-const getMainConfig = () => {
-  return mainConfig as { spam: SpamConfig };
-};
-
-type MockFn = ReturnType<typeof createMockFn>;
-type QueueItem = Record<string, unknown>;
-type AddItemMockFn = ReturnType<typeof createMockFn<[item: QueueItem], void>>;
-type GetQueueLengthMockFn = ReturnType<typeof createMockFn<[], number>>;
-type DonationSpamArgs = [
-  userId: unknown,
-  username: unknown,
-  perGiftAmount: number,
-  giftType: unknown,
-  giftCount: number,
-  platform: string,
-];
-type SpamDecision = { shouldShow: boolean };
-type DonationSpamMockFn = ReturnType<
-  typeof createMockFn<DonationSpamArgs, SpamDecision>
->;
-type AsyncVfxConfigMockFn = ReturnType<
-  typeof createMockFn<[commandKey: string, message: string | null], Promise<unknown>>
->;
-
-initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
+import { createMainPresentationFixture } from "../../helpers/main-presentation-fixture";
+import { createConfigFixture } from "../../helpers/config-fixture";
+import { SpamDetectionConfig } from "../../../src/utils/spam-detection";
+import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
+let h: Awaited<ReturnType<typeof createMainPresentationFixture>>;
+let manager: NotificationManager;
+let dispose: (() => Promise<void>) | undefined;
+beforeEach(async () => {
+  dispose = undefined;
+  h = await createMainPresentationFixture();
+  dispose = h.dispose;
+  h.config.general.envFileReadEnabled = false;
+  h.config.general.envFileWriteEnabled = false;
+  h.config.general.logChatMessages = false;
+  h.config.logging.file.enabled = false;
+  h.config.logging.chat.enabled = false;
+  h.config.vfx.filePath = "/synthetic-only";
+  h.config.spam.enabled = true;
+  h.config.spam.detectionWindow = 60;
+  h.config.spam.maxIndividualNotifications = 1;
+  h.config.spam.lowValueThreshold = 10;
+  await h.start();
+  const owner = h.runtime.notificationManager;
+  if (!(owner instanceof NotificationManager)) throw new Error("Expected the real runtime notification manager");
+  manager = owner;
+});
+afterEach(async () => {
+  const cleanup = dispose;
+  dispose = undefined;
+  await cleanup?.();
 });
 
-describe("Spam Detection Service Integration Tests", () => {
-  afterEach(() => {
-    restoreAllMocks();
+const donor = { userId: "synthetic-user", username: "Synthetic Viewer" };
+const gift = { ...donor, giftType: "Rose", giftCount: 1, amount: 10, currency: "coins" };
+
+
+describe("Spam configuration and real notification admission", () => {
+  it("loads the complete typed configuration into the actual spam config owner", () => {
+    const config = createConfigFixture();
+    const spam = config.spam;
+    expect(spam.enabled).toBe(true);
+    for (const key of ["detectionWindow", "maxIndividualNotifications", "lowValueThreshold"] as const) {
+      expect(typeof spam[key]).toBe("number");
+      expect(spam[key]).toBeGreaterThan(0);
+    }
+    const owner = new SpamDetectionConfig(spam, { logger: manager.logger });
+    expect(owner.getPlatformConfig("tiktok")).toEqual({ enabled: true,
+      detectionWindow: spam.detectionWindow, maxIndividualNotifications: spam.maxIndividualNotifications,
+      lowValueThreshold: spam.lowValueThreshold });
   });
 
-  let mockLogger: LoggerLike;
-  let mockConstants: {
-    PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
-    NOTIFICATION_CONFIGS: {
-      "platform:gift": {
-        priority: number;
-        duration: number;
-        settingKey: string;
-        commandKey: string;
-      };
-    };
-  };
-  let mockDisplayQueue: {
-    addItem: AddItemMockFn;
-    processQueue: MockFn;
-    getQueueLength: GetQueueLengthMockFn;
-  };
-  let mockSpamDetector: {
-    handleDonationSpam: DonationSpamMockFn;
-  };
-  let mockConfig: ReturnType<typeof createConfigFixture>;
-  let mockObsGoals: {
-    processDonationGoal: MockFn;
-  };
-  let mockVfxCommandService: {
-    getVFXConfig: AsyncVfxConfigMockFn;
-  };
-  beforeEach(() => {
-    mockLogger = noOpLogger;
-
-    mockConstants = {
-      PRIORITY_LEVELS,
-      NOTIFICATION_CONFIGS: {
-        "platform:gift": {
-          priority: PRIORITY_LEVELS.GIFT,
-          duration: 5000,
-          settingKey: "giftsEnabled",
-          commandKey: "gifts",
-        },
-      },
-    };
-
-    mockDisplayQueue = {
-      addItem: createMockFn<[item: QueueItem], void>(() => undefined),
-      processQueue: createMockFn(),
-      getQueueLength: createMockFn(() => 0),
-    };
-
-    mockSpamDetector = {
-      handleDonationSpam: createMockFn<DonationSpamArgs, SpamDecision>(() => ({ shouldShow: true })),
-    };
-
-    mockConfig = createConfigFixture();
-
-    mockObsGoals = { processDonationGoal: createMockFn() };
-    mockVfxCommandService = { getVFXConfig: createMockFn<[commandKey: string, message: string | null], Promise<unknown>>(async () => null) };
+  for (const internal of [false, true]) it(`applies real threshold suppression via ${internal ? "internal" : "public"} entry and admits a healthy donor`, async () => {
+    const handle = (data: typeof gift) => internal
+      ? manager.handleNotificationInternal("platform:gift", "tiktok", data, false)
+      : manager.handleNotification("platform:gift", "tiktok", data);
+    expect((await handle(gift)).success).toBe(true);
+    expect(h.queue.state.queue).toHaveLength(1);
+    expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:gift", platform: "tiktok", data: gift });
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    expect(await handle(gift)).toMatchObject({ success: false, suppressed: true, reason: "spam_detection" });
+    expect(h.queue.getQueueLength()).toBe(0);
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    expect((await handle({ ...gift, userId: "synthetic-healthy-user", username: "Synthetic Healthy" })).success).toBe(true);
+    await h.drain();
+    expect(h.rows).toHaveLength(2);
+    expect(h.rows[1]).toMatchObject({ type: "platform:gift", platform: "tiktok", data: {
+      ...gift, userId: "synthetic-healthy-user", username: "Synthetic Healthy" } });
   });
 
-  describe("when spam detection configuration is available", () => {
-    it("should use spam detector service when provided", async () => {
-      const config = getMainConfig();
-
-      expect(config.spam).toBeDefined();
-      expect(config.spam.enabled).toBe(true);
-    });
-
-    it("should contain all required spam detection properties in config", () => {
-      const config = getMainConfig();
-      const spamConfig = config.spam;
-
-      expect(spamConfig).toHaveProperty("enabled");
-      expect(spamConfig).toHaveProperty("detectionWindow");
-      expect(spamConfig).toHaveProperty("maxIndividualNotifications");
-      expect(spamConfig).toHaveProperty("lowValueThreshold");
-
-      expect(typeof spamConfig.enabled).toBe("boolean");
-      expect(typeof spamConfig.detectionWindow).toBe("number");
-      expect(typeof spamConfig.maxIndividualNotifications).toBe("number");
-      expect(typeof spamConfig.lowValueThreshold).toBe("number");
-    });
-  });
-
-  describe("when NotificationManager is initialized with spam detector", () => {
-    it("should process gifts through spam detector when provided", async () => {
-      mockSpamDetector.handleDonationSpam.mockImplementation(
-        (
-          userId: unknown,
-          username: unknown,
-          amount: unknown,
-          giftType: unknown,
-          giftCount: unknown,
-          platform: unknown,
-        ) => ({
-          shouldShow:
-            userId === "user123" &&
-            username === "TestUser" &&
-            amount === 10 &&
-            giftType === "Rose" &&
-            giftCount === 1 &&
-            platform === "tiktok",
-        }),
-      );
-
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const giftData = {
-        userId: "user123",
-        username: "TestUser",
-        giftType: "Rose",
-        giftCount: 1,
-        amount: 10,
-        currency: "coins",
-      };
-
-      const result = await notificationManager.handleNotification(
-        "platform:gift",
-        "tiktok",
-        giftData,
-      );
-
-      expect(result).toMatchObject({ success: true });
-      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
-    });
-
-    it("should apply spam suppression when spam detector dependency is injected", async () => {
-      mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: false });
-
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const result = await notificationManager.handleNotification(
-        "platform:gift",
-        "tiktok",
-        {
-          userId: "user123",
-          username: "TestUser",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      );
-
-      expect(result).toMatchObject({
-        success: false,
-        suppressed: true,
-        reason: "spam_detection",
-      });
-      expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
-    });
-
-    it("should suppress gifts when spam detector indicates spam", async () => {
-      mockSpamDetector.handleDonationSpam.mockReturnValue({
-        shouldShow: false,
-      });
-
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const giftData = {
-        userId: "spammer",
-        username: "SpamUser",
-        giftType: "Rose",
-        giftCount: 1,
-        amount: 1,
-        currency: "coins",
-      };
-
-      const result = await notificationManager.handleNotificationInternal(
-        "platform:gift",
-        "tiktok",
-        giftData,
-        false,
-      );
-
-      expect(result.suppressed).toBe(true);
-      expect(result.reason).toBe("spam_detection");
-      expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("when NotificationManager is initialized without spam detector", () => {
-    it("should gracefully handle missing spam detector dependency", async () => {
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const giftData = {
-        userId: "user123",
-        username: "TestUser",
-        giftType: "Rose",
-        giftCount: 1,
-        amount: 10,
-        currency: "coins",
-      };
-
-      await expect(
-        notificationManager.handleNotification(
-          "platform:gift",
-          "tiktok",
-          giftData,
-        ),
-      ).resolves.toBeDefined();
-
-      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-    });
-
-    it("should continue showing gifts when spam detector dependency is omitted", async () => {
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const result = await notificationManager.handleNotificationInternal(
-        "platform:gift",
-        "tiktok",
-        {
-          userId: "spammer",
-          username: "SpamUser",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 1,
-          currency: "coins",
-        },
-        false,
-      );
-
-      expect(result).toMatchObject({ success: true });
-      expect(result).not.toMatchObject({ suppressed: true });
-      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("when handling edge cases", () => {
-    it("should skip spam detection for aggregated donations", async () => {
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const aggregatedGift = {
-        userId: "user123",
-        username: "TestUser",
-        giftType: "Rose",
-        giftCount: 5,
-        amount: 50,
-        currency: "coins",
-        isAggregated: true,
-      };
-
-      await notificationManager.handleNotification(
-        "platform:gift",
-        "tiktok",
-        aggregatedGift,
-      );
-
-      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
-    });
-
-    it("should validate spam config property types from configuration", () => {
-      const config = getMainConfig();
-      const spamConfig = config.spam;
-
-      expect(typeof spamConfig.enabled).toBe("boolean");
-      expect(typeof spamConfig.detectionWindow).toBe("number");
-      expect(typeof spamConfig.maxIndividualNotifications).toBe("number");
-      expect(typeof spamConfig.lowValueThreshold).toBe("number");
-
-      expect(spamConfig.detectionWindow).toBeGreaterThan(0);
-      expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
-      expect(spamConfig.lowValueThreshold).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  describe("when validating integration with spam detection system", () => {
-    it("should provide config structure compatible with SpamDetectionConfig constructor", () => {
-      const config = getMainConfig();
-      const spamConfig = config.spam;
-
-      expect(spamConfig).toBeTruthy();
-      expect(spamConfig.enabled).toBeDefined();
-      expect(spamConfig.detectionWindow).toBeDefined();
-      expect(spamConfig.maxIndividualNotifications).toBeDefined();
-      expect(spamConfig.lowValueThreshold).toBeDefined();
-
-      expect(spamConfig.detectionWindow).toBeGreaterThan(0);
-      expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
-      expect(spamConfig.lowValueThreshold).toBeGreaterThan(0);
-    });
-
-    it("should route gift handling through injected spam detector behavior", async () => {
-      mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: false });
-
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const result = await notificationManager.handleNotification(
-        "platform:gift",
-        "tiktok",
-        {
-          userId: "user123",
-          username: "TestUser",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      );
-
-      expect(result).toMatchObject({
-        success: false,
-        suppressed: true,
-        reason: "spam_detection",
-      });
-      expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("when ensuring no technical artifacts in user-facing content", () => {
-    it("should not expose internal configuration details to users", async () => {
-      const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
-      };
-      const notificationManager = new NotificationManager({
-        displayQueue: mockDisplayQueue,
-        logger: mockLogger,
-        eventBus: mockEventBus,
-        constants: mockConstants,
-        donationSpamDetector: mockSpamDetector,
-        config: mockConfig,
-        obsGoals: mockObsGoals,
-        vfxCommandService: mockVfxCommandService,
-      });
-
-      const giftData = {
-        userId: "user123",
-        username: "TestUser",
-        giftType: "Rose",
-        giftCount: 1,
-        amount: 10,
-        currency: "coins",
-      };
-
-      await notificationManager.handleNotification(
-        "platform:gift",
-        "tiktok",
-        giftData,
-      );
-
-      const queueCall = mockDisplayQueue.addItem.mock.calls[0];
-      if (queueCall) {
-        const queueItem = queueCall[0] as {
-          data: {
-            displayMessage?: string;
-            [key: string]: unknown;
-          };
-        };
-        const notificationData = queueItem.data;
-        if (typeof notificationData.displayMessage === "string") {
-          expectNoTechnicalArtifacts(notificationData.displayMessage);
-        }
-        expect(notificationData).not.toHaveProperty("spamDetectionConfig");
-        expect(notificationData).not.toHaveProperty("configService");
+  for (const internal of [false, true]) it(`admits low-value gifts with an explicitly omitted detector via ${internal ? "internal" : "public"} entry`, async () => {
+    const detector = manager.donationSpamDetector;
+    manager.donationSpamDetector = undefined;
+    try {
+      for (let index = 0; index < 2; index++) {
+        const result = internal
+          ? await manager.handleNotificationInternal("platform:gift", "tiktok", { ...gift, amount: 1 }, false)
+          : await manager.handleNotification("platform:gift", "tiktok", { ...gift, amount: 1 });
+        expect(result.success).toBe(true);
       }
-    });
+      expect(h.queue.state.queue).toHaveLength(2);
+      for (const item of h.queue.state.queue) expect(item).toMatchObject({ type: "platform:gift", platform: "tiktok", data: { ...gift, amount: 1 } });
+      await h.drain();
+      expect(h.rows).toHaveLength(2);
+    } finally { manager.donationSpamDetector = detector; }
+  });
 
-    it("should provide meaningful property names for spam detection settings", () => {
-      const config = getMainConfig();
-      const spamConfig = config.spam;
+  it("bypasses real suppression for aggregated gifts while individual gifts remain suppressed", async () => {
+    expect((await manager.handleNotification("platform:gift", "tiktok", gift)).success).toBe(true);
+    await h.drain();
+    expect(await manager.handleNotification("platform:gift", "tiktok", gift)).toMatchObject({ suppressed: true });
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    const aggregate = { ...gift, giftCount: 5, amount: 50, isAggregated: true };
+    expect((await manager.handleNotification("platform:gift", "tiktok", aggregate)).success).toBe(true);
+    expect(h.queue.state.queue).toHaveLength(1);
+    expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:gift", platform: "tiktok", data: aggregate });
+    await h.drain();
+    expect(h.rows).toHaveLength(2);
+    expect(h.rows[1]?.data).toMatchObject(aggregate);
+  });
 
-      expect(spamConfig).toHaveProperty("enabled");
-      expect(spamConfig).toHaveProperty("detectionWindow");
-      expect(spamConfig).toHaveProperty("maxIndividualNotifications");
-      expect(spamConfig).toHaveProperty("lowValueThreshold");
-    });
+  it("requires exact productive display copy without configuration artifacts", async () => {
+    const result = await manager.handleNotification("platform:gift", "tiktok", gift);
+    expect(result.success).toBe(true);
+    expect(h.queue.state.queue).toHaveLength(1);
+    const item = h.queue.state.queue[0];
+    if (!item || !("data" in item) || typeof item.eventId !== "string") throw new Error("Expected one admitted notification item with event ID");
+    expect(item).toMatchObject({ type: "platform:gift", platform: "tiktok", data: {
+      ...gift, displayMessage: "Synthetic Viewer sent Rose gift (10 coins)" } });
+    expect(typeof item.data.displayMessage).toBe("string");
+    expectNoTechnicalArtifacts(item.data.displayMessage as string);
+    expect(item.data).not.toHaveProperty("spamDetectionConfig");
+    expect(item.data).not.toHaveProperty("configService");
+    await h.drain();
+    expect(h.rows).toEqual([{ eventId: item.eventId, type: item.type, platform: item.platform,
+      data: item.data, timestamp: item.data.timestamp }]);
   });
 });

@@ -11,6 +11,16 @@ import {
 } from "../../helpers/config-fixture";
 
 describe("config fixtures", () => {
+  it("keeps raw and built fixtures isolated from environment files", () => {
+    const raw = getRawTestConfig();
+    const built = createConfigFixture();
+
+    expect(raw.general.envFileReadEnabled).toBe("false");
+    expect(raw.general.envFileWriteEnabled).toBe("false");
+    expect(built.general.envFileReadEnabled).toBe(false);
+    expect(built.general.envFileWriteEnabled).toBe(false);
+  });
+
   it("returns raw test config sections", () => {
     const raw = getRawTestConfig();
 

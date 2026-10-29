@@ -1,10 +1,13 @@
+import { TwitchViewerCountProvider } from "../../../src/utils/viewer-count-providers";
+import { TwitchApiClient } from "../../../src/utils/api-clients/twitch-api-client";
+import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
+import { secrets } from "../../../src/core/secrets";
 import {
   describe,
   test,
   expect,
   beforeEach,
   afterEach,
-  afterAll,
 } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import {
@@ -15,11 +18,9 @@ import {
 } from "../../helpers/bun-timers";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 import {
-  setupAutomatedCleanup,
   noOpLogger,
 } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
-import testClock from "../../helpers/test-clock";
 
 type ViewerCountUpdate = {
   platform: string;
@@ -56,29 +57,11 @@ type MockObserverBehaviorOverrides = Partial<{
   onCleanup: () => Promise<unknown> | unknown;
 }>;
 
-type MockPlatformConfig = Partial<{
-  initialViewerCount: number;
-  viewerCountSequence: number[];
-  failAfterCalls: number | null;
-  failureMessage: string;
-}>;
-
 type ViewerCountPlatformName = "tiktok" | "twitch" | "youtube";
-
-type MockViewerCountPlatform = {
-  platformName: string;
-  isConnected: boolean;
-  connectionState: string;
-  getViewerCount: () => Promise<number>;
-  setViewerCount: (count: number) => void;
-  getCallCount: () => number;
-};
-
 type ViewerCountEnvironmentConfig = {
   pollingInterval?: number;
-  platforms?: ViewerCountPlatformName[];
   initialStreamStatus?: Partial<Record<ViewerCountPlatformName, boolean>>;
-} & Partial<Record<ViewerCountPlatformName, MockPlatformConfig>>;
+};
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -137,85 +120,40 @@ const createMockViewerCountObserver = (
   };
 };
 
-const createMockPlatformWithViewerCount = (
-  platformName = "tiktok",
-  config: MockPlatformConfig = {},
-): MockViewerCountPlatform => {
-  const {
-    initialViewerCount = 100,
-    viewerCountSequence = [],
-    failAfterCalls = null,
-    failureMessage = "Platform API error",
-  } = config;
-
-  let callCount = 0;
-  let currentViewerCount = initialViewerCount;
-
-  return {
-    platformName,
-    isConnected: true,
-    connectionState: "connected",
-
-    async getViewerCount() {
-      callCount++;
-      if (failAfterCalls !== null && callCount > failAfterCalls) {
-        throw new Error(failureMessage);
-      }
-      if (viewerCountSequence.length > 0) {
-        const index = Math.min(callCount - 1, viewerCountSequence.length - 1);
-        return viewerCountSequence[index] ?? currentViewerCount;
-      }
-      return currentViewerCount;
+// Each store slot uses the real Twitch HTTP provider. These cases exercise the store's
+// common poll contract, not TikTok or YouTube provider-specific ingress.
+const createHttpProvider = (initial: unknown = 100) => {
+  let response: () => Promise<unknown> = async () => initial;
+  const attempts: string[] = [];
+  const http = new EnhancedHttpClient({ logger: noOpLogger, axios: {
+    get: async (url) => {
+      attempts.push(url);
+      const count = await response();
+      return { data: { data: [{ viewer_count: count }] } };
     },
-
-    setViewerCount(count) {
-      currentViewerCount = count;
-    },
-
-    getCallCount() {
-      return callCount;
-    },
-  };
+    post: async () => ({}), put: async () => ({}), delete: async () => ({}),
+  } });
+  const provider = new TwitchViewerCountProvider(
+    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }),
+    null, { channel: "synthetic-channel" }, null, noOpLogger,
+  );
+  return { provider, attempts, respond: (next: () => Promise<unknown>) => { response = next; } };
 };
+const ownedSystems: ViewerCountSystem[] = [];
+const ownSystem = (system: ViewerCountSystem) => { ownedSystems.push(system); return system; };
+const drain = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
+let savedToken: string | null;
 
-const buildConfig = (pollingIntervalMs = 60000) =>
-  createConfigFixture({
-    general: { viewerCountPollingIntervalMs: pollingIntervalMs },
-  });
-
-const createViewerCountTestEnvironment = (
-  envConfig: ViewerCountEnvironmentConfig = {},
-) => {
-  const {
-    pollingInterval = 1,
-    platforms = ["tiktok", "twitch", "youtube"],
-    initialStreamStatus = { tiktok: true, twitch: true, youtube: false },
-  } = envConfig;
-
-  const mockPlatforms: Record<string, MockViewerCountPlatform> = {};
-  platforms.forEach((platformName) => {
-    mockPlatforms[platformName] = createMockPlatformWithViewerCount(
-      platformName,
-      envConfig[platformName] || {},
-    );
-  });
-
-  const config = buildConfig(pollingInterval);
-  const system = new ViewerCountSystem({
-    platforms: mockPlatforms,
-    config,
-    logger: noOpLogger,
-  });
-
-  Object.entries(initialStreamStatus).forEach(([platform, isLive]) => {
-    system.streamStatus[platform] = isLive;
-  });
-
-  return {
-    system,
-    mockPlatforms,
-    observers: new Map(),
-  };
+const buildConfig = (pollingIntervalMs = 60000) => createConfigFixture({
+  general: { viewerCountPollingIntervalMs: pollingIntervalMs, envFileReadEnabled: false, envFileWriteEnabled: false, logChatMessages: false },
+  logging: { fileLoggingEnabled: false },
+});
+const createViewerCountTestEnvironment = (envConfig: ViewerCountEnvironmentConfig = {}) => {
+  const http = { tiktok: createHttpProvider(), twitch: createHttpProvider(), youtube: createHttpProvider() };
+  const platforms = Object.fromEntries(Object.entries(http).map(([name, boundary]) => [name, boundary.provider]));
+  const system = ownSystem(new ViewerCountSystem({ platforms, config: buildConfig(envConfig.pollingInterval ?? 1000), logger: noOpLogger }));
+  Object.assign(system.streamStatus, envConfig.initialStreamStatus ?? { tiktok: true, twitch: true, youtube: false });
+  return { system, http, platforms };
 };
 
 const expectValidViewerCountUpdate = (update: ViewerCountUpdate | undefined) => {
@@ -257,26 +195,14 @@ const expectValidStreamStatusChange = (
 };
 
 describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
-  let cleanupFunctions: ReturnType<typeof setupAutomatedCleanup> | null;
-
-  beforeEach(() => {
-    cleanupFunctions = setupAutomatedCleanup();
-    cleanupFunctions.beforeEach();
-    useFakeTimers();
-  });
-
+  beforeEach(() => { savedToken = secrets.twitch.accessToken; secrets.twitch.accessToken = "synthetic-token"; useFakeTimers(); });
   afterEach(async () => {
+    for (const system of ownedSystems.splice(0)) await system.cleanup();
+    await drain();
+    expect(getTimerCount()).toBe(0);
+    secrets.twitch.accessToken = savedToken;
     restoreAllMocks();
     useRealTimers();
-    if (cleanupFunctions) {
-      cleanupFunctions.afterEach();
-    }
-  });
-
-  afterAll(() => {
-    if (cleanupFunctions) {
-      cleanupFunctions.afterAll();
-    }
   });
 
   describe("System Initialization & Configuration", () => {
@@ -314,47 +240,39 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     });
 
     test("should respect configured polling intervals from config", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platforms: {},
         config: buildConfig(60000),
         logger: noOpLogger,
-      });
+      }));
       system.startPolling();
       expect(system.pollingInterval).toBe(60000);
       expect(system.isPolling).toBe(true);
     });
 
     test("should handle missing configuration gracefully with defaults", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platforms: {},
         config: buildConfig(60000),
         logger: noOpLogger,
-      });
+      }));
       expect(() => system.startPolling()).not.toThrow();
     });
 
-    test("should validate polling interval boundaries and disable for invalid values", () => {
-      const system = new ViewerCountSystem({
-        platforms: {},
-        config: buildConfig(60000),
-        logger: noOpLogger,
-      });
-      system.pollingInterval = 0;
-      expect(system.pollingInterval).toBe(0);
-      const isValidInterval = system.pollingInterval > 0;
-      expect(isValidInterval).toBe(false);
+    test("should validate polling interval boundaries and disable for invalid values", async () => {
+      const system = ownSystem(new ViewerCountSystem({ platforms: {}, config: buildConfig(0), logger: noOpLogger }));
+      system.startPolling();
+      expect(system.isPolling).toBe(false);
+      expect(system.pollingHandles).toEqual({});
+      expect(getTimerCount()).toBe(0);
     });
 
-    test("should handle negative polling intervals by disabling polling", () => {
-      const system = new ViewerCountSystem({
-        platforms: {},
-        config: buildConfig(60000),
-        logger: noOpLogger,
-      });
-      system.pollingInterval = -10000;
-      expect(system.pollingInterval).toBe(-10000);
-      const isValidInterval = system.pollingInterval > 0;
-      expect(isValidInterval).toBe(false);
+    test("should handle negative polling intervals by disabling polling", async () => {
+      const system = ownSystem(new ViewerCountSystem({ platforms: {}, config: buildConfig(-10000), logger: noOpLogger }));
+      system.startPolling();
+      expect(system.isPolling).toBe(false);
+      expect(system.pollingHandles).toEqual({});
+      expect(getTimerCount()).toBe(0);
     });
   });
 
@@ -451,198 +369,69 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
   });
 
   describe("Platform Polling Behavior", () => {
-    test("should allow only one in-flight poll per platform", async () => {
-      const deferredCount = createDeferred<number>();
-      let callCount = 0;
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: {
-            getViewerCount: () => {
-              callCount++;
-              return deferredCount.promise;
-            },
-          },
-        },
-        config: buildConfig(),
-        logger: noOpLogger,
+    for (const ending of ["overlap", "interval", "offline", "stop", "cleanup"] as const) {
+      test(`held HTTP poll: ${ending} preserves admission and retirement`, async () => {
+        const h = createHttpProvider();
+        const entered = createDeferred<void>();
+        const release = createDeferred<number>();
+        h.respond(async () => { entered.resolve(); return release.promise; });
+        const system = ownSystem(new ViewerCountSystem({ platforms: { twitch: h.provider }, config: buildConfig(1), logger: noOpLogger }));
+        let poll: Promise<void> | undefined;
+        try {
+          poll = system.pollPlatform("twitch"); await entered.promise;
+          if (ending === "overlap") await system.pollPlatform("twitch");
+          if (ending === "interval") { system.startPolling(); advanceTimersByTime(5); }
+          if (ending === "offline") await system.updateStreamStatus("twitch", false);
+          if (ending === "stop") system.stopPolling();
+          if (ending === "cleanup") await system.cleanup();
+          expect(h.attempts).toHaveLength(1);
+          expect(system.getViewerCount("twitch")).toBe(0);
+          release.resolve(120); await poll;
+          expect(system.getViewerCount("twitch")).toBe(ending === "overlap" || ending === "interval" ? 120 : 0);
+        } finally { release.resolve(120); await poll; await system.cleanup(); }
       });
-      system.streamStatus.tiktok = true;
-
-      const firstPoll = system.pollPlatform("tiktok");
-      const overlappingPoll = system.pollPlatform("tiktok");
-
-      expect(callCount).toBe(1);
-      deferredCount.resolve(120);
-      await Promise.all([firstPoll, overlappingPoll]);
-      expect(system.getViewerCount("tiktok")).toBe(120);
-    });
-
-    test("should not overlap immediate and interval polls", async () => {
-      const deferredCount = createDeferred<number>();
-      let callCount = 0;
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: {
-            getViewerCount: () => {
-              callCount++;
-              return deferredCount.promise;
-            },
-          },
-        },
-        config: buildConfig(1),
-        logger: noOpLogger,
-      });
-      system.streamStatus.tiktok = true;
-
-      system.startPolling();
-      advanceTimersByTime(5);
-
-      expect(callCount).toBe(1);
-      deferredCount.resolve(120);
-      await Promise.resolve();
-      system.stopPolling();
-    });
-
-    test("should discard a poll result after the platform goes offline", async () => {
-      const deferredCount = createDeferred<number>();
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: { getViewerCount: () => deferredCount.promise },
-        },
-        config: buildConfig(),
-        logger: noOpLogger,
-      });
-      system.streamStatus.tiktok = true;
-
-      const poll = system.pollPlatform("tiktok");
-      await system.updateStreamStatus("tiktok", false);
-      deferredCount.resolve(120);
-      await poll;
-
-      expect(system.getViewerCount("tiktok")).toBe(0);
-    });
-
-    test("should discard a poll result after polling stops", async () => {
-      const deferredCount = createDeferred<number>();
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: { getViewerCount: () => deferredCount.promise },
-        },
-        config: buildConfig(),
-        logger: noOpLogger,
-      });
-      system.streamStatus.tiktok = true;
-
-      const poll = system.pollPlatform("tiktok");
-      system.stopPolling();
-      deferredCount.resolve(120);
-      await poll;
-
-      expect(system.getViewerCount("tiktok")).toBe(0);
-    });
-
-    test("should discard a poll result after cleanup", async () => {
-      const deferredCount = createDeferred<number>();
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: { getViewerCount: () => deferredCount.promise },
-        },
-        config: buildConfig(),
-        logger: noOpLogger,
-      });
-      system.streamStatus.tiktok = true;
-
-      const poll = system.pollPlatform("tiktok");
-      await system.cleanup();
-      deferredCount.resolve(120);
-      await poll;
-
-      expect(system.getViewerCount("tiktok")).toBe(0);
-    });
+    }
 
     test("should poll different platforms independently", async () => {
-      const tiktokCount = createDeferred<number>();
-      const twitchCount = createDeferred<number>();
-      const system = new ViewerCountSystem({
-        platforms: {
-          tiktok: { getViewerCount: () => tiktokCount.promise },
-          twitch: { getViewerCount: () => twitchCount.promise },
-        },
-        config: buildConfig(),
-        logger: noOpLogger,
-      });
-      system.streamStatus.tiktok = true;
-      system.streamStatus.twitch = true;
-
-      const slowPoll = system.pollPlatform("tiktok");
-      const fastPoll = system.pollPlatform("twitch");
-      twitchCount.resolve(75);
-      await fastPoll;
-
-      expect(system.getViewerCount("twitch")).toBe(75);
-      expect(system.getViewerCount("tiktok")).toBe(0);
-
-      tiktokCount.resolve(120);
-      await slowPoll;
+      const { system, http } = createViewerCountTestEnvironment();
+      const entered = createDeferred<void>(); const release = createDeferred<number>();
+      http.tiktok.respond(async () => { entered.resolve(); return release.promise; });
+      http.twitch.respond(async () => 75);
+      const slow = system.pollPlatform("tiktok");
+      try {
+        await entered.promise;
+        await system.pollPlatform("twitch");
+        expect(http.tiktok.attempts).toHaveLength(1); expect(http.twitch.attempts).toHaveLength(1);
+        expect(system.getViewerCount("twitch")).toBe(75); expect(system.getViewerCount("tiktok")).toBe(0);
+        release.resolve(120); await slow;
+        expect(system.getViewerCount("tiktok")).toBe(120);
+      } finally { release.resolve(120); await slow; }
     });
 
-    test("should poll live platforms at configured intervals", async () => {
-      const { system, mockPlatforms } = createViewerCountTestEnvironment({
-        pollingInterval: 1,
-      });
-
-      system.startPolling();
-      advanceTimersByTime(2);
-      expect(mockPlatforms.tiktok!.getCallCount()).toBeGreaterThan(0);
-      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
-    });
-
-    test("should skip polling for offline platforms", async () => {
-      const { system, mockPlatforms } = createViewerCountTestEnvironment({
-        pollingInterval: 1,
-        initialStreamStatus: { tiktok: true, twitch: true, youtube: false },
-      });
-      system.startPolling();
-      advanceTimersByTime(2);
-      expect(mockPlatforms.youtube!.getCallCount()).toBe(0);
-      expect(mockPlatforms.tiktok!.getCallCount()).toBeGreaterThan(0);
-      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
-    });
-
-    test("should detect viewer count changes and notify observers", async () => {
-      const { system } = createViewerCountTestEnvironment({
-        tiktok: { viewerCountSequence: [100, 150, 200] },
-      });
-      const observer = createMockViewerCountObserver("count-tracker");
-      system.addObserver(observer);
-      system.startPolling();
-      advanceTimersByTime(3);
-      await Promise.resolve();
-      expect(observer.receivedUpdates.length).toBeGreaterThan(0);
-      const lastUpdate =
-        observer.receivedUpdates[observer.receivedUpdates.length - 1];
-      expectValidViewerCountUpdate(lastUpdate);
-    }, 10000);
-
-    test("should handle platform API failures gracefully during polling", async () => {
-      const { system } = createViewerCountTestEnvironment({
-        tiktok: { failAfterCalls: 1, failureMessage: "Network timeout" },
-      });
-      const observer = createMockViewerCountObserver("error-tracker");
-      system.addObserver(observer);
-      system.startPolling();
-      advanceTimersByTime(5);
-      await Promise.resolve();
-      expect(system.isPolling).toBe(true);
-    }, 10000);
-
-    test("should maintain independent polling schedules per platform", async () => {
-      const { system } = createViewerCountTestEnvironment();
-      system.startPolling();
+    test("live cadence admits exact HTTP attempts and skips offline slots", async () => {
+      const { system, http } = createViewerCountTestEnvironment();
+      const observer = createMockViewerCountObserver("cadence"); system.addObserver(observer);
+      system.startPolling(); await drain();
+      expect(Object.values(http).map(h => h.attempts.length)).toEqual([1, 1, 0]);
+      expect(observer.receivedUpdates.map(u => [u.platform, u.count])).toEqual([["tiktok", 100], ["twitch", 100]]);
+      advanceTimersByTime(1000); await drain();
+      expect(Object.values(http).map(h => h.attempts.length)).toEqual([2, 2, 0]);
       system.stopPlatformPolling("tiktok");
-      advanceTimersByTime(5);
-      expect(system.pollingHandles.twitch).toBeDefined();
-      expect(system.pollingHandles.tiktok).toBeUndefined();
+      advanceTimersByTime(1000); await drain();
+      expect(Object.values(http).map(h => h.attempts.length)).toEqual([2, 3, 0]);
+      expect(system.pollingHandles.tiktok).toBeUndefined(); expect(system.pollingHandles.twitch).toBeDefined();
+      expect(observer.receivedUpdates.map(u => u.count)).toEqual([100, 100, 100, 100, 100]);
+    });
+
+    test("successive HTTP observations publish exact changing counts", async () => {
+      const { system, http } = createViewerCountTestEnvironment();
+      const observer = createMockViewerCountObserver("counts"); system.addObserver(observer);
+      for (const count of [100, 150, 200]) {
+        http.tiktok.respond(async () => count); await system.pollPlatform("tiktok");
+      }
+      expect(http.tiktok.attempts).toHaveLength(3);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[100, 0], [150, 100], [200, 150]]);
+      expect(system.getViewerCount("tiktok")).toBe(200);
     });
   });
 
@@ -773,9 +562,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     });
 
     test("should track viewer count history accurately", async () => {
-      const { system } = createViewerCountTestEnvironment({
-        tiktok: { viewerCountSequence: [100, 120, 90, 110] },
-      });
+      const { system } = createViewerCountTestEnvironment();
       const observer = createMockViewerCountObserver("history-tracker");
       system.addObserver(observer);
       await system.notifyObservers("tiktok", 100, 0);
@@ -815,68 +602,70 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
   });
 
   describe("Error Handling & Recovery", () => {
-    test("should continue operation when platform polling fails", async () => {
-      const { system, mockPlatforms } = createViewerCountTestEnvironment({
-        tiktok: { failAfterCalls: 1 },
-        twitch: { initialViewerCount: 200 },
+    for (const failure of ["Network timeout", "Request timeout", "Network error", "Service unavailable"] as const) {
+      test(`HTTP failure retains last good and recovers: ${failure}`, async () => {
+        const { system, http } = createViewerCountTestEnvironment();
+        const observer = createMockViewerCountObserver("recovery"); system.addObserver(observer);
+        http.twitch.respond(async () => 200);
+        await system.pollPlatform("tiktok");
+        http.tiktok.respond(async () => { throw new Error(failure); });
+        const failures = failure === "Network error" ? 2 : 1;
+        for (let i = 0; i < failures; i++) await system.pollPlatform("tiktok");
+        await system.pollPlatform("twitch");
+        expect(http.tiktok.attempts).toHaveLength(1 + failures); expect(http.twitch.attempts).toHaveLength(1);
+        expect(http.tiktok.provider.getErrorStats()).toMatchObject({ totalErrors: failures, consecutiveErrors: failures, lastError: failure });
+        expect(system.getViewerCount("tiktok")).toBe(100);
+        expect(observer.receivedUpdates.map(u => [u.platform, u.count])).toEqual([["tiktok", 100], ["twitch", 200]]);
+        http.tiktok.respond(async () => 400); await system.pollPlatform("tiktok");
+        expect(http.tiktok.attempts).toHaveLength(2 + failures);
+        expect(system.getViewerCount("tiktok")).toBe(400);
+        expect(http.tiktok.provider.getErrorStats().consecutiveErrors).toBe(0);
+        expect(observer.receivedUpdates.at(-1)).toMatchObject({ count: 400, previousCount: 100 });
       });
-      const observer = createMockViewerCountObserver("error-recovery");
-      system.addObserver(observer);
-      system.startPolling();
-      advanceTimersByTime(10);
-      await Promise.resolve();
-      expect(system.isPolling).toBe(true);
-      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
-    }, 10000);
+    }
+    test("null availability, external throw, measured zero and offline reset remain distinct", async () => {
+      const h = createHttpProvider(42);
+      const system = ownSystem(new ViewerCountSystem({ platforms: { twitch: h.provider }, config: buildConfig(), logger: noOpLogger }));
+      const observer = createMockViewerCountObserver("availability"); system.addObserver(observer);
+      await system.pollPlatform("twitch");
+      const lastGood = system.getViewerCountSnapshot("twitch");
+      expect(lastGood).toMatchObject({ count: 42, hasCompleteObservation: true, latestOutcome: "complete" });
+      h.provider.config = { channel: "" };
+      expect(await h.provider.getViewerCount()).toBeNull();
+      await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(1);
+      expect(system.getViewerCountSnapshot("twitch")).toEqual(lastGood);
+      h.provider.config = { channel: "synthetic-channel" };
+      h.respond(async () => { throw new Error("synthetic transport rejection"); });
+      expect(await h.provider.getViewerCount()).toBeNull();
+      await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(3);
+      expect(h.provider.getErrorStats()).toMatchObject({ totalErrors: 2, consecutiveErrors: 2 });
+      // Twitch null does not change the store's last complete snapshot. YouTube's
+      // observation unavailable policy is separately owned by the membership suite.
+      expect(system.getViewerCountSnapshot("twitch")).toEqual(lastGood);
+      expect(observer.receivedUpdates.map(u => u.count)).toEqual([42]);
+      h.respond(async () => 0); await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(4);
+      expect(system.getViewerCountSnapshot("twitch")).toMatchObject({ count: 0, hasCompleteObservation: true, latestOutcome: "complete" });
+      h.respond(async () => 9); await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(5); expect(system.getViewerCount("twitch")).toBe(9);
+      await system.updateStreamStatus("twitch", false); await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(5); expect(system.getViewerCount("twitch")).toBe(0);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[42, 0], [0, 42], [9, 0], [0, 9]]);
+    });
 
-    test("should handle platform API timeouts gracefully", async () => {
-      const { system } = createViewerCountTestEnvironment({
-        tiktok: {
-          failAfterCalls: 1,
-          failureMessage: "Request timeout",
-        },
-      });
-      system.startPolling();
-      advanceTimersByTime(5);
-      await Promise.resolve();
-      expect(system.isPolling).toBe(true);
-    }, 10000);
-
-    test("should recover from temporary network failures", async () => {
-      const { system, mockPlatforms } = createViewerCountTestEnvironment({
-        pollingInterval: 1,
-      });
-      let failureCount = 0;
-      const originalGetViewerCount = mockPlatforms.tiktok!.getViewerCount;
-      mockPlatforms.tiktok!.getViewerCount = async function () {
-        failureCount++;
-        if (failureCount <= 2) {
-          throw new Error("Network error");
-        }
-        return originalGetViewerCount.call(this);
-      };
-      const observer = createMockViewerCountObserver("recovery-tracker");
-      system.addObserver(observer);
-      system.startPolling();
-      advanceTimersByTime(10);
-      await Promise.resolve();
-      expect(system.isPolling).toBe(true);
-    }, 10000);
-
-    test("should maintain system stability during cascading errors", async () => {
-      const { system } = createViewerCountTestEnvironment({
-        tiktok: { failAfterCalls: 0 },
-        twitch: { failAfterCalls: 0 },
-        youtube: { failAfterCalls: 0 },
-      });
-      const observer = createMockViewerCountObserver("stability-test");
-      system.addObserver(observer);
-      system.startPolling();
-      advanceTimersByTime(5);
-      await Promise.resolve();
-      expect(system.isPolling).toBe(true);
-      expect(system.observers.size).toBe(1);
-    }, 10000);
+    test("all failed HTTP slots preserve distinct last good counts", async () => {
+      const { system, http } = createViewerCountTestEnvironment({ initialStreamStatus: { tiktok: true, twitch: true, youtube: true } });
+      for (const [index, name] of (["tiktok", "twitch", "youtube"] as const).entries()) {
+        await system.updateViewerCount(name, index + 10);
+        http[name].respond(async () => { throw new Error("synthetic outage"); });
+        await system.pollPlatform(name);
+      }
+      expect(system.getViewerCounts()).toEqual({ tiktok: 10, twitch: 11, youtube: 12 });
+      expect(Object.values(http).map(h => h.attempts.length)).toEqual([1, 1, 1]);
+      expect(system.pollingStats.successfulPolls).toBe(0);
+    });
 
     test("should handle observer notification failures without affecting others", async () => {
       const { system } = createViewerCountTestEnvironment();
@@ -945,14 +734,14 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       expect(system.isPolling).toBe(true);
     });
 
-    test("should prevent memory leaks during extended operation", async () => {
+    test("delivers all 1000 notifications and clears observers on cleanup", async () => {
       const { system } = createViewerCountTestEnvironment();
       const observer = createMockViewerCountObserver("memory-test");
       system.addObserver(observer);
       for (let i = 0; i < 1000; i++) {
         await system.notifyObservers("tiktok", i, i - 1);
       }
-      expect(observer.receivedUpdates).toHaveLength(1000);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual(Array.from({ length: 1000 }, (_, i) => [i, i - 1]));
       await system.cleanup();
       expect(system.observers.size).toBe(0);
     });
@@ -960,15 +749,16 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
 
   describe("Configuration Changes & Runtime Adaptation", () => {
     test("should adapt to polling interval changes at runtime", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platforms: {},
         config: buildConfig(60000),
         logger: noOpLogger,
-      });
+      }));
       system.startPolling();
       expect(system.pollingInterval).toBe(60000);
       system.stopPolling();
-      system.pollingInterval = 30000;
+      system.pollingIntervalMs = 30000;
+      system.startPolling();
       expect(system.pollingInterval).toBe(30000);
     });
 
@@ -983,11 +773,11 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     });
 
     test("should validate configuration changes before applying", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platforms: {},
         config: buildConfig(60000),
         logger: noOpLogger,
-      });
+      }));
       expect(() => system.startPolling()).not.toThrow();
       expect(system.isPolling).toBe(true);
     });
@@ -1005,110 +795,47 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     });
   });
 
-  describe("Performance & Scalability", () => {
-    test("should handle multiple simultaneous platform updates efficiently", async () => {
+  describe("Notification volume", () => {
+    test("delivers three simultaneous platform updates exactly", async () => {
       const { system } = createViewerCountTestEnvironment();
-      const observer = createMockViewerCountObserver("performance-test");
-      system.addObserver(observer);
-      const startTime = testClock.now();
-      const updatePromises = [
-        system.notifyObservers("tiktok", 100, 50),
-        system.notifyObservers("twitch", 200, 150),
-        system.notifyObservers("youtube", 300, 250),
-      ];
-      await Promise.all(updatePromises);
-      const simulatedDurationMs = 20;
-      testClock.advance(simulatedDurationMs);
-      const duration = testClock.now() - startTime;
-      expect(duration).toBeLessThan(100);
-      expect(observer.receivedUpdates).toHaveLength(3);
+      const observer = createMockViewerCountObserver("simultaneous"); system.addObserver(observer);
+      await Promise.all([["tiktok", 100, 50], ["twitch", 200, 150], ["youtube", 300, 250]].map(([platform, count, previous]) => system.notifyObservers(String(platform), Number(count), Number(previous))));
+      expect(observer.receivedUpdates.map(u => [u.platform, u.count, u.previousCount])).toEqual([["tiktok", 100, 50], ["twitch", 200, 150], ["youtube", 300, 250]]);
     });
-
-    test("should maintain performance with many registered observers", async () => {
-      const { system } = createViewerCountTestEnvironment();
-      const observers: MockViewerCountObserver[] = [];
-      for (let i = 0; i < 50; i++) {
-        const observer = createMockViewerCountObserver(`perf-observer-${i}`);
-        observers.push(observer);
-        system.addObserver(observer);
-      }
-      const startTime = testClock.now();
-      await system.notifyObservers("tiktok", 100, 50);
-      const simulatedDurationMs = 150;
-      testClock.advance(simulatedDurationMs);
-      const duration = testClock.now() - startTime;
-      expect(duration).toBeLessThan(1000);
-      observers.forEach((observer) => {
-        expect(observer.receivedUpdates).toHaveLength(1);
-      });
-    });
-
-    test("should process viewer count updates within performance thresholds", async () => {
-      const { system } = createViewerCountTestEnvironment();
-
-      const observer = createMockViewerCountObserver("threshold-test");
-      system.addObserver(observer);
-      const iterations = 100;
-      const startTime = testClock.now();
-      for (let i = 0; i < iterations; i++) {
-        await system.notifyObservers("tiktok", i, i - 1);
-      }
-      const simulatedTotalMs = iterations * 2;
-      testClock.advance(simulatedTotalMs);
-      const totalDuration = testClock.now() - startTime;
-      const averageTime = totalDuration / iterations;
-      expect(averageTime).toBeLessThan(5);
-    });
-
-    test("should scale observer notifications efficiently", async () => {
-      const { system } = createViewerCountTestEnvironment();
-      const testSizes = [1, 10, 25, 50];
-      const results: Array<{ size: number; duration: number }> = [];
-      for (const size of testSizes) {
-        system.observers.clear();
-        for (let i = 0; i < size; i++) {
-          const observer = createMockViewerCountObserver(`scale-${i}`);
-          system.addObserver(observer);
-        }
-        const startTime = testClock.now();
+    for (const size of [1, 10, 25, 50]) {
+      test(`delivers to each of ${size} registered observers`, async () => {
+        const { system } = createViewerCountTestEnvironment();
+        const observers = Array.from({ length: size }, (_, i) => createMockViewerCountObserver(`volume-${i}`));
+        observers.forEach(observer => system.addObserver(observer));
         await system.notifyObservers("tiktok", 100, 50);
-        const simulatedDurationMs = 5 + size;
-        testClock.advance(simulatedDurationMs);
-        const duration = testClock.now() - startTime;
-        results.push({ size, duration });
-      }
-      const firstResult = results[0];
-      const lastResult = results[results.length - 1];
-      expect(firstResult).toBeDefined();
-      expect(lastResult).toBeDefined();
-      if (!firstResult || !lastResult) {
-        throw new Error("Expected scalability results");
-      }
-      const scaleFactor =
-        firstResult.duration > 0
-          ? lastResult.duration / firstResult.duration
-          : 1;
-      expect(scaleFactor).toBeLessThan(10);
+        for (const observer of observers) expect(observer.receivedUpdates).toEqual([expect.objectContaining({ platform: "tiktok", count: 100, previousCount: 50 })]);
+      });
+    }
+    test("delivers all 100 successive updates in order", async () => {
+      const { system } = createViewerCountTestEnvironment();
+      const observer = createMockViewerCountObserver("successive"); system.addObserver(observer);
+      for (let i = 0; i < 100; i++) await system.notifyObservers("tiktok", i, i - 1);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual(Array.from({ length: 100 }, (_, i) => [i, i - 1]));
     });
   });
 
   describe("Integration Points", () => {
     test("should integrate with platform registry correctly", () => {
-      const { system, mockPlatforms } = createViewerCountTestEnvironment();
+      const { system, platforms } = createViewerCountTestEnvironment();
       const validation = system.validatePlatformForPolling("tiktok");
       expect(validation.valid).toBe(true);
       if (!validation.valid) {
         throw new Error("Expected tiktok platform to be valid for polling");
       }
-      expect(validation.platform).toBe(mockPlatforms.tiktok!);
+      expect(validation.platform).toBe(platforms.tiktok!);
     });
 
     test("should handle empty platform registry properly", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platforms: {},
         config: buildConfig(60000),
         logger: noOpLogger,
-      });
+      }));
       expect(() => system.startPolling()).not.toThrow();
     });
 

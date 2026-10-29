@@ -59,24 +59,49 @@ describe("DependencyFactory behavior", () => {
       expect(() => deps.innertubeService.withMetadataOperation({}, async () => true)).toThrow("disposed");
     });
 
-    it("uses the injected root owner for every recreated metadata consumer", async () => {
-      const rootFactory = new DependencyFactory();
-      const root = rootFactory.createYoutubeInnertubeService({ logger: noOpLogger });
+    it("routes default and explicit youtubei discovery and viewer reads through the reused root owner", async () => {
+      const channelId = "UC" + "s".repeat(22);
+      const reads: string[] = [];
+      let creations = 0;
+      const root = factory.createYoutubeInnertubeService({
+        logger: noOpLogger,
+        Innertube: { create: async () => {
+          creations += 1;
+          return {
+            getInfo: async (videoId: string) => {
+              reads.push(videoId);
+              return { video_details: { concurrent_viewers: 37 } };
+            },
+            getChannel: async (id: string) => {
+              reads.push(id);
+              return { getLiveStreams: async () => ({ videos: [{
+                id: "synthetic-live", title: "Synthetic stream", is_live: true,
+                author: { id: channelId, name: "Synthetic channel" },
+              }] }) };
+            },
+            search: async () => ({ videos: [] }),
+          };
+        } },
+      });
       try {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        for (const streamDetectionMethod of [undefined, "youtubei"]) {
           const deps = factory.createYoutubeDependencies(
-            { username: "synthetic-channel", streamDetectionMethod: "youtubei" },
-            { logger: noOpLogger, config: configFixture, innertubeService: root, Innertube: { create: async () => ({ getInfo: async () => ({}) }) } },
+            { username: "synthetic-channel", ...(streamDetectionMethod ? { streamDetectionMethod } : {}) },
+            { logger: noOpLogger, config: configFixture, innertubeService: root },
           );
-          expect(deps.innertubeService).toBe(root);
-          expect(deps.viewerExtractionService.innertubeService).toBe(root);
-          expect((deps.streamDetectionService as YouTubeStreamDetectionService).client).toBe(root);
+          const discovery = await (deps.streamDetectionService as YouTubeStreamDetectionService).detectLiveStreams(channelId);
+          expect(discovery.success).toBe(true);
+          expect(discovery.videoIds).toEqual(["synthetic-live"]);
+          expect(await deps.viewerExtractionService.extractViewerCount("synthetic-live")).toMatchObject({ success: true, count: 37 });
         }
+        expect(creations).toBe(1);
+        expect(reads).toEqual([channelId, "synthetic-live", channelId, "synthetic-live"]);
       } finally {
         await root.dispose();
       }
+      expect(() => root.withMetadataOperation({}, async () => true)).toThrow("disposed");
     });
-    it("requires API key when YouTube API is enabled", () => {
+    it("rejects unsupported YouTube API mode", () => {
       _resetForTesting();
       expect(() =>
         factory.createYoutubeDependencies(
@@ -86,7 +111,7 @@ describe("DependencyFactory behavior", () => {
           },
           { logger: noOpLogger, config: configFixture },
         ),
-      ).toThrow(/YouTube API key is required/);
+      ).toThrow(/YouTube Data API.*not supported/);
     });
 
     it("creates dependencies object with expected structure when config is valid", () => {
@@ -98,8 +123,6 @@ describe("DependencyFactory behavior", () => {
         { logger: noOpLogger, config: configFixture },
       );
 
-      expect(deps).toHaveProperty("apiClient");
-      expect(deps).toHaveProperty("connectionManager");
       expect(deps).toHaveProperty("innertubeFactory");
     });
   });

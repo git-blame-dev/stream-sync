@@ -61,7 +61,7 @@ class EventBus extends EventEmitter {
         const { once = false, context = null } = options;
 
         const wrappedHandler: WrappedEventHandler = async (...args: unknown[]) => {
-            const startTime = Date.now();
+            const startTime = performance.now();
 
             try {
                 if (this.debugEnabled) {
@@ -77,7 +77,7 @@ class EventBus extends EventEmitter {
                     await result;
                 }
 
-                const executionTime = Math.max(0, Date.now() - startTime);
+                const executionTime = Math.max(0, performance.now() - startTime);
 
                 this._updateEventStats(eventName, 'success', executionTime);
 
@@ -86,7 +86,7 @@ class EventBus extends EventEmitter {
                 }
 
             } catch (error) {
-                const executionTime = Math.max(0, Date.now() - startTime);
+                const executionTime = Math.max(0, performance.now() - startTime);
                 this._updateEventStats(eventName, 'error', executionTime);
 
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -157,8 +157,6 @@ class EventBus extends EventEmitter {
     }
 
     override emit(eventName: EventName, ...args: unknown[]) {
-        const startTime = Date.now();
-
         if (this.debugEnabled) {
             logger?.debug?.(`[EventBus] Emitting '${formatEventName(eventName)}'`, 'event-bus', {
                 argsCount: args.length,
@@ -167,9 +165,7 @@ class EventBus extends EventEmitter {
         }
 
         const hadListeners = super.emit(eventName, ...args);
-        const emissionTime = Math.max(0, Date.now() - startTime);
-
-        this._updateEventStats(eventName, 'emitted', emissionTime);
+        this._updateEventStats(eventName, 'emitted');
 
         if (!hadListeners && this.debugEnabled) {
             logger?.debug?.(`[EventBus] No listeners for '${formatEventName(eventName)}'`, 'event-bus');
@@ -208,7 +204,7 @@ class EventBus extends EventEmitter {
         logger?.debug?.(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
     }
 
-    _updateEventStats(eventName: EventName, type: keyof Pick<EventStats, 'emitted' | 'success' | 'error'>, duration: number) {
+    _updateEventStats(eventName: EventName, type: keyof Pick<EventStats, 'emitted' | 'success' | 'error'>, duration = 0) {
         if (!this.eventStats.has(eventName)) {
             this.eventStats.set(eventName, {
                 emitted: 0,
@@ -224,9 +220,9 @@ class EventBus extends EventEmitter {
             return;
         }
         stats[type]++;
-        stats.totalDuration += duration;
         
         if (type === 'success' || type === 'error') {
+            stats.totalDuration += duration;
             stats.avgDuration = stats.totalDuration / (stats.success + stats.error);
         }
     }

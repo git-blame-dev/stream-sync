@@ -149,21 +149,6 @@ describe("Centralized Endpoints Configuration", () => {
     });
   });
 
-  describe("Environment-Specific Configuration", () => {
-    test("should support environment override for development", () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = "development";
-
-      expect(TWITCH.API_BASE).toBe("https://api.twitch.tv/helix");
-
-      if (originalEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = originalEnv;
-      }
-    });
-  });
-
   describe("Public Endpoint Exports", () => {
     test("should export individual platform configurations", () => {
       expect(TWITCH).toBeDefined();

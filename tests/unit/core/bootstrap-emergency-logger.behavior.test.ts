@@ -15,6 +15,48 @@ function createStderrCapture() {
 }
 
 describe("bootstrap emergency logger behavior", () => {
+    test("removes complete URL secrets before independent stderr and file writes", () => {
+        const capture = createStderrCapture();
+        const writes: string[] = [];
+        const logger = createBootstrapEmergencyLogger({ logsDir: '/synthetic-unused', stderr: capture.stderr,
+            existsSync: () => true, appendFileSync: (_path, data) => { writes.push(String(data)); } });
+        logger.writeUncaughtException(new Error('failed https://example.invalid/?opaque=synthetic-prefix,synthetic-tail scope missing'));
+        logger.writeUncaughtException(new Error(JSON.stringify({
+            url: 'https://example.invalid/?opaque=synthetic-escaped', diagnostic: 'scope missing',
+        }).replace(/\//g, '\\/')));
+        logger.writeUncaughtException(new Error(JSON.stringify({
+            url: 'ht\ttps://example.invalid/?opaque=synthetic-whitespace', diagnostic: 'scope missing',
+        })));
+        for (const output of [capture.output.join(''), writes.join('')]) {
+            expect(output).not.toContain('synthetic-');
+            expect(output).toContain('scope missing');
+        }
+    });
+    test("unknown rejection shapes cannot prevent any public emergency report", () => {
+        const values: unknown[] = [Object.create(null), { constructor: null },
+            Object.defineProperty({}, 'constructor', { get() { throw new Error('synthetic getter'); } }),
+            new Proxy({}, { ownKeys() { throw new Error('synthetic keys'); } })];
+        for (const value of values) {
+            const capture = createStderrCapture();
+            const writes: string[] = [];
+            const logger = createBootstrapEmergencyLogger({ logsDir: '/synthetic-unused', stderr: capture.stderr,
+                existsSync: () => true, appendFileSync: (_path, data) => { writes.push(String(data)); } });
+            expect(() => logger.writeUnhandledRejection(value)).not.toThrow();
+            expect(() => logger.writeUncaughtException(value)).not.toThrow();
+            expect(() => logger.writeMainFailure(value)).not.toThrow();
+            expect(capture.output).toHaveLength(3);
+            expect(writes).toHaveLength(2);
+        }
+    });
+
+    test("a broken stderr still permits the independent emergency file attempt", () => {
+        const writes: string[] = [];
+        const logger = createBootstrapEmergencyLogger({ logsDir: '/synthetic-unused',
+            stderr: { write() { throw new Error('synthetic sink failure'); } }, existsSync: () => true,
+            appendFileSync: (_path, data) => { writes.push(String(data)); } });
+        expect(() => logger.writeUnhandledRejection(Object.create(null))).not.toThrow();
+        expect(writes).toHaveLength(1);
+    });
     test("writes uncaught exception emergencies to stderr and the program log", () => {
         const stderrCapture = createStderrCapture();
         const fileWrites: string[] = [];

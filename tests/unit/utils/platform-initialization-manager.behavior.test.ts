@@ -1,33 +1,39 @@
-import { describe, expect, beforeEach, it } from "bun:test";
+import { describe, expect, beforeEach, afterEach, it, spyOn } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformInitializationManager } from "../../../src/utils/platform-initialization-manager.ts";
-import { PlatformErrorHandler } from "../../../src/utils/platform-error-handler.ts";
-type MockPlatformErrorHandler = PlatformErrorHandler & {
-  handleEventProcessingError: ReturnType<typeof createMockFn>;
-  logOperationalError: ReturnType<typeof createMockFn>;
-};
+import { createPlatformErrorHandler } from "../../../src/utils/platform-error-handler.ts";
 type InitializationManagerDeps = NonNullable<ConstructorParameters<typeof PlatformInitializationManager>[2]>;
 type CreatePlatformErrorHandler = NonNullable<InitializationManagerDeps["createPlatformErrorHandler"]>;
-
-const createMockPlatformErrorHandler = (): MockPlatformErrorHandler => ({
-  handleEventProcessingError: createMockFn(),
-  logOperationalError: createMockFn(),
-} as unknown as MockPlatformErrorHandler);
+const observations: Array<{ mockRestore(): void }> = [];
+function createObservedErrorHandler(...args: Parameters<CreatePlatformErrorHandler>) {
+  const handler = createPlatformErrorHandler(...args);
+  const processing = spyOn(handler, 'handleEventProcessingError');
+  const operational = spyOn(handler, 'logOperationalError');
+  observations.push(processing, operational);
+  return Object.assign(handler, { handleEventProcessingError: processing, logOperationalError: operational });
+}
+type ObservedPlatformErrorHandler = ReturnType<typeof createObservedErrorHandler>;
+function observedFactory(onCreated: (owner: ObservedPlatformErrorHandler) => void) {
+  return createMockFn((...args: Parameters<CreatePlatformErrorHandler>) => {
+    const owner = createObservedErrorHandler(...args);
+    onCreated(owner);
+    return owner;
+  });
+}
+afterEach(() => { for (const observation of observations.splice(0)) observation.mockRestore(); });
 
 describe("PlatformInitializationManager behavior edges", () => {
-  let sharedHandler: MockPlatformErrorHandler;
-  let mockCreateErrorHandler: CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+  let suppliedHandler: ObservedPlatformErrorHandler;
+  let observedCreateErrorHandler: ReturnType<typeof observedFactory>;
 
   beforeEach(() => {
-    sharedHandler = createMockPlatformErrorHandler();
-
-    mockCreateErrorHandler = createMockFn().mockReturnValue(sharedHandler) as unknown as CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+    observedCreateErrorHandler = observedFactory(owner => { suppliedHandler = owner; });
   });
 
   function createManager(platformName: string, deps: Partial<InitializationManagerDeps> = {}) {
     return new PlatformInitializationManager(platformName, noOpLogger, {
-      createPlatformErrorHandler: mockCreateErrorHandler,
+      createPlatformErrorHandler: observedCreateErrorHandler,
       ...deps,
     });
   }
@@ -50,7 +56,7 @@ describe("PlatformInitializationManager behavior edges", () => {
 
     expect(manager.beginInitialization()).toBe(true);
     expect(manager.beginInitialization()).toBe(false);
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
     expect(manager.getInitializationState()).toMatchObject({
       totalAttempts: 1,
       attempt: 1,
@@ -68,7 +74,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     const state = manager.getInitializationState();
     expect(state.success).toBe(false);
     expect(state.preventedAttempts).toBe(0);
-    expect(sharedHandler.handleEventProcessingError).toHaveBeenCalled();
+    expect(suppliedHandler.handleEventProcessingError).toHaveBeenCalled();
   });
 
   it("allows forced reinitialization even after successes while respecting max attempts", () => {
@@ -82,7 +88,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     manager.markInitializationSuccess();
 
     expect(manager.beginInitialization(true)).toBe(false);
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
   });
 
   it("retains a string failure message without inventing Unknown error", () => {
@@ -95,7 +101,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(state.success).toBe(false);
     expect(state.stage).toBe("config");
     expect(state.error).toBe("string failure");
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
   });
 
   it("heals corrupted counters and state before beginning initialization", () => {
@@ -123,19 +129,20 @@ describe("PlatformInitializationManager behavior edges", () => {
     const stats = manager.getStatistics();
     expect(stats.initializationAttempts).toBe(1);
     expect(stats.isInitialized).toBe(false);
-    expect(sharedHandler.handleEventProcessingError).toHaveBeenCalled();
+    expect(suppliedHandler.handleEventProcessingError).toHaveBeenCalled();
 
     manager.reset();
     expect(manager.getStatistics().initializationAttempts).toBe(0);
   });
 
-  it("creates platform error handler lazily on first failure", () => {
-    const lazyHandler = createMockPlatformErrorHandler();
-    const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler) as unknown as CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+  it("recreates a missing platform error handler on failure", () => {
+    let lazyHandler: ObservedPlatformErrorHandler;
+    const observedCreate = observedFactory(owner => { lazyHandler = owner; });
     const manager = new PlatformInitializationManager("twitch", noOpLogger, {
-      createPlatformErrorHandler: lazyMockCreate,
+      createPlatformErrorHandler: observedCreate,
     });
-    const initialCreateCount = lazyMockCreate.mock.calls.length;
+    const initialCreateCount = observedCreate.mock.calls.length;
+    const firstHandler = manager.errorHandler;
     manager.errorHandler = null;
 
     manager.beginInitialization();
@@ -143,9 +150,10 @@ describe("PlatformInitializationManager behavior edges", () => {
       stage: "lazy",
     });
 
-    expect(lazyMockCreate.mock.calls.length).toBe(initialCreateCount + 1);
-    expect(manager.errorHandler as unknown).toBe(lazyHandler);
-    expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
+    expect(observedCreate.mock.calls.length).toBe(initialCreateCount + 1);
+    expect(manager.errorHandler).not.toBe(firstHandler);
+    expect(manager.errorHandler as unknown).toBe(lazyHandler!);
+    expect(lazyHandler!.handleEventProcessingError).toHaveBeenCalled();
   });
 
   it("records failure and statistics even when already prevented by max attempts", () => {
@@ -162,7 +170,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(stats.initializationAttempts).toBe(1);
     expect(stats.initializationCount).toBe(0);
     expect(stats.isInitialized).toBe(false);
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
   });
 
   it("allows forced reinitialization even when allowReinitialization is false", () => {
@@ -217,7 +225,7 @@ describe("PlatformInitializationManager behavior edges", () => {
   it("validates all four logger methods before constructing its error handler", () => {
     let constructed = false;
     expect(() => new PlatformInitializationManager("tiktok", { debug: () => {}, warn: () => {}, error: () => {} }, {
-      createPlatformErrorHandler: () => { constructed = true; return sharedHandler; },
+      createPlatformErrorHandler: () => { constructed = true; return suppliedHandler; },
     })).toThrow(/info/);
     expect(constructed).toBe(false);
   });
@@ -236,7 +244,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(manager.getInitializationState().error).toBe("synthetic structured message");
   });
 
-  it("skips initialization when platform disabled in config and records prevention", () => {
+  it("prevents reinitialization after success carrying a disabled-platform marker", () => {
     const manager = createManager("youtube");
     manager.configure({ allowReinitialization: false, maxAttempts: 3 });
 
@@ -288,26 +296,28 @@ describe("PlatformInitializationManager behavior edges", () => {
     manager.markInitializationFailure(null, { stage: "config" });
 
     expect(manager.getInitializationState().error).toBe("Unknown error");
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
   });
 
   it("routes failures through a lazily created handler", () => {
-    const lazyHandler = createMockPlatformErrorHandler();
-    const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler) as unknown as CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+    let lazyHandler: ObservedPlatformErrorHandler;
+    const observedCreate = observedFactory(owner => { lazyHandler = owner; });
     const manager = new PlatformInitializationManager("twitch", noOpLogger, {
-      createPlatformErrorHandler: lazyMockCreate,
+      createPlatformErrorHandler: observedCreate,
     });
-    const initialCreateCount = lazyMockCreate.mock.calls.length;
+    const initialCreateCount = observedCreate.mock.calls.length;
+    const firstHandler = manager.errorHandler;
     manager.errorHandler = null;
 
     manager.beginInitialization();
     manager.markInitializationFailure(new Error("boom"), { stage: "connect" });
 
-    expect(lazyMockCreate.mock.calls.length).toBe(initialCreateCount + 1);
-    expect(manager.errorHandler as unknown).toBe(lazyHandler);
-    expect(lazyHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+    expect(observedCreate.mock.calls.length).toBe(initialCreateCount + 1);
+    expect(manager.errorHandler).not.toBe(firstHandler);
+    expect(manager.errorHandler as unknown).toBe(lazyHandler!);
+    expect(lazyHandler!.handleEventProcessingError).toHaveBeenCalledTimes(1);
     const [errorArg, eventTypeArg, payloadArg, messageArg, platformArg] =
-      lazyHandler.handleEventProcessingError.mock.calls[0] ?? [];
+      lazyHandler!.handleEventProcessingError.mock.calls[0] ?? [];
     expect(errorArg).toBeInstanceOf(Error);
     expect(eventTypeArg).toBe("initialization");
     expect(payloadArg).toEqual({ stage: "connect" });
@@ -316,22 +326,24 @@ describe("PlatformInitializationManager behavior edges", () => {
   });
 
   it("logs operational failures through lazily created handler for non-Error payloads", () => {
-    const lazyHandler = createMockPlatformErrorHandler();
-    const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler) as unknown as CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+    let lazyHandler: ObservedPlatformErrorHandler;
+    const observedCreate = observedFactory(owner => { lazyHandler = owner; });
     const manager = new PlatformInitializationManager("youtube", noOpLogger, {
-      createPlatformErrorHandler: lazyMockCreate,
+      createPlatformErrorHandler: observedCreate,
     });
-    const initialCreateCount = lazyMockCreate.mock.calls.length;
+    const initialCreateCount = observedCreate.mock.calls.length;
+    const firstHandler = manager.errorHandler;
     manager.errorHandler = null;
 
     manager.beginInitialization();
     manager.markInitializationFailure("string failure", { stage: "nonerror" });
 
-    expect(lazyMockCreate.mock.calls.length).toBe(initialCreateCount + 1);
-    expect(manager.errorHandler as unknown).toBe(lazyHandler);
-    expect(lazyHandler.logOperationalError).toHaveBeenCalledTimes(1);
+    expect(observedCreate.mock.calls.length).toBe(initialCreateCount + 1);
+    expect(manager.errorHandler).not.toBe(firstHandler);
+    expect(manager.errorHandler as unknown).toBe(lazyHandler!);
+    expect(lazyHandler!.logOperationalError).toHaveBeenCalledTimes(1);
     const [messageArg, platformArg, payloadArg] =
-      lazyHandler.logOperationalError.mock.calls[0] ?? [];
+      lazyHandler!.logOperationalError.mock.calls[0] ?? [];
     expect(String(messageArg)).toContain("Initialization failed");
     expect(platformArg).toBe("youtube");
     expect(payloadArg).toEqual({ stage: "nonerror" });
@@ -339,12 +351,13 @@ describe("PlatformInitializationManager behavior edges", () => {
   });
 
   it("uses default error-handler context when platform name is missing", () => {
-    const lazyHandler = createMockPlatformErrorHandler();
-    const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler) as unknown as CreatePlatformErrorHandler & ReturnType<typeof createMockFn>;
+    let lazyHandler: ObservedPlatformErrorHandler;
+    const observedCreate = observedFactory(owner => { lazyHandler = owner; });
     const manager = new PlatformInitializationManager(undefined, noOpLogger, {
-      createPlatformErrorHandler: lazyMockCreate,
+      createPlatformErrorHandler: observedCreate,
     });
-    const initialCreateCount = lazyMockCreate.mock.calls.length;
+    const initialCreateCount = observedCreate.mock.calls.length;
+    const firstHandler = manager.errorHandler;
     manager.errorHandler = null;
 
     manager.beginInitialization();
@@ -352,9 +365,10 @@ describe("PlatformInitializationManager behavior edges", () => {
       stage: "no-name",
     });
 
-    expect(lazyMockCreate.mock.calls.length).toBe(initialCreateCount + 1);
-    expect(manager.errorHandler as unknown).toBe(lazyHandler);
-    expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
+    expect(observedCreate.mock.calls.length).toBe(initialCreateCount + 1);
+    expect(manager.errorHandler).not.toBe(firstHandler);
+    expect(manager.errorHandler as unknown).toBe(lazyHandler!);
+    expect(lazyHandler!.handleEventProcessingError).toHaveBeenCalled();
   });
 
   it("halts forced reinitialization when max attempts exceeded", () => {
@@ -367,7 +381,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     manager.markInitializationSuccess();
 
     expect(manager.beginInitialization(true)).toBe(false);
-    expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(suppliedHandler.logOperationalError).toHaveBeenCalled();
   });
 
   it("computes success rate in statistics", () => {

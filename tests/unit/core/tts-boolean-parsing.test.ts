@@ -4,12 +4,11 @@ import {
   createMockFn,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
-import { createSourcesConfigFixture } from "../../helpers/config-fixture";
-import { noOpLogger } from "../../helpers/mock-factories";
 import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { DisplayQueue } from "../../../src/obs/display-queue";
-import { createOBSSourcesManager } from "../../../src/obs/sources";
+import { ConfigValidator } from "../../../src/utils/config-validator";
+import { buildObsConfig } from "../../../src/core/config-builders";
 
 registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
@@ -18,7 +17,9 @@ registerMockLifecycleHooks({
 });
 
 describe("TTS Configuration Boolean Parsing", () => {
-  afterEach(() => {
+  const queues: DisplayQueue[] = [];
+  afterEach(async () => {
+    await Promise.all(queues.splice(0).map((queue) => queue.stop()));
     restoreAllMocks();
     clearAllMocks();
   });
@@ -65,27 +66,9 @@ describe("TTS Configuration Boolean Parsing", () => {
         updateTextSource: createMockFn().mockResolvedValue(true),
       };
 
-      const realSourcesManager = createOBSSourcesManager(mockOBS as unknown as Parameters<typeof createOBSSourcesManager>[0], {
-        ...createSourcesConfigFixture(),
-        logger: noOpLogger,
-        ensureOBSConnected: createMockFn().mockResolvedValue(),
-        obsCall: mockOBS.call,
-      });
-
-      const mockGoalsManager = {
-        processDonationGoal: createMockFn().mockResolvedValue({
-          success: true,
-        }),
-        processPaypiggyGoal: createMockFn().mockResolvedValue({
-          success: true,
-        }),
-        initializeGoalDisplay: createMockFn().mockResolvedValue(),
-      };
-
-      return new DisplayQueue(mockOBS, config as unknown as ConstructorParameters<typeof DisplayQueue>[1], baseConstants, null, {
-        sourcesManager: realSourcesManager,
-        goalsManager: mockGoalsManager,
-      } as unknown as ConstructorParameters<typeof DisplayQueue>[4]);
+      const queue = new DisplayQueue(mockOBS, config as unknown as ConstructorParameters<typeof DisplayQueue>[1], baseConstants);
+      queues.push(queue);
+      return queue;
     };
 
     describe("when ttsNotificationsEnabled is false", () => {
@@ -144,25 +127,11 @@ describe("TTS Configuration Boolean Parsing", () => {
     });
   });
 
-  describe("main.js config parsing", () => {
-    it("should properly parse ttsNotificationsEnabled from INI config object", () => {
-      const testConfigs = [
-        { input: { general: { ttsNotificationsEnabled: "false" } }, expected: false },
-        { input: { general: { ttsNotificationsEnabled: "true" } }, expected: true },
-        { input: { general: { ttsNotificationsEnabled: false } }, expected: false },
-        { input: { general: { ttsNotificationsEnabled: true } }, expected: true },
-        { input: { general: {} }, expected: false },
-        { input: { general: { ttsNotificationsEnabled: "" } }, expected: false },
-        { input: { general: { ttsNotificationsEnabled: null } }, expected: false },
-      ];
-
-      testConfigs.forEach(({ input, expected }) => {
-        const config = input;
-        const ttsNotificationsEnabled =
-          config.general.ttsNotificationsEnabled === true ||
-          config.general.ttsNotificationsEnabled === "true";
-        expect(ttsNotificationsEnabled).toBe(expected);
-      });
-    });
+  it("normalizes and builds the OBS setting independently of general", () => {
+    for (const [value, expected] of [["false", false], ["true", true], [false, false], [true, true], ["", true], [null, true], [undefined, true]] as const) {
+      const normalized = ConfigValidator.normalize({ general: { ttsNotificationsEnabled: !expected }, obs: { ttsNotificationsEnabled: value } });
+      expect(normalized.obs.ttsNotificationsEnabled).toBe(expected);
+      expect(buildObsConfig(normalized).ttsNotificationsEnabled).toBe(expected);
+    }
   });
 });

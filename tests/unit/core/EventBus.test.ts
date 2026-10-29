@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { createMockFn, clearAllMocks } from '../../helpers/bun-mock-utils';
-import testClock from '../../helpers/test-clock';
+import { advanceTimersByTime, setSystemTime, useFakeTimers, useRealTimers } from '../../helpers/bun-timers';
 import { waitForDelay } from '../../helpers/time-utils';
 
 import { EventBus, createEventBus } from '../../../src/core/EventBus.ts';
@@ -48,10 +48,17 @@ function asHandlerErrorEvent(value: unknown): HandlerErrorEvent {
     return value as HandlerErrorEvent;
 }
 
+async function settleHandlers() {
+    advanceTimersByTime(10);
+    await Promise.resolve();
+    await Promise.resolve();
+}
+
 describe('EventBus', () => {
     let eventBus: EventBus;
     
     beforeEach(() => {
+        useFakeTimers();
         clearAllMocks();
         eventBus = new EventBus({ debugEnabled: true });
     });
@@ -60,6 +67,7 @@ describe('EventBus', () => {
         if (eventBus) {
             eventBus.reset();
         }
+        useRealTimers();
     });
 
     describe('Constructor and Initialization', () => {
@@ -204,7 +212,7 @@ describe('EventBus', () => {
             eventBus.subscribe('async-event', asyncHandler);
             eventBus.emit('async-event', 'hello');
 
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(asyncHandler).toHaveBeenCalledTimes(1);
             
@@ -220,7 +228,7 @@ describe('EventBus', () => {
             eventBus.subscribe('error-event', errorHandler);
             eventBus.emit('error-event');
 
-            await waitForDelay(50);
+            await settleHandlers();
             
             const stats = eventBus.getEventStats();
             expect(getEventStatsFor(stats, 'error-event').error).toBe(1);
@@ -234,7 +242,7 @@ describe('EventBus', () => {
             eventBus.subscribe('promise-event', promiseHandler);
             eventBus.emit('promise-event');
 
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(promiseHandler).toHaveBeenCalled();
             
@@ -257,7 +265,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', 'data');
             
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(goodHandler).toHaveBeenCalledTimes(1);
             expect(anotherGoodHandler).toHaveBeenCalledTimes(1);
@@ -280,7 +288,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', 'data');
             
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
             const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
@@ -301,7 +309,7 @@ describe('EventBus', () => {
 
             eventBus.emit('test-event', 'data');
 
-            await waitForDelay(50);
+            await settleHandlers();
 
             expect(handlerErrorHandler).toHaveBeenCalledTimes(1);
         });
@@ -315,7 +323,7 @@ describe('EventBus', () => {
             eventBus.subscribe('test-event', errorHandler, { context });
             eventBus.emit('test-event');
 
-            await waitForDelay(50);
+            await settleHandlers();
             
             const stats = eventBus.getEventStats();
             expect(getEventStatsFor(stats, 'test-event').error).toBe(1);
@@ -333,7 +341,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', longObject);
             
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
             const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
@@ -505,7 +513,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', 'data');
 
-            await waitForDelay(10);
+            await settleHandlers();
             
             expect(handler).toHaveBeenCalledTimes(1);
             expect(eventBus.debugEnabled).toBe(true);
@@ -559,7 +567,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event');
             
-            await waitForDelay(50);
+            await settleHandlers();
             
             const stats = eventBus.getEventStats();
             const testEventStats = getEventStatsFor(stats, 'test-event');
@@ -567,23 +575,67 @@ describe('EventBus', () => {
             expect(testEventStats.error).toBe(1);
         });
 
-        test('should calculate average duration correctly', async () => {
-            testClock.useRealTime();
-            const slowHandler = createMockFn(async () => {
-                await waitForDelay(20);
-            });
-            
-            eventBus.subscribe('test-event', slowHandler);
-            
-            eventBus.emit('test-event');
-            eventBus.emit('test-event');
-            
-            await waitForDelay(100);
-            
-            const stats = eventBus.getEventStats();
-            const testEventStats = getEventStatsFor(stats, 'test-event');
-            expect(testEventStats.avgDuration).toBeGreaterThan(0);
-            expect(testEventStats.totalDuration).toBeGreaterThan(testEventStats.avgDuration);
+        test('counts only completed wrapped handlers using monotonic elapsed time', async () => {
+            let elapsed = 100;
+            let wall = 10000;
+            const monotonic = spyOn(performance, 'now').mockImplementation(() => elapsed);
+            setSystemTime(new Date(wall));
+            try {
+                eventBus.subscribe('samples', () => { elapsed += 10; wall -= 1000; setSystemTime(new Date(wall)); });
+                eventBus.emit('samples');
+                expect(eventBus.getEventStats().samples).toEqual({ emitted: 1, success: 1, error: 0, totalDuration: 10, avgDuration: 10 });
+                eventBus.emit('samples');
+                expect(eventBus.getEventStats().samples).toEqual({ emitted: 2, success: 2, error: 0, totalDuration: 20, avgDuration: 10 });
+                const off = eventBus.subscribe('samples', () => { elapsed += 30; throw new Error('synthetic failure'); });
+                eventBus.emit('samples');
+                expect(eventBus.getEventStats().samples).toEqual({ emitted: 3, success: 3, error: 1, totalDuration: 60, avgDuration: 15 });
+                off();
+                eventBus.emit('empty');
+                eventBus.on('raw', () => { elapsed += 99; });
+                eventBus.emit('raw');
+                for (const name of ['empty', 'raw']) {
+                    expect(eventBus.getEventStats()[name]).toEqual({ emitted: 1, success: 0, error: 0, totalDuration: 0, avgDuration: 0 });
+                }
+            } finally {
+                monotonic.mockRestore();
+                setSystemTime();
+            }
+        });
+
+        test('keeps synchronous dispatch and measures overlapping completions in settlement order', async () => {
+            let elapsed = 0;
+            const monotonic = spyOn(performance, 'now').mockImplementation(() => elapsed);
+            const first = Promise.withResolvers<void>();
+            const second = Promise.withResolvers<void>();
+            const order: string[] = [];
+            const errors: unknown[] = [];
+            try {
+                eventBus.subscribe('handler-error', error => { errors.push(error); });
+                eventBus.subscribe('overlap', value => {
+                    order.push(`start:${value}`);
+                    elapsed += 3;
+                    return value === 1 ? first.promise : second.promise;
+                });
+                eventBus.subscribe('overlap', value => { order.push(`later:${value}`); elapsed += 7; });
+                expect(eventBus.emit('overlap', 1)).toBe(true);
+                expect(eventBus.emit('overlap', 2)).toBe(true);
+                expect(order).toEqual(['start:1', 'later:1', 'start:2', 'later:2']);
+                expect(eventBus.getEventStats().overlap).toEqual({ emitted: 2, success: 2, error: 0, totalDuration: 14, avgDuration: 7 });
+                elapsed = 30;
+                second.reject(new Error('synthetic rejection'));
+                await second.promise.catch(() => {});
+                expect(errors).toHaveLength(1);
+                expect(eventBus.getEventStats().overlap).toEqual({ emitted: 2, success: 2, error: 1, totalDuration: 34, avgDuration: 34 / 3 });
+                elapsed = 50;
+                first.resolve();
+                await first.promise;
+                expect(eventBus.getEventStats().overlap).toEqual({ emitted: 2, success: 3, error: 1, totalDuration: 84, avgDuration: 21 });
+            } finally {
+                first.resolve();
+                second.resolve();
+                await Promise.allSettled([first.promise, second.promise]);
+                monotonic.mockRestore();
+            }
         });
 
         test('should return copy of stats to prevent mutation', () => {
@@ -673,21 +725,11 @@ describe('EventBus', () => {
             const handler = createMockFn();
             eventBus.subscribe('rapid-event', handler);
             
-            const startTime = testClock.now();
-
             for (let i = 0; i < 100; i++) {
                 eventBus.emit('rapid-event', i);
             }
-            
-            const simulatedEmissionMs = 25;
-            testClock.advance(simulatedEmissionMs);
-            const emissionTime = testClock.now() - startTime;
-
-            await waitForDelay(100);
-            
             expect(handler).toHaveBeenCalledTimes(100);
-            expect(emissionTime).toBeLessThan(100);
-            
+
             const stats = eventBus.getEventStats();
             expect(getEventStatsFor(stats, 'rapid-event').success).toBe(100);
         });
@@ -738,7 +780,7 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', obj);
             
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
             const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
@@ -756,24 +798,6 @@ describe('EventBus', () => {
             expect(handler).toHaveBeenCalledTimes(1);
         });
 
-        test('should measure handler execution time accurately', async () => {
-            testClock.useRealTime();
-            const delayMs = 50;
-            const slowHandler = createMockFn(async () => {
-                await waitForDelay(delayMs);
-            });
-            
-            eventBus.subscribe('slow-event', slowHandler);
-            eventBus.emit('slow-event');
-
-            await waitForDelay(delayMs + 50);
-            
-            const stats = eventBus.getEventStats();
-            const slowEventStats = getEventStatsFor(stats, 'slow-event');
-            expect(slowEventStats.avgDuration).toBeGreaterThan(delayMs - 10);
-            expect(slowEventStats.avgDuration).toBeLessThan(delayMs + 50);
-        });
-
         test('should handle synchronous and asynchronous handlers mixed', async () => {
             const syncHandler = createMockFn(() => 'sync');
             const asyncHandler = createMockFn(async () => {
@@ -788,7 +812,7 @@ describe('EventBus', () => {
             
             eventBus.emit('mixed-event', 'data');
 
-            await waitForDelay(50);
+            await settleHandlers();
             
             expect(syncHandler).toHaveBeenCalledTimes(1);
             expect(asyncHandler).toHaveBeenCalledTimes(1);

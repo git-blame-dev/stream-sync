@@ -1,10 +1,11 @@
 import fs from 'node:fs';
+import { getYouTubeCapabilityErrors } from '../core/config-schema';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { initializeStaticSecrets } from '../core/secrets';
-import { parseEnvContent } from './env-file-parser';
+import { encodeEnvValue, parseEnvContent } from './env-file-parser';
 import { resolveLogger } from './logger-resolver';
 
 type LoggerLike = {
@@ -119,6 +120,16 @@ const persistToEnv = (envFilePath: string | null, updates: Record<string, string
     }
 
     try {
+        const encoded: Record<string, string> = {};
+        for (const [key, value] of Object.entries(updates)) {
+            const representation = encodeEnvValue(value);
+            if (representation === null) {
+                logger.warn?.(`${key} is available for this process but was not persisted: its characters cannot roundtrip through the supported env-file loaders`, 'secret-manager');
+            } else {
+                encoded[key] = representation;
+            }
+        }
+        if (Object.keys(encoded).length === 0) return [];
         const existingLines = fs.existsSync(envFilePath)
             ? fs.readFileSync(envFilePath, 'utf8').split(/\r?\n/)
             : [];
@@ -132,7 +143,7 @@ const persistToEnv = (envFilePath: string | null, updates: Record<string, string
             }
         });
 
-        Object.entries(updates).forEach(([key, value]) => {
+        Object.entries(encoded).forEach(([key, value]) => {
             const newLine = `${key}=${value}`;
             if (indexByKey[key] !== undefined) {
                 existingLines[indexByKey[key]] = newLine;
@@ -170,7 +181,7 @@ const persistToEnv = (envFilePath: string | null, updates: Record<string, string
             throw error;
         }
 
-        return Object.keys(updates);
+        return Object.keys(encoded);
     } catch (error) {
         try {
             if (errorHandler && typeof errorHandler.handleDataLoggingError === 'function') {
@@ -221,22 +232,6 @@ const SECRET_DEFINITIONS: SecretDefinition[] = [
         configPath: ['streamelements', 'jwtToken'],
         requiredWhen: (config) => boolFromConfig(config?.streamelements?.enabled),
         promptText: 'Paste StreamElements JWT token: '
-    },
-    {
-        id: 'YOUTUBE_API_KEY',
-        envKey: 'YOUTUBE_API_KEY',
-        configPath: ['youtube', 'apiKey'],
-        requiredWhen: (config) => {
-            if (!boolFromConfig(config?.youtube?.enabled)) {
-                return false;
-            }
-            const enableApi = boolFromConfig(config?.youtube?.enableAPI);
-            const streamDetectionMethod = String(config?.youtube?.streamDetectionMethod || '').trim().toLowerCase();
-            const viewerCountMethod = String(config?.youtube?.viewerCountMethod || '').trim().toLowerCase();
-            return enableApi || streamDetectionMethod === 'api' || viewerCountMethod === 'api';
-        },
-        promptText: 'Paste YouTube Data API key (optional unless API mode enabled): ',
-        optional: true
     }
 ];
 
@@ -252,6 +247,9 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
         readEnvFile = parseEnvFile,
         writeEnvFile = persistToEnv
     } = options;
+
+    const capabilityErrors = getYouTubeCapabilityErrors(config?.youtube);
+    if (capabilityErrors.length) throw new Error(capabilityErrors.join(' '));
 
     const logger = resolveLogger(loggerCandidate, 'Secret manager') as LoggerLike;
     const safeLogger = logger;
@@ -312,7 +310,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
                 process.env[envKey] = value;
                 persistUpdates[envKey] = value;
                 applied[id] = { source: 'prompt' };
-                safeLogger.info?.(`Saved ${id}`, 'secret-manager');
+                safeLogger.info?.(`Using prompted ${id} for this process`, 'secret-manager');
                 continue;
             }
         }

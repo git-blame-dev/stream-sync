@@ -1,12 +1,19 @@
 import { describe, it, expect } from "bun:test";
 import testClock from "../../helpers/test-clock";
 import {
+  formatTimestampCompact,
   isIsoTimestamp,
   getSystemTimestampISO,
   parseTimestampMs,
   parseTimestampISO,
 } from "../../../src/utils/timestamp.ts";
 describe("Timestamp utilities", () => {
+  it("formats compact timestamps in UTC with stable invalid-date fallback", () => {
+    expect(formatTimestampCompact("2024-01-02T03:04:05Z")).toBe("03:04:05");
+    expect(formatTimestampCompact(new Date("2024-01-02T23:04:05+02:00"))).toBe("21:04:05");
+    expect(formatTimestampCompact(0)).toBe("00:00:00");
+    expect(formatTimestampCompact("invalid-test-date")).toBe("00:00:00");
+  });
   describe("isIsoTimestamp", () => {
     it("rejects normalized impossible calendar days while preserving existing time grammar", () => {
       for (const date of ["2023-02-29", "1900-02-29", "2024-02-30", "2024-04-31", "2024-00-01", "2024-13-01", "2024-01-00"]) {

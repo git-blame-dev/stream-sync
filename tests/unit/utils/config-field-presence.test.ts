@@ -25,7 +25,7 @@ describe("_parseInheritableFlags", () => {
     const result = ConfigValidator._parseInheritableFlags({});
 
     EXPECTED_INHERITABLE_FLAGS.forEach((field) => {
-      expect(result[field]).toBe(null);
+      expect(Reflect.get(result, field)).toBe(null);
     });
   });
 

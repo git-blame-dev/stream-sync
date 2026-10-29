@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { describe, expect, beforeEach, it, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import type { TestMockFn } from "../../helpers/bun-mock-utils";
@@ -6,32 +7,23 @@ import { YouTubeiCurrencyParser } from "../../../src/platforms/youtube/youtubei-
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import { createTextProcessingManager } from "../../../src/utils/text-processing";
 import * as constants from "../../../src/core/constants";
-import { getDefaultGoalsManager } from "../../../src/obs/goals";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
-import testClock from "../../helpers/test-clock";
 
 type NotificationDependencies = NonNullable<
   ConstructorParameters<typeof NotificationManager>[0]
 >;
 type DisplayQueueFixture = NonNullable<NotificationDependencies["displayQueue"]> & {
-  addItem: TestMockFn<[Record<string, unknown>], boolean>;
+  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
 };
 type NotificationResult = Awaited<
   ReturnType<NotificationManager["handleNotification"]>
 >;
 type NotificationData = Record<string, unknown>;
-type GoalsFixture = NonNullable<NotificationDependencies["obsGoals"]>;
 
 const createDisplayQueueFixture = (): DisplayQueueFixture => ({
-  addItem: createMockFn<[Record<string, unknown>], boolean>().mockReturnValue(
-    true,
-  ),
+  addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
   getQueueLength: createMockFn<[], number>().mockReturnValue(0),
-});
-
-const createObsGoalsFixture = (): GoalsFixture => ({
-  processDonationGoal: createMockFn<unknown[], unknown>(),
 });
 
 const expectNotificationSucceeded = (result: NotificationResult) => {
@@ -284,7 +276,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         off: createMockFn(),
       };
       createTextProcessingManager({ logger: mockLogger });
-      const obsGoals = createObsGoalsFixture();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };
@@ -294,7 +285,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         eventBus: mockEventBus,
         config: mockConfig,
         constants,
-        obsGoals,
         vfxCommandService,
       });
     });
@@ -458,8 +448,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
       };
       const logger = noOpLogger;
       createTextProcessingManager({ logger });
-      getDefaultGoalsManager();
-      const obsGoals = createObsGoalsFixture();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };
@@ -469,7 +457,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         eventBus: mockEventBus,
         config: createTestConfig(),
         constants,
-        obsGoals,
         vfxCommandService,
       });
 
@@ -484,26 +471,19 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
   });
 });
 
-describe("Currency Parsing Performance and Reliability", () => {
+describe("Currency parsing repeated inputs and invalid values", () => {
   let parser: YouTubeiCurrencyParser;
 
   beforeEach(() => {
     parser = new YouTubeiCurrencyParser({ logger: noOpLogger });
   });
 
-  it("should parse 1000 TRY amounts quickly", () => {
-    const startTime = testClock.now();
-
+  it("parses all 1000 distinct TRY amounts exactly", () => {
     for (let i = 0; i < 1000; i++) {
       const amount = (100 + i / 10).toFixed(2);
       const result = parser.parse(`TRY ${amount}`);
-      expect(result.success).toBe(true);
+      expect(result).toMatchObject({ success: true, amount: Number(amount), currency: "TRY" });
     }
-
-    const simulatedDurationMs = 250;
-    testClock.advance(simulatedDurationMs);
-    const duration = testClock.now() - startTime;
-    expect(duration).toBeLessThan(1300); // Keep within a reasonable CI-safe bound
   });
 
   it("should handle malformed inputs without crashing", () => {

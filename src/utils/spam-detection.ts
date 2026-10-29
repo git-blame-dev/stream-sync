@@ -13,9 +13,9 @@ type SpamConfigShape = {
     detectionWindow?: number;
     maxIndividualNotifications?: number;
     tiktokEnabled?: boolean;
-    tiktokLowValueThreshold?: number;
+    tiktokLowValueThreshold?: number | null;
     twitchEnabled?: boolean;
-    twitchLowValueThreshold?: number;
+    twitchLowValueThreshold?: number | null;
     youtubeEnabled?: boolean;
     youtubeLowValueThreshold?: number;
 };

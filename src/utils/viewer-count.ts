@@ -1,5 +1,6 @@
 import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
-import { safeSetInterval, safeDelay } from './timeout-validator';
+import { safeSetInterval } from './timeout-validator';
+import { withTimeout } from './timeout-wrapper';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { validateLoggerInterface } from './dependency-validator';
 import type { ViewerCountObservation, ViewerCountSnapshot } from '../contracts/viewer-count';
@@ -107,6 +108,7 @@ class ViewerCountSystem {
     private observations: Record<string, Omit<ViewerCountSnapshot, 'count'>> = {};
     private activePolls: Set<string>;
     private pollGenerations: Map<string, number>;
+    private statusRevisions = new Map<string, number>();
     streamStatus: Record<string, boolean>;
     statusChangeHistory: Map<string, Array<{ timestamp: number; from: boolean; to: boolean; reason: string }>>;
     lastStatusUpdate: Map<string, number>;
@@ -337,6 +339,14 @@ class ViewerCountSystem {
         }
         const wasLive = this.streamStatus[platformKey] ?? false;
         
+        const revision = (this.statusRevisions.get(platformKey) ?? 0) + 1;
+        this.statusRevisions.set(platformKey, revision);
+        // Retire pre-transition polls before observers can yield to a newer status.
+        // YouTube observations remain authoritative even while chat is offline.
+        if (wasLive !== isLive && !(platformKey === 'youtube'
+            && this._hasObservationCapability(this._getPlatforms()[platformKey]))) {
+            this._invalidatePlatformPoll(platformKey);
+        }
         this.streamStatus[platformKey] = isLive;
         this._trackStatusChange(platformKey, wasLive, isLive);
         
@@ -348,6 +358,7 @@ class ViewerCountSystem {
             this.logger.debug(`Stream status confirmed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
 
+        if (this.statusRevisions.get(platformKey) !== revision) return;
         await this._optimizePollingForStatusChange(platformKey, isLive, !wasLive && isLive);
     }
 
@@ -856,6 +867,9 @@ class ViewerCountSystem {
     }
 
     async cleanup() {
+        for (const platform of Object.keys(this.streamStatus)) {
+            this.statusRevisions.set(platform, (this.statusRevisions.get(platform) ?? 0) + 1);
+        }
         this.stopPolling();
         
         if (this.memoryOptimizationInterval) {
@@ -883,12 +897,9 @@ class ViewerCountSystem {
         
         // Wait for observer cleanups with timeout to prevent hanging
         try {
-            await Promise.race([
-                Promise.allSettled(cleanupPromises),
-                safeDelay(5000, 5000, 'viewerCount:platformWait').then(() => {
-                    throw new Error('Observer cleanup timed out');
-                })
-            ]);
+            await withTimeout(Promise.allSettled(cleanupPromises), 5000, {
+                errorMessage: 'Observer cleanup timed out'
+            });
         } catch (error) {
             this._runCleanupDiagnostic(() => this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }

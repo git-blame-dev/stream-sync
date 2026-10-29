@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { getSyntheticFixture } from "../../helpers/platform-test-data";
-import testClock from "../../helpers/test-clock";
 const realChatMessage = getSyntheticFixture("youtube", "chat-message");
 const realSuperChat = getSyntheticFixture("youtube", "superchat");
 const realSuperSticker = getSyntheticFixture("youtube", "supersticker");
@@ -99,18 +98,4 @@ describe("YouTube Message Extraction - Modern (Production Data)", () => {
     });
   });
 
-  describe("Performance", () => {
-    it("extracts message in under 50ms", () => {
-      const start = testClock.now();
-
-      for (let i = 0; i < 1000; i++) {
-        extractMessageText(realChatMessage.item.message);
-      }
-
-      const simulatedDurationMs = 25;
-      testClock.advance(simulatedDurationMs);
-      const duration = testClock.now() - start;
-      expect(duration).toBeLessThan(50);
-    });
-  });
 });

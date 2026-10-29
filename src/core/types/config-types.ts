@@ -1,3 +1,6 @@
+import type { CONFIG_SCHEMA } from '../config-schema';
+import type { ConfigValidator } from '../../utils/config-validator';
+import type { buildConfig } from '../config-builders';
 import type { RowTheme, RowVisualEffectId } from '../row-presentation';
 
 export type ConfigScalarType = 'string' | 'number' | 'boolean' | 'stringArray';
@@ -64,7 +67,7 @@ export type RawConfigSection = Record<string, unknown>;
 
 export type RawConfig = Partial<Record<ConfigSectionName, RawConfigSection>> & Record<string, RawConfigSection | undefined>;
 
-export type ConfigDefaultsSection = Record<string, ConfigScalarValue>;
+export type ConfigDefaultsSection = Record<string, ConfigScalarValue | undefined>;
 
 export type ConfigDefaultSectionName = Exclude<ConfigSectionName, 'commands'>;
 
@@ -74,7 +77,16 @@ export type ConfigDefaults = Record<ConfigDefaultSectionName, ConfigDefaultsSect
 
 export type NormalizedConfigSection = Record<string, unknown>;
 
-export type NormalizedConfig = Record<ConfigSectionName, NormalizedConfigSection> & { profiles: Record<string, MemberProfile> };
+type SchemaFieldValue<F> = F extends { userDefined: true } ? string | null
+    : F extends { inheritFrom: string } ? boolean | null
+    : F extends { type: 'boolean' } ? boolean
+    : F extends { type: 'number' } ? number
+    : F extends { type: 'stringArray' } ? readonly string[] | null
+    : F extends { enum: readonly (infer E)[] } ? E : string;
+export type NormalizedSchemaSection<S extends ConfigSectionName> = {
+    -readonly [F in Exclude<keyof typeof CONFIG_SCHEMA[S], '_dynamic'>]: SchemaFieldValue<typeof CONFIG_SCHEMA[S][F]>
+};
+export type NormalizedConfig = ReturnType<typeof ConfigValidator.normalize>;
 
 export interface ParseNumberOptions {
     defaultValue?: unknown;
@@ -89,4 +101,4 @@ export interface ConfigValidationResult {
     errors: string[];
 }
 
-export type BuiltConfig = Record<string, unknown>;
+export type BuiltConfig = ReturnType<typeof buildConfig>;

@@ -18,23 +18,18 @@ type MockAxios = {
   put: MockFunction<[string, unknown, Record<string, unknown>]>;
   delete: MockFunction<[string, Record<string, unknown>]>;
 };
-type RetryExecutor = NonNullable<EnhancedHttpClientConfig["retryExecutor"]>;
-type MockRetryExecutor = RetryExecutor & {
-  executeWithRetry: TestMockFn<
-    [string, () => Promise<Record<string, unknown>>, number?],
-    Promise<Record<string, unknown>>
-  >;
-};
+const transientFailure = () => Object.assign(new Error("synthetic transient HTTP failure"), {
+  response: { status: 503, headers: { "retry-after": "0" } },
+});
 
-const createTestHttpRetryExecutor = (): MockRetryExecutor => ({
-  executeWithRetry: createMockFn(
-    async (_scope: string, executeRequest: () => Promise<Record<string, unknown>>) => executeRequest(),
-  ),
-}) as unknown as MockRetryExecutor;
+function barrier<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(complete => { resolve = complete; });
+  return { promise, resolve };
+}
 
 describe("Enhanced HTTP Client", () => {
   let mockAxios: MockAxios;
-  let mockRetryExecutor: MockRetryExecutor;
   let EnhancedHttpClient: EnhancedHttpClientConstructor;
   let client: InstanceType<EnhancedHttpClientConstructor>;
 
@@ -46,13 +41,12 @@ describe("Enhanced HTTP Client", () => {
       delete: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
     };
 
-    mockRetryExecutor = createTestHttpRetryExecutor();
     EnhancedHttpClient =
       require("../../../src/utils/enhanced-http-client").EnhancedHttpClient;
 
     client = new EnhancedHttpClient({
-      retryExecutor: mockRetryExecutor,
       timeout: 10000,
+      userAgents: ["SyntheticAgent/1", "SyntheticAgent/2"],
       axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
       logger: noOpLogger,
     });
@@ -86,45 +80,48 @@ describe("Enhanced HTTP Client", () => {
   });
 
   describe("Retry Executor Integration", () => {
-    test("uses retry executor for GET requests when platform is provided", async () => {
-      const mockResponse = { data: "test", status: 200 };
-      mockAxios.get.mockResolvedValue(mockResponse);
-      let observedRetryPlatform: string | undefined;
-      let observedRetryResult: Record<string, unknown> | undefined;
-      mockRetryExecutor.executeWithRetry.mockImplementation(
-        async (platformName, executeRequest) => {
-          observedRetryPlatform = platformName as string;
-          observedRetryResult = await executeRequest();
-          return observedRetryResult;
-        },
-      );
-
-      const result = await client.get("https://api.test.example.invalid/data", {
-        authToken: "token123",
-        platform: "twitch",
+    test("admits the retry only after the first held HTTP attempt fails", async () => {
+      const firstEntered = barrier<void>();
+      const secondEntered = barrier<void>();
+      const failFirst = barrier<void>();
+      const finishSecond = barrier<Record<string, unknown>>();
+      const response = { data: "synthetic-success", status: 200 };
+      let admissions = 0;
+      mockAxios.get.mockImplementation(async () => {
+        if (++admissions === 1) {
+          firstEntered.resolve();
+          await failFirst.promise;
+          throw transientFailure();
+        }
+        secondEntered.resolve();
+        return finishSecond.promise;
       });
-
-      expect(result).toBe(mockResponse);
-      expect(observedRetryPlatform).toBe("twitch");
-      expect(observedRetryResult).toBe(mockResponse);
+      let completed = false;
+      const pending = client.get("https://api.test.example.invalid/data", { platform: "twitch" })
+        .then(result => { completed = true; return result; });
+      try {
+        await firstEntered.promise;
+        expect(admissions).toBe(1);
+        expect(completed).toBe(false);
+        failFirst.resolve();
+        await secondEntered.promise;
+        expect(admissions).toBe(2);
+        expect(completed).toBe(false);
+        finishSecond.resolve(response);
+        expect(await pending).toBe(response);
+        expect(mockAxios.get).toHaveBeenCalledTimes(2);
+      } finally {
+        failFirst.resolve();
+        finishSecond.resolve(response);
+        await pending;
+      }
     });
 
-    test("forwards maxAttempts to executeWithRetry", async () => {
-      mockAxios.get.mockResolvedValue({ data: "test", status: 200 });
-      let observedMaxAttempts: number | undefined;
-      mockRetryExecutor.executeWithRetry.mockImplementation(
-        async (_platform, executeRequest, maxAttempts) => {
-          observedMaxAttempts = maxAttempts as number | undefined;
-          return executeRequest();
-        },
-      );
-
-      await client.get("https://api.test.example.invalid/data", {
-        platform: "twitch",
-        maxAttempts: 4,
-      });
-
-      expect(observedMaxAttempts).toBe(4);
+    test("enforces maxAttempts at the external HTTP boundary", async () => {
+      const failure = transientFailure();
+      mockAxios.get.mockRejectedValue(failure);
+      await expect(client.get("https://api.test.example.invalid/data", { platform: "twitch", maxAttempts: 4 })).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(4);
     });
 
     test("makes direct requests when no platform is provided", async () => {
@@ -139,7 +136,7 @@ describe("Enhanced HTTP Client", () => {
 
       const result = await client.get("https://api.test.example.invalid/data");
 
-      expect(mockRetryExecutor.executeWithRetry).not.toHaveBeenCalled();
+      expect(mockAxios.get).toHaveBeenCalledTimes(1);
       expect(capturedUrl).toBe("https://api.test.example.invalid/data");
       expect(capturedConfig).toEqual(expect.objectContaining({
         timeout: 10000,
@@ -150,31 +147,35 @@ describe("Enhanced HTTP Client", () => {
       expect(result).toBe(mockResponse);
     });
 
-    test("returns retry-system fallback response when request execution fails", async () => {
-      const mockResponse = { data: "success", status: 200 };
-      mockAxios.get.mockRejectedValue(new Error("temporary failure"));
-      let observedRetryPlatform: string | undefined;
-      let retryFallbackUsed = false;
+    test("does not fabricate a fallback response for terminal provider errors", async () => {
+      const failure = Object.assign(new Error("synthetic unauthorized"), { response: { status: 401 } });
+      mockAxios.get.mockRejectedValue(failure);
+      await expect(client.get("https://api.test.example.invalid/data", { platform: "youtube" })).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(1);
+    });
 
-      mockRetryExecutor.executeWithRetry.mockImplementation(
-        async (platformName, executeRequest) => {
-          observedRetryPlatform = platformName as string;
-          try {
-            return await executeRequest();
-          } catch {
-            retryFallbackUsed = true;
-            return mockResponse;
-          }
-        },
-      );
+    test("does not retry transient failures without a platform", async () => {
+      const failure = transientFailure();
+      mockAxios.get.mockRejectedValue(failure);
+      await expect(client.get("https://api.test.example.invalid/data")).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(1);
+    });
 
-      const result = await client.get("https://api.test.example.invalid/data", {
-        platform: "youtube",
-      });
+    test("disableRetry prevents a second GET attempt after a transient failure", async () => {
+      const failure = transientFailure();
+      mockAxios.get.mockRejectedValue(failure);
+      await expect(client.get("https://api.test.example.invalid/data", { platform: "twitch", disableRetry: true })).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(1);
+    });
 
-      expect(result).toBe(mockResponse);
-      expect(observedRetryPlatform).toBe("youtube");
-      expect(retryFallbackUsed).toBe(true);
+    test("retries POST only when explicitly idempotent", async () => {
+      const failure = transientFailure();
+      const response = { data: "synthetic-created", status: 201 };
+      mockAxios.post.mockRejectedValueOnce(failure).mockRejectedValueOnce(failure).mockResolvedValueOnce(response);
+      await expect(client.post("https://api.test.example.invalid/create", {}, { platform: "twitch" })).rejects.toBe(failure);
+      expect(mockAxios.post).toHaveBeenCalledTimes(1);
+      expect(await client.post("https://api.test.example.invalid/create", {}, { platform: "twitch", idempotentRequest: true })).toBe(response);
+      expect(mockAxios.post).toHaveBeenCalledTimes(3);
     });
 
     test("bypasses retry executor when disableRetry is true", async () => {
@@ -198,7 +199,7 @@ describe("Enhanced HTTP Client", () => {
         },
       );
 
-      expect(mockRetryExecutor.executeWithRetry).not.toHaveBeenCalled();
+      expect(mockAxios.post).toHaveBeenCalledTimes(1);
       expect(capturedUrl).toBe("https://api.test.example.invalid/token");
       expect(capturedData).toEqual({ grant_type: "refresh_token" });
       expect(capturedConfig).toEqual(expect.objectContaining({
@@ -213,7 +214,6 @@ describe("Enhanced HTTP Client", () => {
   describe("User-Agent Configuration", () => {
     test("uses configured user agent list when provided", () => {
       const customClient = new EnhancedHttpClient({
-        retryExecutor: mockRetryExecutor,
         timeout: 10000,
         axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
         logger: noOpLogger,
@@ -276,16 +276,16 @@ describe("Enhanced HTTP Client", () => {
     });
 
     test("should support PUT and DELETE methods", async () => {
-      mockAxios.put.mockResolvedValue({ data: "updated", status: 200 });
-      mockAxios.delete.mockResolvedValue({ data: "deleted", status: 204 });
-
-      await client.put("https://api.test.example.invalid/update/1", {
-        name: "updated",
-      });
-      await client.delete("https://api.test.example.invalid/delete/1");
-
-      expect(mockAxios.put).toHaveBeenCalled();
-      expect(mockAxios.delete).toHaveBeenCalled();
+      const updated = { data: "synthetic-updated", status: 200 };
+      const deleted = { data: "synthetic-deleted", status: 204 };
+      mockAxios.put.mockResolvedValue(updated);
+      mockAxios.delete.mockResolvedValue(deleted);
+      expect(await client.put("https://api.test.example.invalid/update/1", { name: "synthetic-updated" })).toBe(updated);
+      expect(await client.delete("https://api.test.example.invalid/delete/1")).toBe(deleted);
+      expect(mockAxios.put).toHaveBeenCalledTimes(1);
+      expect(mockAxios.put).toHaveBeenCalledWith("https://api.test.example.invalid/update/1", { name: "synthetic-updated" }, expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/json" }) }));
+      expect(mockAxios.delete).toHaveBeenCalledTimes(1);
+      expect(mockAxios.delete).toHaveBeenCalledWith("https://api.test.example.invalid/delete/1", expect.any(Object));
     });
   });
 
@@ -300,29 +300,31 @@ describe("Enhanced HTTP Client", () => {
       const calls = mockAxios.get.mock.calls;
       const userAgents = calls.map((call) => (call[1] as RequestConfig).headers["User-Agent"]);
 
-      expect(new Set(userAgents).size).toBeGreaterThan(1);
+      expect(userAgents).toEqual(["SyntheticAgent/1", "SyntheticAgent/2", "SyntheticAgent/1"]);
     });
   });
 
   describe("Error Handling", () => {
     test("should preserve original error when not using retry executor", async () => {
-      mockAxios.get.mockRejectedValue(new Error("API Error"));
+      const failure = new Error("synthetic API error");
+      mockAxios.get.mockRejectedValue(failure);
 
       await expect(
         client.get("https://test.example.invalid/error"),
-      ).rejects.toThrow("API Error");
+      ).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(1);
     });
 
     test("should let retry executor handle errors when platform specified", async () => {
-      mockRetryExecutor.executeWithRetry.mockRejectedValue(
-        new Error("Network timeout"),
-      );
+      const failure = transientFailure();
+      mockAxios.get.mockRejectedValue(failure);
 
       await expect(
         client.get("https://test.example.invalid/error", {
           platform: "tiktok",
         }),
-      ).rejects.toThrow("Network timeout");
+      ).rejects.toBe(failure);
+      expect(mockAxios.get).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -367,8 +369,60 @@ describe("Enhanced HTTP Client", () => {
 });
 
 describe("Enhanced HTTP Client - Retry Executor Requirement", () => {
-  test("retry executor must have executeWithRetry method", () => {
-    const mockRetryExecutor = createTestHttpRetryExecutor();
-    expect(typeof mockRetryExecutor.executeWithRetry).toBe("function");
+  test("rejects an invalid injected retry dependency when executing, before HTTP admission", async () => {
+    const { EnhancedHttpClient } = await import("../../../src/utils/enhanced-http-client");
+    let admissions = 0;
+    const transport = async () => { admissions++; return { status: 200 }; };
+    const client = new EnhancedHttpClient({
+      retryExecutor: {} as NonNullable<EnhancedHttpClientConfig["retryExecutor"]>,
+      axios: { get: transport, post: transport, put: transport, delete: transport },
+      logger: noOpLogger,
+    });
+    await expect(client.get("https://synthetic.example.invalid/invalid-dependency", { platform: "twitch" })).rejects.toThrow(TypeError);
+    expect(admissions).toBe(0);
   });
 });
+
+for (const mode of ["cancel", "deadline"] as const) {
+  test(`HTTP ${mode} aborts the admitted request and fences late success without another attempt`, async () => {
+    const { EnhancedHttpClient } = await import("../../../src/utils/enhanced-http-client");
+    const entered = barrier<AbortSignal>();
+    const release = barrier<Record<string, unknown>>();
+    const settled = barrier<void>();
+    let admissions = 0;
+    const transport = async (_url: string, config: Record<string, unknown>) => {
+      admissions++;
+      entered.resolve(config.signal as AbortSignal);
+      try { return await release.promise; } finally { settled.resolve(); }
+    };
+    const client = new EnhancedHttpClient({
+      axios: { get: transport, post: async () => ({}), put: async () => ({}), delete: transport },
+      logger: noOpLogger,
+    });
+    const controller = new AbortController();
+    const reason = new DOMException("synthetic cancellation", "AbortError");
+    const pending = client.get("https://synthetic.example.invalid/held", {
+      platform: "youtube", parentAbortSignal: controller.signal, overallBudgetMs: mode === "deadline" ? 10 : 8000,
+    });
+    // Attach rejection observation before triggering cancellation or the deadline.
+    const outcome = pending.then(value => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
+    try {
+      const signal = await entered.promise;
+      if (mode === "cancel") controller.abort(reason);
+      const result = await outcome;
+      expect(result.value).toBeUndefined();
+      if (mode === "cancel") expect(result.error).toBe(reason);
+      else expect(result.error).toMatchObject({ message: "HTTP GET deadline exceeded after 10ms" });
+      expect(signal.aborted).toBe(true);
+      expect(admissions).toBe(1);
+      release.resolve({ status: 200, data: "synthetic-too-late" });
+      await settled.promise;
+      expect(await outcome).toEqual(result);
+      expect(admissions).toBe(1);
+    } finally {
+      release.resolve({ status: 200 });
+      await settled.promise;
+      await outcome;
+    }
+  });
+}

@@ -307,18 +307,41 @@ enabled = true
         expect(() => loadFreshConfig()).toThrow(/StreamElements channel ID/);
     });
 
-    it('does not throw when YouTube API usage is enabled without apiKey', () => {
+    for (const selection of [
+        { setting: 'enableAPI = true', correction: 'enableAPI=false' },
+        { setting: 'streamDetectionMethod = api', correction: 'streamDetectionMethod=youtubei' },
+        { setting: 'viewerCountMethod = api', correction: 'viewerCountMethod=youtubei' }
+    ]) {
+        it(`rejects unsupported YouTube ${selection.setting} with an actionable correction`, () => {
+            const content = buildConfig({
+                youtubeSection: `enabled = true
+username = synthetic-channel
+${selection.setting}`
+            });
+            setupConfigMocks(content);
+            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+
+            expect(() => loadFreshConfig()).toThrow(/YouTube Data API is not supported/);
+            expect(() => loadFreshConfig()).toThrow(selection.correction);
+        });
+    }
+
+    it('loads enabled youtubei discovery and viewer counts without an API key', () => {
         const content = buildConfig({
             youtubeSection: `enabled = true
- username = TestChannel
- enableAPI = true
- streamDetectionMethod = youtubei
- viewerCountMethod = youtubei`
+username = synthetic-channel
+enableAPI = false
+streamDetectionMethod = youtubei
+viewerCountMethod = youtubei`
         });
         setupConfigMocks(content);
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-        expect(() => loadFreshConfig()).not.toThrow();
+        const normalized = configModule.loadConfig();
+        expect(normalized.youtube.enabled).toBe(true);
+        expect(normalized.youtube.enableAPI).toBe(false);
+        expect(normalized.youtube.streamDetectionMethod).toBe('youtubei');
+        expect(normalized.youtube.viewerCountMethod).toBe('youtubei');
     });
 
     it('resolves anonymousUsername defaults and overrides', () => {

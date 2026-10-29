@@ -1,4 +1,4 @@
-import { secrets } from '../core/secrets';
+import { getYouTubeCapabilityErrors } from '../core/config-schema';
 import { getUnifiedLogger } from '../core/logging';
 import type { AppLogger } from '../core/logger/types';
 import { InnertubeFactory } from '../factories/innertube-factory';
@@ -109,18 +109,8 @@ class DependencyFactory {
         this._validateConfiguration(config, 'YouTube');
         this._validateOptions(options);
 
-        const needsApiKey = config.enableAPI || 
-                           config.streamDetectionMethod === 'api' || 
-                           config.viewerCountMethod === 'api';
-        const apiKey = secrets.youtube.apiKey || null;
-        
-        if (needsApiKey && !apiKey) {
-            throw new Error('YouTube API key is required when enableAPI=true or using API methods (set YOUTUBE_API_KEY)');
-        }
-
-        const normalizedConfig = {
-            ...config
-        };
+        const capabilityErrors = getYouTubeCapabilityErrors(config);
+        if (capabilityErrors.length) throw new Error(capabilityErrors.join(' '));
 
         try {
             const normalizedOptions = { ...options };
@@ -144,13 +134,10 @@ class DependencyFactory {
             const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config);
 
             const streamDetectionService = injectedStreamDetectionService ||
-                this._createYouTubeStreamDetectionService(normalizedConfig, logger,
-                    { ...normalizedOptions, ...(injectedInnertubeService ? { innertubeService: injectedInnertubeService } : {}) }, innertubeService);
+                new YouTubeStreamDetectionService(innertubeService, { logger, timeout: 3000 });
             
             const dependencies = {
                 logger,
-                apiClient: this._createYouTubeApiClient(normalizedConfig, logger),
-                connectionManager: this._createYouTubeConnectionManager(normalizedConfig, logger),
                 streamDetectionService,
                 
                 innertubeFactory,
@@ -209,7 +196,6 @@ class DependencyFactory {
                 ControlEvent,
                 WebcastPushConnection,
                 connectionFactory: this._createTikTokConnectionFactory(config, logger),
-                stateManager: this._createTikTokStateManager(config, logger),
                 RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
                 ...sanitizedOptions
@@ -239,13 +225,6 @@ class DependencyFactory {
         try {
             const logger = this.createValidatedLogger('twitch');
 
-            const normalizedConfig: PlatformDependencyConfig = {
-                ...config,
-                channel: channel
-            };
-            delete normalizedConfig.clientSecret;
-            delete normalizedConfig.apiKey;
-
             const sanitizedOptions = { ...options };
             const injectedTwitchAuth = sanitizedOptions.twitchAuth;
             delete sanitizedOptions.twitchAuth;
@@ -265,7 +244,6 @@ class DependencyFactory {
             const dependencies = {
                 logger,
                 twitchAuth: injectedTwitchAuth,
-                apiClient: this._createTwitchApiClient(normalizedConfig, logger),
                 RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
                 axios: options.axios,
@@ -326,86 +304,6 @@ class DependencyFactory {
     _validateOptions(options: unknown) {
         if (options === null || (options !== undefined && typeof options !== 'object')) {
             throw new Error('Options must be an object');
-        }
-    }
-
-    _createYouTubeApiClient(config: PlatformDependencyConfig, logger: AppLogger) {
-        return {
-            apiKey: secrets.youtube.apiKey || null,
-            username: config.username,
-            logger,
-            isValid: true,
-            
-            get: async () => Promise.resolve({}),
-            post: async () => Promise.resolve({}),
-            authenticate: async () => Promise.resolve(true)
-        };
-    }
-
-    _createYouTubeConnectionManager(config: PlatformDependencyConfig, logger: AppLogger) {
-        return {
-            config,
-            logger,
-            
-            connect: async () => Promise.resolve(true),
-            disconnect: async () => Promise.resolve(true),
-            isConnected: () => false,
-            getStatus: () => ({ connected: false, health: 'good' })
-        };
-    }
-
-    _createYouTubeStreamDetectionService(config: PlatformDependencyConfig, logger: AppLogger, options: DependencyFactoryOptions, innertubeService: InnertubeService) {
-        try {
-            if (config.streamDetectionMethod === 'youtubei') {
-                if (!options.Innertube && !options.innertubeService) {
-                    throw new Error('Innertube dependency required for youtubei stream detection');
-                }
-                return new YouTubeStreamDetectionService(innertubeService, { logger, timeout: 3000 });
-            }
-            
-            logger.debug('Using mock Innertube client for stream detection service', 'dependency-factory');
-            const mockInnertubeClient = {
-                getInfo: async () => ({}),
-                search: async (_query: string) => ({ videos: [] }),
-                getChannel: async (_handle: string) => ({ videos: [] })
-            };
-            
-            const disabledOwner: Pick<InnertubeService, 'withMetadataOperation'> = {
-                withMetadataOperation: async (_context, operation) => operation(mockInnertubeClient)
-            };
-            return new YouTubeStreamDetectionService(disabledOwner, {
-                logger,
-                timeout: 3000
-            });
-            
-        } catch (error) {
-            if (config.streamDetectionMethod === 'youtubei') {
-                throw error;
-            }
-            logger.debug('Using fallback YouTube stream detection service', 'dependency-factory');
-            return {
-                config,
-                logger,
-                
-                detectLiveStreams: async (_channelHandle: string, _options: Record<string, unknown> = {}) => {
-                    return {
-                        success: false,
-                        videoIds: [],
-                        message: 'YouTube stream detection service not available',
-                        responseTime: 0,
-                        retryable: true
-                    };
-                },
-                getUsageMetrics: () => ({
-                    totalRequests: 0,
-                    successfulRequests: 0,
-                    averageResponseTime: 0
-                }),
-                isLive: async () => Promise.resolve(false),
-                checkStream: async () => Promise.resolve({ live: false }),
-                startMonitoring: () => {},
-                stopMonitoring: () => {}
-            };
         }
     }
 
@@ -481,31 +379,6 @@ class DependencyFactory {
 
     _createTikTokConnectionFactory(_config: PlatformDependencyConfig, logger: AppLogger) {
         return new PlatformConnectionFactory(logger);
-    }
-
-    _createTikTokStateManager(config: PlatformDependencyConfig, logger: AppLogger) {
-        return {
-            config,
-            logger,
-            state: 'disconnected',
-            
-            getState: () => 'disconnected',
-            setState: (_state: string) => {},
-            isConnected: () => false,
-            reset: () => {}
-        };
-    }
-
-    _createTwitchApiClient(config: PlatformDependencyConfig, logger: AppLogger) {
-        return {
-            config,
-            logger,
-            
-            get: async () => Promise.resolve({}),
-            post: async () => Promise.resolve({}),
-            authenticate: async () => Promise.resolve(true),
-            getChannel: async () => Promise.resolve({ name: config.channel })
-        };
     }
 
     _createInterfaceValidators(): InterfaceValidators {

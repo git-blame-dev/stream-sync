@@ -29,7 +29,7 @@ async function fixture(files: ReadonlyArray<readonly [string, string]>): Promise
 }
 
 function scan(guard: string, root: string) {
-  const result = Bun.spawnSync([process.execPath, path.join(repositoryRoot, 'scripts/lint', `${guard}.ts`), root], {
+  const result = Bun.spawnSync([process.execPath, '--no-env-file', path.join(repositoryRoot, 'scripts/lint', `${guard}.ts`), root], {
     cwd: root,
     stdout: 'pipe',
     stderr: 'pipe'

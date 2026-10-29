@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import testClock from "../../helpers/test-clock";
 import { GoalTracker } from "../../../src/utils/goal-tracker";
 
 type GoalState = NonNullable<ReturnType<GoalTracker["getGoalState"]>>;
@@ -632,21 +631,5 @@ describe("Goal Tracker - Core Functionality", () => {
       TEST_TIMEOUTS.MEDIUM,
     );
 
-    test(
-      "should maintain performance with many operations",
-      () => {
-        const startTime = testClock.now();
-
-        for (let i = 0; i < 1000; i++) {
-          goalTracker.getAllGoalStates();
-          goalTracker.formatGoalDisplay("tiktok", i, 1000);
-          testClock.advance(0.05);
-        }
-
-        const duration = testClock.now() - startTime;
-        expect(duration).toBeLessThan(100);
-      },
-      TEST_TIMEOUTS.FAST,
-    );
   });
 });

@@ -6,7 +6,6 @@ import {
   INTERNATIONAL_USERNAMES,
   BOUNDARY_CONDITIONS,
 } from "../../helpers/platform-test-data";
-import testClock from "../../helpers/test-clock";
 describe("YouTube Username Normalization", () => {
   describe("normalizeYouTubeUsername", () => {
     test("trims after removing exactly one handle prefix before checking sentinels", () => {
@@ -142,41 +141,7 @@ describe("YouTube Username Normalization", () => {
     });
   });
 
-  describe("International Username Performance and Stress Tests", () => {
-    test("should handle high-volume international username processing", () => {
-      const internationalUsernames = Object.values(INTERNATIONAL_USERNAMES);
-      const startTime = testClock.now();
-
-      const results: Array<string | null> = [];
-      for (let i = 0; i < 1000; i++) {
-        const username = `@${internationalUsernames[i % internationalUsernames.length]}${i}`;
-        results.push(normalizeYouTubeUsername(username));
-      }
-
-      const simulatedProcessingMs = 150;
-      testClock.advance(simulatedProcessingMs);
-      const endTime = testClock.now();
-      const processingTime = endTime - startTime;
-
-      expect(results).toHaveLength(1000);
-      expect(processingTime).toBeLessThan(1000);
-    });
-
-    test("should maintain memory efficiency with international strings", () => {
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      Object.values(INTERNATIONAL_USERNAMES).forEach((username) => {
-        for (let i = 0; i < 100; i++) {
-          normalizeYouTubeUsername(`@${username}${i}`);
-        }
-      });
-
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-
-      expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
-    });
-
+  describe("International username categories", () => {
     test("should handle all international username categories", () => {
       const categories: Array<keyof typeof INTERNATIONAL_USERNAMES> = [
         "chinese",

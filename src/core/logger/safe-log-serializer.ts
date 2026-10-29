@@ -1,3 +1,5 @@
+import { LOG_TEXT_SPAN_SOURCE } from './web-url-pattern';
+
 const SENSITIVE_LOG_KEYS = new Set([
     'accesstoken',
     'refreshtoken',
@@ -14,7 +16,7 @@ const SENSITIVE_LOG_KEYS = new Set([
 ]);
 const RAW_PROVIDER_PAYLOAD_KEY_PATTERN = /^(?:payload|rawPayload|rawData|originalData|eventData|providerPayload)$/i;
 const SENSITIVE_URL_KEY_PATTERN = /(?:url|uri|endpoint|reconnect)/i;
-const URL_PATTERN = /\b(?:https?|wss?):\/\/[^\s|)\]}>,"']+/gi;
+const URL_TEXT_PATTERN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
 const JSON_STRING_ASSIGNMENT_PATTERN = /("([a-z_-]+)"\s*:\s*")(?:[^"\\]*\\[\s\S])*[^"\\]*"/gi;
 // Quote-started values consume escaped quotes; bare values retain embedded quotes.
 const SECRET_TEXT_VALUE_PATTERN = String.raw`(?:"(?:[^"\\]*\\[\s\S])*[^"\\]*"|'(?:[^'\\]*\\[\s\S])*[^'\\]*'|[^\s,;&"'][^\s,;&]*)`;
@@ -39,24 +41,48 @@ function isSensitiveLogKey(key: string): boolean {
     return SENSITIVE_LOG_KEYS.has(normalizeLogKey(key));
 }
 
-function stripUrlSecrets(value: string): string {
+function stripUrlSecrets(value: string, webOnly = false): string | null {
     try {
         const parsed = new URL(value);
+        if (webOnly && !/^(?:https?|wss?):$/.test(parsed.protocol)) return null;
         parsed.username = '';
         parsed.password = '';
         parsed.search = '';
         parsed.hash = '';
         return parsed.toString();
     } catch {
-        return value;
+        return null;
     }
+}
+
+function sanitizeUrlText(value: string, depth = 0): string {
+    return value.replace(URL_TEXT_PATTERN, candidate => {
+        const quote = candidate[0];
+        if (quote === '"' || quote === "'") {
+            if (depth >= 12) return `${quote}[URL omitted]${quote}`;
+            if (quote === '"') {
+                try {
+                    const decoded = JSON.parse(candidate) as string;
+                    const safe = stripUrlSecrets(decoded, true) ?? sanitizeUrlText(decoded, depth + 1);
+                    return safe === decoded ? candidate : JSON.stringify(safe);
+                } catch {
+                    // Non-JSON quoted diagnostics still retain their enclosing boundary.
+                }
+            }
+            const content = candidate.slice(1, -1);
+            const safe = stripUrlSecrets(content, true) ?? sanitizeUrlText(content, depth + 1);
+            return quote + safe + quote;
+        }
+        // A malformed complete span must not expose credentials from its suffix.
+        return stripUrlSecrets(candidate, true) ?? '[Invalid URL omitted]';
+    });
 }
 
 function sanitizeLogText(value: string): string {
     const withoutJsonSecrets = value.replace(JSON_STRING_ASSIGNMENT_PATTERN, (assignment, prefix: string, key: string) =>
         isSensitiveLogKey(key) ? `${prefix}[REDACTED]"` : assignment,
     );
-    const withoutUrlSecrets = withoutJsonSecrets.replace(URL_PATTERN, (candidate) => stripUrlSecrets(candidate));
+    const withoutUrlSecrets = sanitizeUrlText(withoutJsonSecrets);
     return FREE_TEXT_SECRET_PATTERNS.reduce(
         (sanitized, pattern) => sanitized.replace(pattern, '$1[REDACTED]'),
         withoutUrlSecrets,
@@ -83,7 +109,7 @@ return '[REDACTED]';
     }
     if (typeof value === 'string') {
         const sanitized = SENSITIVE_URL_KEY_PATTERN.test(key)
-            ? sanitizeLogText(stripUrlSecrets(value))
+            ? sanitizeLogText(stripUrlSecrets(value) ?? value)
             : sanitizeLogText(value);
         const limited = sanitized.length > MAX_STRING_LENGTH ? `${sanitized.slice(0, MAX_STRING_LENGTH)}${TRUNCATION_MARKER}` : sanitized;
         if (!budget) return limited;

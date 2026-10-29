@@ -1,3 +1,5 @@
+import { utf16BudgetPrefix } from './utf16-budget-prefix';
+
 type TemplateRecord = Record<string, unknown>;
 
 function isTemplateRecord(value: unknown): value is TemplateRecord {
@@ -14,7 +16,7 @@ function sanitizeStringValue(value: unknown): string {
     stringValue = stringValue.replace(/\{[^}]*\}/g, '');
 
     if (stringValue.length > 1000) {
-        stringValue = stringValue.substring(0, 1000);
+        stringValue = utf16BudgetPrefix(stringValue, 1000);
     }
 
     return stringValue;

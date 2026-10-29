@@ -162,6 +162,21 @@ describe("secret-manager", () => {
     restoreAllMocks();
   });
 
+  it("persists representable updates without replacing an unrepresentable credential's existing entry", async () => {
+    fileStore[envFilePath] = "OBS_PASSWORD=synthetic-old\nKEEP=synthetic-keep\n";
+    const result = await ensureSecrets({
+      config: { obs: { enabled: true }, tiktok: { enabled: true } }, logger,
+      interactive: true, envFilePath, envFileReadEnabled: false, envFileWriteEnabled: true,
+      promptFor: async id => id === 'OBS_PASSWORD' ? 'synthetic-$SYNTHETIC_VAR' : 'synthetic-saveable',
+    });
+    expect(result.persisted).toEqual(['TIKTOK_API_KEY']);
+    expect(process.env.OBS_PASSWORD).toBe('synthetic-$SYNTHETIC_VAR');
+    expect(fileStore[envFilePath]).toContain('OBS_PASSWORD=synthetic-old');
+    expect(fileStore[envFilePath]).toContain('TIKTOK_API_KEY=synthetic-saveable');
+    expect(logger.entries.some(entry => entry.message.includes('not persisted'))).toBe(true);
+    expect(logger.entries.some(entry => entry.message.includes('synthetic-$SYNTHETIC_VAR'))).toBe(false);
+  });
+
   it("applies environment secrets without prompting and leaves existing env file untouched", async () => {
     process.env.TIKTOK_API_KEY = "env_tiktok_key";
     process.env.TWITCH_CLIENT_SECRET = "env_client_secret";
@@ -219,7 +234,7 @@ describe("secret-manager", () => {
       promptFor,
     });
 
-    expect(logger.entries.filter((entry) => entry.level === "info").map((entry) => entry.message)).toEqual(["Saved TIKTOK_API_KEY", "Saved TWITCH_CLIENT_SECRET", "Saved OBS_PASSWORD", "Saved STREAMELEMENTS_JWT_TOKEN"]);
+    expect(logger.entries.filter((entry) => entry.level === "info").map((entry) => entry.message)).toEqual(["Using prompted TIKTOK_API_KEY for this process", "Using prompted TWITCH_CLIENT_SECRET for this process", "Using prompted OBS_PASSWORD for this process", "Using prompted STREAMELEMENTS_JWT_TOKEN for this process"]);
     const envContent = fileStore[envFilePath];
     expect(envContent).toContain("EXISTING=keep");
     expect(envContent).toContain("TIKTOK_API_KEY=prompt_tiktok");
@@ -366,36 +381,29 @@ describe("secret-manager", () => {
     expect(Object.keys(fileStore)).toEqual([envFilePath]);
   });
 
-  it("requires a YouTube API key when API methods are selected", async () => {
-    process.env.TIKTOK_API_KEY = "env_tiktok_key";
-    process.env.TWITCH_CLIENT_SECRET = "env_client_secret";
-    process.env.OBS_PASSWORD = "env_obs_password";
-    process.env.STREAMELEMENTS_JWT_TOKEN = "env_jwt_token";
-
-    const youtubeSection = {
-      ...testConfig.youtube,
-      enabled: true,
-      enableAPI: false,
-      streamDetectionMethod: "api",
-      viewerCountMethod: "youtubei",
-    };
-
-    await expect(
-      ensureSecrets({
-        config: {
-          tiktok: testConfig.tiktok,
-          twitch: testConfig.twitch,
-          obs: testConfig.obs,
-          streamelements: testConfig.streamelements,
-          youtube: youtubeSection,
-        },
+  for (const selection of [
+    { enableAPI: true },
+    { streamDetectionMethod: "api" },
+    { viewerCountMethod: "api" },
+  ]) {
+    it(`rejects unsupported YouTube selection ${JSON.stringify(selection)} before any secret prompt`, async () => {
+      await expect(ensureSecrets({
+        config: { youtube: { enabled: true, ...selection } },
         logger,
-        interactive: false,
-        envFilePath,
-        envFileReadEnabled: false,
-        envFileWriteEnabled: false,
-      }),
-    ).rejects.toThrow(/missing required secrets/i);
+        interactive: true,
+        promptFor: async () => { throw new Error("Unexpected secret prompt"); },
+      })).rejects.toThrow(/YouTube Data API.*not supported.*youtubei/);
+    });
+  }
+
+  it("requires no YouTube key for enabled youtubei discovery and viewer counts", async () => {
+    const result = await ensureSecrets({
+      config: { youtube: { enabled: true, streamDetectionMethod: "youtubei", viewerCountMethod: "youtubei" } },
+      logger,
+      interactive: true,
+      promptFor: async () => { throw new Error("Unexpected secret prompt"); },
+    });
+    expect(result.applied).toEqual({});
   });
 
   it("shows colon-terminated prompts for interactive clarity", async () => {

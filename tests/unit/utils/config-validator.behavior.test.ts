@@ -6,7 +6,7 @@ import { buildConfig, buildGeneralConfig, buildLoggingConfig } from "../../../sr
 import type {
   ConfigFieldSpec,
   ConfigSectionName,
-  NormalizedConfig,
+  RawConfig,
   NormalizedConfigSection,
   RawConfigSection,
 } from "../../../src/core/types/config-types";
@@ -76,7 +76,7 @@ messagesEnabled = false
 function validateUncheckedConfig(
   config: Partial<Record<ConfigSectionName, NormalizedConfigSection>>,
 ) {
-  return ConfigValidator.validate(config as NormalizedConfig);
+  return ConfigValidator.validate(config);
 }
 
 const requireFieldSpec = (value: unknown, label: string): ConfigFieldSpec => {
@@ -454,7 +454,7 @@ describe("ConfigValidator._normalizeTwitchSection()", () => {
     if (twitchSchema === undefined) {
       throw new Error("Expected twitch config schema to be defined");
     }
-    expect(twitchSchema.clientId).toBeUndefined();
+    expect(twitchSchema).not.toHaveProperty("clientId");
 
     const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
     try {
@@ -485,12 +485,12 @@ describe("ConfigValidator._normalizeYoutubeSection()", () => {
   });
 
   it("validates stream detection method", () => {
-    const rawValid = { streamDetectionMethod: "api" };
+    const rawValid = { streamDetectionMethod: "youtubei" };
     const rawInvalid = { streamDetectionMethod: "invalid" };
 
     expect(
       ConfigValidator._normalizeYoutubeSection(rawValid).streamDetectionMethod,
-    ).toBe("api");
+    ).toBe("youtubei");
     expect(
       ConfigValidator._normalizeYoutubeSection(rawInvalid)
         .streamDetectionMethod,
@@ -1084,7 +1084,7 @@ describe("ConfigValidator simple command sections", () => {
 });
 
 describe("ConfigValidator.validate()", () => {
-  const createMinimalValidConfig = (): NormalizedConfig => ({
+  const createMinimalValidConfig = (): RawConfig => ({
     ...ConfigValidator.normalize({}),
     general: { debugEnabled: false },
     obs: { enabled: false },
@@ -1296,7 +1296,7 @@ describe("getFieldsRequiredWhenEnabled()", () => {
 describe("ConfigValidator.validateRequiredFields()", () => {
   const createValidationTestConfig = (
     overrides: ValidationPlatformOverrides = {},
-  ): NormalizedConfig => ({
+  ): RawConfig => ({
     ...ConfigValidator.normalize({}),
     general: { debugEnabled: false },
     tiktok: createTikTokConfigFixture({ enabled: false, ...overrides.tiktok }),
@@ -1485,9 +1485,9 @@ describe("ConfigValidator.normalizeFromSchema()", () => {
 
   it("validates enum values and falls back to default", () => {
     const validResult = ConfigValidator.normalizeFromSchema("youtube", {
-      streamDetectionMethod: "api",
+      streamDetectionMethod: "youtubei",
     });
-    expect(validResult.streamDetectionMethod).toBe("api");
+    expect(validResult.streamDetectionMethod).toBe("youtubei");
 
     const invalidResult = ConfigValidator.normalizeFromSchema("youtube", {
       streamDetectionMethod: "invalid",

@@ -2,30 +2,14 @@ import fs from 'fs';
 import ini from 'ini';
 
 import { buildConfig } from './config-builders';
-import type { BuiltConfig, NormalizedConfig } from './types/config-types';
+import type { BuiltConfig, NormalizedConfig, RawConfig } from './types/config-types';
 import { parseEnvContent } from '../utils/env-file-parser';
 import configValidatorModule from '../utils/config-validator';
 import { handleUserFacingError } from '../utils/user-friendly-errors';
 
-type RawConfig = NormalizedConfig;
+const { ConfigValidator } = configValidatorModule;
 
-type ConfigValidatorApi = {
-    parseBoolean: (value: unknown, defaultValue: boolean) => boolean;
-    parseString: (value: unknown, defaultValue: string) => string;
-    normalize: (rawConfig: RawConfig) => RawConfig;
-    validate: (normalizedConfig: RawConfig) => {
-        isValid: boolean;
-        errors: string[];
-    };
-};
-
-type ConfigValidatorModule = {
-    ConfigValidator: ConfigValidatorApi;
-};
-
-const { ConfigValidator } = configValidatorModule as ConfigValidatorModule;
-
-let loadedConfig: RawConfig | null = null;
+let loadedConfig: NormalizedConfig | null = null;
 let cachedConfig: BuiltConfig | null = null;
 let configPath = './config.ini';
 
@@ -71,7 +55,7 @@ function preloadEnvFromConfig(rawConfig: RawConfig): void {
     }
 }
 
-function loadConfig(): RawConfig {
+function loadConfig(): NormalizedConfig {
     if (loadedConfig) {
         return loadedConfig;
     }

@@ -35,7 +35,7 @@ function resolveTikTokTimestampMs(data: unknown): number | null {
             inferMicrosecondsThresholdInclusive: true,
             microsecondRounding: 'round'
         });
-        if (parsed !== null) {
+        if (parsed !== null && Number.isFinite(new Date(parsed).getTime())) {
             return parsed;
         }
     }

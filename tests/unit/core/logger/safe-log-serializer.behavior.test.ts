@@ -6,6 +6,82 @@ import path from "node:path";
 import { RawEventLogWriter } from "../../../../src/services/RawEventLogWriter";
 
 describe("safe log serializer behavior", () => {
+    test("handles large malformed protocols and URL control runs before applying the output budget", () => {
+        const controls = "\t".repeat(200_000);
+        for (const protocol of ['http', 'https', 'ws', 'wss']) {
+            const malformed = protocol + controls + 'x';
+            expect(sanitizeLogData({ message: malformed })).toEqual({ message: malformed.slice(0, 4096) + '...' });
+            const url = `${protocol}://example.invalid/path?opaque=synthetic-secret${controls}suffix`;
+            expect(sanitizeLogText(url)).toBe(`${protocol}://example.invalid/path`);
+        }
+        const composite = `https://example.invalid/path?opaque=synthetic-first${controls}https://synthetic-user:synthetic-password@example.invalid/next`;
+        const output = sanitizeLogText(composite);
+        expect(output).not.toContain('synthetic-');
+        expect(output).toBe(`https://example.invalid/path${controls}https://example.invalid/next`);
+    });
+
+    test("classifies complete quoted URLs with the same whitespace rules as the URL parser", () => {
+        for (const url of [
+            'ht\ttps://example.invalid/?opaque=synthetic-secret',
+            'ht\ntps://example.invalid/#synthetic-secret',
+            'https:\r//synthetic-user:synthetic-secret@example.invalid/',
+            ' https://example.invalid/?opaque=synthetic head synthetic-tail',
+            '\thttps://example.invalid/?opaque=synthetic head synthetic-tail',
+        ]) {
+            expect(new URL(url).protocol).toBe('https:');
+            const input = JSON.stringify({ url, diagnostic: 'scope missing' });
+            const safe = sanitizeLogText(input);
+            expect(safe).not.toContain('synthetic');
+            expect(JSON.parse(safe).diagnostic).toBe('scope missing');
+            expect(sanitizeLogText(JSON.stringify(input))).not.toContain('synthetic');
+            expect(sanitizeLogText(`'${url}' scope missing`)).not.toContain('synthetic');
+            expect(sanitizeLogData({ url })).toEqual({ url: new URL(url).origin + '/' });
+        }
+        const unchanged = String.raw`{"message":"ordinary \/ diagnostic"}`;
+        expect(sanitizeLogText(unchanged)).toBe(unchanged);
+        expect(sanitizeLogText('failed https://example.invalid/?opaque=synthetic-secret scope missing')).toContain('scope missing');
+    });
+    test("decodes escaped JSON URL schemes before redaction and consumes complete quoted URL values", () => {
+        for (const url of [
+            'https://example.invalid/?opaque=synthetic-secret',
+            'wss://example.invalid/#synthetic-secret',
+            'https://synthetic-user:synthetic-secret@example.invalid/',
+            'https://example.invalid/?opaque=synthetic head synthetic-tail',
+        ]) {
+            const input = JSON.stringify({ url, diagnostic: 'scope missing' });
+            for (const encoded of [
+                input.replace(/\//g, '\\/'),
+                input.replace(JSON.stringify(url), JSON.stringify(url).replace(/https?|wss?|[:/]/g,
+                    value => [...value].map(char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`).join(''))),
+            ]) {
+                const safe = sanitizeLogText(encoded);
+                expect(safe).not.toContain('synthetic');
+                expect(JSON.parse(safe).diagnostic).toBe('scope missing');
+                const nested = sanitizeLogText(JSON.stringify(encoded));
+                expect(nested).not.toContain('synthetic');
+                expect(JSON.parse(JSON.parse(nested)).diagnostic).toBe('scope missing');
+            }
+        }
+    });
+    test("redacts complete punctuation-bearing URL credentials while preserving adjacent diagnostics", () => {
+        for (const url of [
+            'https://example.invalid/media?opaque=synthetic-prefix,synthetic-tail',
+            'https://synthetic-user:synthetic-password,synthetic-tail@example.invalid/media',
+            'wss://example.invalid/ws#synthetic-prefix;synthetic-tail',
+            'https://example.invalid/?opaque=synthetic-prefix|synthetic-tail',
+        ]) {
+            const output = sanitizeLogText(`failed ${url} scope missing`);
+            expect(output).not.toContain('synthetic-');
+            expect(output).toContain('scope missing');
+            const json = JSON.stringify({ url, diagnostic: 'scope missing' });
+            const sanitized = sanitizeLogText(json);
+            expect(sanitized).not.toContain('synthetic-');
+            expect(JSON.parse(sanitized).diagnostic).toBe('scope missing');
+            const nested = sanitizeLogText(JSON.stringify(json));
+            expect(nested).not.toContain('synthetic-');
+            expect(JSON.parse(JSON.parse(nested)).diagnostic).toBe('scope missing');
+        }
+    });
     test("redacts quoted assignments and complete unquoted values containing quotes", () => {
         const assignments = [
             'password="synthetic-password"', "access_token='synthetic-token'",
