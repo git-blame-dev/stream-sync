@@ -51,22 +51,22 @@ class YouTubeiCurrencyParser {
         this.codeSymbolPattern = /^([A-Za-z]{3})\$([0-9,]+(?:\.[0-9]{1,2})?)$/;
 
         this.symbolMappings = [
-            { pattern: /₺([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'TRY', symbol: '₺' },
-            { pattern: /₹([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'INR', symbol: '₹' },
-            { pattern: /€([0-9,.]+)/, currency: 'EUR', symbol: '€' },
-            { pattern: /£([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'GBP', symbol: '£' },
-            { pattern: /¥([0-9,]+)/, currency: 'JPY', symbol: '¥' },
-            { pattern: /₩([0-9,]+)/, currency: 'KRW', symbol: '₩' },
-            { pattern: /₽([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'RUB', symbol: '₽' },
-            { pattern: /฿([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'THB', symbol: '฿' },
-            { pattern: /₱([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'PHP', symbol: '₱' },
-            { pattern: /₦([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'NGN', symbol: '₦' },
-            { pattern: /₴([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'UAH', symbol: '₴' },
-            { pattern: /₪([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'ILS', symbol: '₪' },
-            { pattern: /₫([0-9,]+)/, currency: 'VND', symbol: '₫' },
-            { pattern: /৳([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'BDT', symbol: '৳' },
-            { pattern: /₨([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'PKR', symbol: '₨' },
-            { pattern: /\$([0-9,]+(?:\.[0-9]{1,2})?)/, currency: 'USD', symbol: '$' }
+            { pattern: /^₺([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'TRY', symbol: '₺' },
+            { pattern: /^₹([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'INR', symbol: '₹' },
+            { pattern: /^€([0-9,.]+)$/, currency: 'EUR', symbol: '€' },
+            { pattern: /^£([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'GBP', symbol: '£' },
+            { pattern: /^¥([0-9,]+)$/, currency: 'JPY', symbol: '¥' },
+            { pattern: /^₩([0-9,]+)$/, currency: 'KRW', symbol: '₩' },
+            { pattern: /^₽([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'RUB', symbol: '₽' },
+            { pattern: /^฿([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'THB', symbol: '฿' },
+            { pattern: /^₱([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'PHP', symbol: '₱' },
+            { pattern: /^₦([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'NGN', symbol: '₦' },
+            { pattern: /^₴([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'UAH', symbol: '₴' },
+            { pattern: /^₪([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'ILS', symbol: '₪' },
+            { pattern: /^₫([0-9,]+)$/, currency: 'VND', symbol: '₫' },
+            { pattern: /^৳([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'BDT', symbol: '৳' },
+            { pattern: /^₨([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'PKR', symbol: '₨' },
+            { pattern: /^\$([0-9,]+(?:\.[0-9]{1,2})?)$/, currency: 'USD', symbol: '$' }
         ];
 
         this.currencySymbols = {
@@ -128,20 +128,6 @@ class YouTubeiCurrencyParser {
             return this._createFailureResult(displayString, 'Negative amount not allowed');
         }
 
-        if (trimmed.startsWith('TRY ')) {
-            const amountStr = trimmed.slice(4);
-            const amount = this._parseAmount(amountStr);
-            if (amount > 0) {
-                return {
-                    amount,
-                    currency: 'TRY',
-                    symbol: '₺',
-                    success: true,
-                    originalString: trimmed
-                };
-            }
-        }
-
         const codeSpaceResult = this._parseCodeSpaceFormat(trimmed);
         if (codeSpaceResult.success) {
             return codeSpaceResult;
@@ -173,13 +159,9 @@ class YouTubeiCurrencyParser {
             return { success: false };
         }
 
-        const firstCurrencyCharacter = currencyRaw.charAt(0);
-        const currency = currencyRaw.length === 3 && firstCurrencyCharacter >= 'A' && firstCurrencyCharacter <= 'Z'
-            ? currencyRaw
-            : currencyRaw.toUpperCase();
-        const amount = amountStr.indexOf(',') === -1
-            ? parseFloat(amountStr)
-            : this._parseAmount(amountStr);
+        const currency = currencyRaw.toUpperCase();
+        const amount = this._parseAmount(amountStr);
+        if (amount <= 0) return { success: false };
         const symbol = currency === 'TRY' ? '₺' : (this.currencySymbols[currency] || currency);
 
         return {
@@ -233,6 +215,7 @@ class YouTubeiCurrencyParser {
 
         const currency = currencyRaw.toUpperCase();
         const amount = this._parseAmount(amountStr);
+        if (amount <= 0) return { success: false };
 
         return {
             amount,
@@ -256,6 +239,7 @@ class YouTubeiCurrencyParser {
             }
 
             const amount = this._parseAmount(amountStr);
+            if (amount <= 0) return { success: false };
             return {
                 amount,
                 currency: mapping.currency,
@@ -269,55 +253,20 @@ class YouTubeiCurrencyParser {
     }
 
     private _parseAmount(amountStr: string): number {
-        if (!amountStr) {
+        // Ungrouped decimal, or groups of exactly three with an optional decimal part.
+        // A lone comma with one/two trailing digits is a decimal separator.
+        const western = /^(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?$/;
+        const european = /^(?:[0-9]+|[0-9]{1,3}(?:\.[0-9]{3})+),[0-9]{1,2}$/;
+        let normalized: string;
+        if (western.test(amountStr)) {
+            normalized = amountStr.replace(/,/g, '');
+        } else if (european.test(amountStr)) {
+            normalized = amountStr.replace(/\./g, '').replace(',', '.');
+        } else {
             return 0;
         }
-
-        if (amountStr.indexOf(',') === -1 && amountStr.indexOf('.') === -1) {
-            const parsed = parseFloat(amountStr);
-            return Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        if (amountStr.indexOf(',') === -1) {
-            const parsed = parseFloat(amountStr);
-            return Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        const hasPeriod = amountStr.indexOf('.') !== -1;
-        const hasComma = amountStr.indexOf(',') !== -1;
-
-        if (hasPeriod && hasComma) {
-            const lastPeriodIndex = amountStr.lastIndexOf('.');
-            const lastCommaIndex = amountStr.lastIndexOf(',');
-
-            if (lastCommaIndex > lastPeriodIndex) {
-                const cleanAmount = amountStr.replace(/\./g, '').replace(',', '.');
-                const parsed = parseFloat(cleanAmount);
-                return Number.isNaN(parsed) ? 0 : parsed;
-            }
-
-            const cleanAmount = amountStr.replace(/,/g, '');
-            const parsed = parseFloat(cleanAmount);
-            return Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        if (hasComma && !hasPeriod) {
-            const lastCommaIndex = amountStr.lastIndexOf(',');
-            const afterComma = amountStr.substring(lastCommaIndex + 1);
-
-            if (afterComma.length <= 2 && afterComma.length > 0) {
-                const cleanAmount = amountStr.replace(/,/g, '.');
-                const parsed = parseFloat(cleanAmount);
-                return Number.isNaN(parsed) ? 0 : parsed;
-            }
-
-            const cleanAmount = amountStr.replace(/,/g, '');
-            const parsed = parseFloat(cleanAmount);
-            return Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        const parsed = parseFloat(amountStr);
-        return Number.isNaN(parsed) ? 0 : parsed;
+        const amount = Number(normalized);
+        return Number.isFinite(amount) && amount > 0 ? amount : 0;
     }
 
     private _createFailureResult(originalString: unknown, reason: string): CurrencyParseFailure {

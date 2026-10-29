@@ -127,6 +127,8 @@ class PlatformLifecycleService {
     shutdownRequested: boolean;
     platformCleanupPromises: Map<PlatformInstance, Promise<void>>;
 
+    private disconnectPromise: Promise<void> | null = null;
+
     constructor(options: PlatformLifecycleOptions = {}) {
         this.config = options.config;
         this.eventBus = options.eventBus || null;
@@ -196,6 +198,11 @@ class PlatformLifecycleService {
                 PlatformClass,
                 configCopy
             );
+
+            if (this.shutdownRequested) {
+                await this.cleanupPlatformInstance(platformInstance);
+                return;
+            }
 
             if (platformName === 'twitch' && !this.isTwitchAuthReady()) {
                 await this.cleanupPlatformInstance(platformInstance);
@@ -594,6 +601,9 @@ class PlatformLifecycleService {
 
             this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
         } catch (error) {
+            // Shutdown already owns cleanup and its health outcome. Cancellation
+            // of initialization must not start another cleanup or overwrite it.
+            if (this.shutdownRequested) return;
             this._handleLifecycleError(`[${platformName}] Background initialization failed: ${getErrorMessage(error)}`, error, 'background-init');
             await this.markPlatformFailure(platformName, error, { expectedInstance });
         }
@@ -627,12 +637,17 @@ class PlatformLifecycleService {
 
         this.logger.info('Waiting for background platform initializations to complete...', 'PlatformLifecycleService');
 
-        const timeout = safeDelay(timeoutMs, timeoutMs, 'platformLifecycle:backgroundInitWait');
+        const abort = new AbortController();
+        const timeout = safeDelay(timeoutMs, timeoutMs, 'platformLifecycle:backgroundInitWait', abort.signal);
         const allInits = Promise.allSettled(
             this.backgroundPlatformInits.map(init => init.promise)
         );
 
-        await Promise.race([allInits, timeout]);
+        try {
+            await Promise.race([allInits, timeout]);
+        } finally {
+            abort.abort();
+        }
     }
 
     getStatus() {
@@ -814,16 +829,23 @@ class PlatformLifecycleService {
         });
     }
 
-    async disconnectAll() {
+    disconnectAll(): Promise<void> {
+        if (this.disconnectPromise) return this.disconnectPromise;
+        const stopping = this.retireAllPlatforms().finally(() => {
+            if (this.disconnectPromise === stopping) this.disconnectPromise = null;
+        });
+        this.disconnectPromise = stopping;
+        return stopping;
+    }
+
+    private async retireAllPlatforms() {
         this.logger.info('Cleaning up all platforms...', 'PlatformLifecycleService');
         this.shutdownRequested = true;
 
-        await this.waitForBackgroundInits(10000);
-
-        for (const platformName in this.platforms) {
+        // Admit every owner's cancellation before joining any slow cleanup.
+        const retirements = Object.entries(this.platforms).map(async ([platformName, platform]) => {
             let cleanupError: unknown = null;
             try {
-                const platform = this.platforms[platformName];
                 if (platform && typeof platform.cleanup === 'function') {
                     await this.cleanupPlatformInstance(platform);
                     this.logger.info(`Cleaned up ${platformName}`, 'PlatformLifecycleService');
@@ -835,6 +857,7 @@ class PlatformLifecycleService {
                 cleanupError = error;
                 this._handleLifecycleError(`Error disconnecting from ${platformName}: ${getErrorMessage(error)}`, error, 'disconnect');
             } finally {
+                if (this.platforms[platformName] !== platform) return;
                 delete this.platforms[platformName];
                 delete this.platformConnectionTimes[platformName];
 
@@ -852,7 +875,9 @@ class PlatformLifecycleService {
                     });
                 }
             }
-        }
+        });
+        await Promise.allSettled(retirements);
+        await this.waitForBackgroundInits(10000);
     }
 
     private cleanupPlatformInstance(platform: PlatformInstance): Promise<void> {

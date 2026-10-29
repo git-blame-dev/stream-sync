@@ -7,7 +7,7 @@ import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggin
 import { validateLoggerInterface } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import type { OperationDeadlineContext } from '../utils/timeout-wrapper';
+import { withOperationDeadline, type OperationDeadlineContext } from '../utils/timeout-wrapper';
 import { safeDelay, safeSetInterval, safeSetTimeout, validateTimeout } from '../utils/timeout-validator';
 import { createTwitchEventSubSubscriptionManager } from './twitch/connections/eventsub-subscription-manager';
 import { createTwitchEventSubSubscriptions } from './twitch/connections/eventsub-subscriptions';
@@ -28,7 +28,7 @@ type ErrorHandlerLike = {
 type TwitchAuthLike = {
     isReady?: () => boolean;
     getUserId: () => { toString: () => string } | string | number | null | undefined;
-    refreshTokens: () => Promise<boolean>;
+    refreshTokens: (signal?: AbortSignal) => Promise<boolean>;
 };
 
 type AxiosLike = {
@@ -757,7 +757,15 @@ class TwitchEventSub extends EventEmitter {
         this.eventRouter.handlePaypiggyMessageEvent(event);
     }
 
-    async sendMessage(message: string): Promise<{ success: true; platform: 'twitch'; broadcasterId: string; senderId: string }> {
+    async sendMessage(message: string, options: { signal?: AbortSignal; overallBudgetMs?: number } = {}): Promise<{ success: true; platform: 'twitch'; broadcasterId: string; senderId: string }> {
+        return withOperationDeadline(context => this.sendMessageWithinDeadline(message, context), {
+            budgetMs: options.overallBudgetMs ?? 5000,
+            parentAbortSignal: options.signal ? AbortSignal.any([this.lifetime.signal, options.signal]) : this.lifetime.signal,
+            operationName: 'EventSub chat send'
+        });
+    }
+
+    private async sendMessageWithinDeadline(message: string, { signal, remainingBudgetMs }: OperationDeadlineContext): Promise<{ success: true; platform: 'twitch'; broadcasterId: string; senderId: string }> {
         const trimmedMessage = typeof message === 'string' ? message.trim() : '';
         if (!trimmedMessage) {
             throw new Error('EventSub chat send requires a non-empty message');
@@ -788,21 +796,30 @@ class TwitchEventSub extends EventEmitter {
         }
 
         const postMessage = async () => {
+            signal.throwIfAborted();
             const token = secrets.twitch.accessToken;
             if (!token) {
                 throw new Error('EventSub chat send requires an access token');
             }
-            await this.axios.post('https://api.twitch.tv/helix/chat/messages', payload, {
+            const response = await this.axios.post('https://api.twitch.tv/helix/chat/messages', payload, {
+                signal,
+                timeout: Math.max(1, Math.ceil(remainingBudgetMs())),
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Client-Id': clientId,
                     'Content-Type': 'application/json'
                 }
             });
+            signal.throwIfAborted();
+            const messages = getRecord(response.data)?.data;
+            if (!Array.isArray(messages) || messages.length !== 1 || getRecord(messages[0])?.is_sent !== true) {
+                throw new Error('EventSub chat send was not confirmed by Twitch');
+            }
         };
 
         try {
             await postMessage();
+            signal.throwIfAborted();
 
             this.logger.info('EventSub chat message sent', 'twitch', {
                 broadcasterId,
@@ -816,11 +833,14 @@ class TwitchEventSub extends EventEmitter {
                 senderId
             };
         } catch (error) {
+            signal.throwIfAborted();
             if (hasAxiosResponseStatus(error, 401)) {
-                const refreshed = await this.twitchAuth.refreshTokens();
+                const refreshed = await this.twitchAuth.refreshTokens(signal);
+                signal.throwIfAborted();
                 if (refreshed) {
                     try {
                         await postMessage();
+                        signal.throwIfAborted();
                         this.logger.info('EventSub chat message sent after refresh', 'twitch', {
                             broadcasterId,
                             senderId

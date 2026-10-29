@@ -1,213 +1,53 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import {
-  createMockTikTokPlatformDependencies,
-  noOpLogger,
-} from "../../helpers/mock-factories";
-import { TikTokPlatform } from "../../../src/platforms/tiktok";
+import { afterEach, beforeEach, expect, test, vi } from 'bun:test';
+import { createTikTokLifetimeFixture, flushConnectorSetup } from '../../helpers/tiktok-connector-fixture';
 
-type EmittedPlatformEvent = {
-  event: string;
-  data: { type?: string; data?: { isLive?: boolean; willReconnect?: boolean; status?: string } };
-};
-type TikTokPlatformConfig = ConstructorParameters<typeof TikTokPlatform>[0];
-type TikTokPlatformDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokPlatformDependencies["WebcastEvent"]>;
+type PlatformEvent = { type: string; data: { isLive?: boolean; willReconnect?: boolean; status?: string } };
+let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
+let events: PlatformEvent[];
+beforeEach(() => {
+    vi.useFakeTimers();
+    fixture = createTikTokLifetimeFixture();
+    events = [];
+    fixture.platform.on('platform:event', event => { events.push(event); });
+});
+afterEach(async () => { await fixture.cleanup(); vi.useRealTimers(); });
 
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
+test.each(['handleGift', 'handleFollow', 'handleConnection'])('%s error emits exactly its connection status contract', async operation => {
+    await fixture.platform._handleError(new Error('synthetic processing failure'), { operation, recoverable: operation !== 'handleConnection' });
+    const statuses = events.filter(event => event.type === 'platform:stream-status');
+    if (operation === 'handleConnection') {
+        expect(statuses).toHaveLength(1);
+        expect(statuses[0]!.data.isLive).toBe(false);
+    } else expect(statuses).toEqual([]);
+});
 
-describe("TikTokPlatform connection lifecycle", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
+test.each([true, false])('enabled=%s publishes both exact willReconnect outcomes', async enabled => {
+    // First prove a real upstream connection, then change the public configuration.
+    const connecting = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[0]!.open(); fixture.connectors[0]!.enter();
+    await connecting;
+    fixture.platform.config.enabled = enabled;
+    events.length = 0;
+    await fixture.platform.handleConnectionIssue({ code: 1011, reason: 'synthetic drop' });
+    const disconnected = events.filter(event => ['platform:chat-disconnected', 'platform:stream-status'].includes(event.type));
+    expect(disconnected.map(event => event.type)).toEqual(['platform:chat-disconnected', 'platform:stream-status']);
+    expect(disconnected.map(event => event.data.willReconnect)).toEqual([enabled, enabled]);
+    expect(disconnected[1]!.data.isLive).toBe(false);
+    await flushConnectorSetup();
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(enabled ? 1 : 0);
+    expect(!!fixture.retry.retryTimers.tiktok).toBe(enabled);
+});
 
-  const createPlatform = (
-    configOverrides: Partial<TikTokPlatformConfig> = {},
-    dependencyOverrides: Partial<TikTokPlatformDependencies> = {},
-  ) => {
-    const config = { enabled: true, username: "testuser", ...configOverrides };
-    const dependencies = createMockTikTokPlatformDependencies();
-    dependencies.logger = noOpLogger;
-
-    const emittedEvents: EmittedPlatformEvent[] = [];
-    const originalEmit = TikTokPlatform.prototype.emit;
-
-    return {
-      platform: new TikTokPlatform(config, {
-        ...dependencies,
-        ...dependencyOverrides,
-        WebcastEvent: WEBCAST_EVENT,
-      }),
-      emittedEvents,
-      captureEvents: (platform: TikTokPlatform) => {
-        platform.emit = function (event: string, data: EmittedPlatformEvent["data"]) {
-          emittedEvents.push({ event, data });
-          return originalEmit.call(this, event, data);
-        };
-      },
-    };
-  };
-
-  describe("_handleError stream status emission", () => {
-    test("_handleError with gift processing context should NOT emit stream-status isLive:false", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform();
-      captureEvents(platform);
-
-      await platform._handleError(new Error("Gift validation failed"), {
-        operation: "handleGift",
-        recoverable: true,
-      });
-
-      const streamStatusEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          e.data?.type === "platform:stream-status",
-      );
-
-      const falseLiveEvents = streamStatusEvents.filter(
-        (e) => e.data?.data?.isLive === false,
-      );
-      expect(falseLiveEvents.length).toBe(0);
-    });
-
-    test("_handleError with follow processing context should NOT emit stream-status isLive:false", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform();
-      captureEvents(platform);
-
-      await platform._handleError(new Error("Follow processing failed"), {
-        operation: "handleFollow",
-        recoverable: true,
-      });
-
-      const streamStatusEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          e.data?.type === "platform:stream-status",
-      );
-
-      const falseLiveEvents = streamStatusEvents.filter(
-        (e) => e.data?.data?.isLive === false,
-      );
-      expect(falseLiveEvents.length).toBe(0);
-    });
-
-    test("_handleError with connection context SHOULD emit stream-status isLive:false", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform();
-      captureEvents(platform);
-
-      await platform._handleError(new Error("Connection lost"), {
-        operation: "handleConnection",
-        recoverable: false,
-      });
-
-      const streamStatusEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          e.data?.type === "platform:stream-status",
-      );
-
-      const falseLiveEvents = streamStatusEvents.filter(
-        (e) => e.data?.data?.isLive === false,
-      );
-      expect(falseLiveEvents.length).toBe(1);
-    });
-  });
-
-  describe("handleConnectionIssue willReconnect flag", () => {
-    test("handleConnectionIssue with enabled config should emit willReconnect:true", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform({
-        enabled: true,
-      });
-      captureEvents(platform);
-
-      platform.connectionActive = true;
-      platform.isPlannedDisconnection = false;
-
-      await platform.handleConnectionIssue(
-        { message: "Connection dropped" },
-        false,
-      );
-
-      const disconnectionEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          (e.data?.type === "platform:chat-disconnected" ||
-            e.data?.type === "platform:stream-status"),
-      );
-
-      const willReconnectTrue = disconnectionEvents.some(
-        (e) => e.data?.data?.willReconnect === true,
-      );
-      expect(willReconnectTrue).toBe(true);
-    });
-
-    test("handleConnectionIssue with disabled config should emit willReconnect:false", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform({
-        enabled: false,
-      });
-      captureEvents(platform);
-
-      platform.connectionActive = true;
-      platform.isPlannedDisconnection = false;
-
-      await platform.handleConnectionIssue(
-        { message: "Connection dropped" },
-        false,
-      );
-
-      const disconnectionEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          (e.data?.type === "platform:chat-disconnected" ||
-            e.data?.type === "platform:stream-status"),
-      );
-
-      const willReconnectFalse = disconnectionEvents.every(
-        (e) => e.data?.data?.willReconnect === false,
-      );
-      expect(willReconnectFalse).toBe(true);
-    });
-  });
-
-  describe("disconnection deduplication", () => {
-    test("concurrent disconnection handlers only emit events once", async () => {
-      const { platform, emittedEvents, captureEvents } = createPlatform({
-        enabled: true,
-      });
-      captureEvents(platform);
-
-      // Simulate both being called concurrently (as happens when 4404 triggers both events)
-      const p1 = platform.handleConnectionIssue(
-        { code: 4404, message: "Stream not live" },
-        false,
-      );
-      const p2 = platform._handleStreamEnd();
-      await Promise.all([p1, p2]);
-
-      const disconnectionEvents = emittedEvents.filter(
-        (e) =>
-          e.event === "platform:event" &&
-          (e.data?.type === "platform:chat-disconnected" ||
-            e.data?.type === "platform:stream-status"),
-      );
-
-      expect(disconnectionEvents.filter((event) =>
-        event.data?.type === "platform:chat-disconnected"
-      )).toHaveLength(1);
-      expect(disconnectionEvents.filter((event) =>
-        event.data?.type === "platform:stream-status" && event.data?.data?.status === "stream-ended"
-      )).toHaveLength(1);
-      expect(disconnectionEvents.filter((event) =>
-        event.data?.type === "platform:stream-status" && event.data?.data?.status !== "stream-ended"
-      )).toHaveLength(1);
-    });
-  });
+test('concurrent disconnection handlers emit each distinct status once', async () => {
+    await Promise.all([
+        fixture.platform.handleConnectionIssue({ code: 4404, message: 'Stream not live' }),
+        fixture.platform._handleStreamEnd(),
+    ]);
+    expect(events.filter(event => event.type === 'platform:chat-disconnected')).toHaveLength(1);
+    const statuses = events.filter(event => event.type === 'platform:stream-status');
+    expect(statuses).toHaveLength(2);
+    expect(statuses.filter(event => event.data.status === 'stream-ended')).toHaveLength(1);
+    expect(statuses.every(event => event.data.isLive === false)).toBe(true);
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(0);
 });

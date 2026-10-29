@@ -1,16 +1,14 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
+import { InnertubeService } from "../../../../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../../../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../../../../src/services/viewer-count-extraction-service";
 import { getSyntheticFixture } from "../../../../helpers/platform-test-data";
 import { waitForDelay } from "../../../../helpers/time-utils";
-const {
-  initializeTestLogging,
-  createMockPlatformDependencies,
-} = require("../../../../helpers/test-setup");
+import { initializeTestLogging } from "../../../../helpers/test-setup";
+import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
 
 initializeTestLogging();
@@ -62,26 +60,82 @@ const getDebugCalls = (logger: unknown): DebugCall[] => {
   }));
 };
 
+const createRecordingLogger = () => {
+  const calls: Array<[string, unknown?, unknown?]> = [];
+  const debug = Object.assign(
+    (message: string, scope?: unknown, metadata?: unknown) => {
+      calls.push([message, scope, metadata]);
+    },
+    { mock: { calls } },
+  );
+  return {
+    ...noOpLogger,
+    debug,
+  };
+};
+
 describe("YouTubePlatform event routing behavior", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   const baseConfig = createYouTubeConfigFixture({
     enabled: true,
     username: "test-channel",
+    dataLoggingPath: "",
+    dataLoggingEnabled: false,
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
   });
 
-  const createPlatform = () =>
-    new YouTubePlatform(baseConfig, {
-      ...createMockPlatformDependencies("youtube"),
-      streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
-          success: true,
-          videoIds: [],
+  const createPlatform = () => {
+    const logger = createRecordingLogger();
+    const metadata = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getInfo: async (_videoId: string) => ({}),
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
         }),
       },
+      { logger },
+    );
+    const detector = new YouTubeStreamDetectionService(metadata, { logger });
+    const viewerExtractionService = new ViewerCountExtractionService(metadata, {
+      logger,
     });
+    const platform = new YouTubePlatform(baseConfig, {
+      logger,
+      innertubeService: metadata,
+      streamDetectionService: detector,
+      viewerExtractionService,
+    });
+    cleanups.push(async () => {
+      try {
+        await platform.cleanup();
+      } finally {
+        try {
+          await detector.cleanup();
+        } finally {
+          await metadata.dispose();
+        }
+      }
+    });
+    return platform;
+  };
 
   test("routes gift membership purchase announcements to giftpaypiggy notifications", async () => {
     const platform = createPlatform();
@@ -193,7 +247,6 @@ describe("YouTubePlatform event routing behavior", () => {
 
   test("logs ignored duplicates for renderer variants without unknown-event logging", async () => {
     const platform = createPlatform();
-    platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
     await platform.handleChatMessage({
       type: "AddChatItemAction",

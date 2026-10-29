@@ -1,66 +1,38 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { TikTokPlatform } from "../../../src/platforms/tiktok";
-import { RetrySystem } from "../../../src/utils/retry-system";
-import { createMockTikTokPlatformDependencies, noOpLogger } from "../../helpers/mock-factories";
-import { useFakeTimers, useRealTimers } from "../../helpers/bun-timers";
+import { afterEach, beforeEach, expect, test, vi } from 'bun:test';
+import { createTikTokLifetimeFixture, flushConnectorSetup } from '../../helpers/tiktok-connector-fixture';
+let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
+let elapsed: number;
+beforeEach(() => { vi.useFakeTimers(); elapsed = 0; fixture = createTikTokLifetimeFixture({}, () => elapsed); });
+afterEach(async () => { await fixture.cleanup(); vi.useRealTimers(); });
 
-describe("TikTok sustained recovery backoff", () => {
-  let retry: RetrySystem;
-  let platform: TikTokPlatform;
-  let elapsed: number;
+test.each([1000, 60000])('confirmed connection lasting %i ms retains or resets accumulated failures', async duration => {
+    fixture.retry.incrementRetryCount('tiktok');
+    fixture.retry.incrementRetryCount('tiktok');
+    const connected = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[0]!.open(); fixture.connectors[0]!.enter();
+    await connected;
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(2);
+    elapsed += duration;
+    await fixture.platform.handleConnectionIssue({ code: 1011, reason: 'synthetic upstream failure' });
+    await flushConnectorSetup();
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(duration === 60000 ? 1 : 3);
+    expect(fixture.retry.calculateAdaptiveRetryDelay('tiktok')).toBe(2000 * Math.pow(1.3, duration === 60000 ? 1 : 3));
+    expect(Object.keys(fixture.retry.retryTimers)).toEqual(['tiktok']);
+    // Retry cleanup must preserve the backoff just observed.
+    await fixture.platform.cleanup(false);
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(duration === 60000 ? 1 : 3);
+});
 
-  beforeEach(() => {
-    useFakeTimers();
-    elapsed = 0;
-    retry = new RetrySystem({ logger: noOpLogger });
-    platform = new TikTokPlatform({ enabled: true, username: "synthetic-streamer" }, {
-      ...createMockTikTokPlatformDependencies(),
-      logger: noOpLogger,
-      WebcastEvent: { CHAT: "chat", GIFT: "gift", FOLLOW: "follow", SOCIAL: "social", ROOM_USER: "roomUser", ERROR: "error", DISCONNECT: "disconnected", STREAM_END: "streamEnd" },
-      ControlEvent: { CONNECTED: "connected", DISCONNECTED: "disconnected", ERROR: "error" },
-      monotonicNow: () => elapsed,
-      retrySystem: {
-        resetRetryCount: retry.resetRetryCount.bind(retry),
-        handleConnectionError: retry.handleConnectionError.bind(retry),
-        cancelConnectionRetry: retry.cancelConnectionRetry.bind(retry),
-      },
-    });
-  });
+test.each([4400, 4401, 4403])('does not schedule retries for terminal provider code %i', async code => {
+    const result = await fixture.platform.handleConnectionIssue({ code, reason: 'synthetic provider failure' });
+    expect(result.retryResult).toEqual({ queued: false, reason: 'terminal-error' });
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(0);
+    expect(fixture.retry.retryTimers).toEqual({});
+});
 
-  afterEach(async () => {
-    await platform.cleanup();
-    retry.dispose();
-    useRealTimers();
-  });
-
-  test("retains accumulated failures across brief confirmed connections and cleanup", async () => {
-    retry.incrementRetryCount("tiktok");
-    await platform.handleConnectionSuccess();
-    expect(retry.getRetryCount("tiktok")).toBe(1);
-    elapsed += 1000;
-    await platform.handleConnectionIssue({ code: 1011, reason: "Synthetic upstream failure" });
-    expect(retry.getRetryCount("tiktok")).toBe(2);
-
-  });
-
-  test("resets backoff after a full minute of confirmed connection", async () => {
-    retry.incrementRetryCount("tiktok");
-    retry.incrementRetryCount("tiktok");
-    await platform.handleConnectionSuccess();
-    elapsed += 60000;
-    await platform.handleConnectionIssue({ code: 1011, reason: "Synthetic upstream failure" });
-    expect(retry.getRetryCount("tiktok")).toBe(1);
-  });
-
-  test.each([4400, 4401, 4403])("does not schedule retries for terminal provider code %i", async code => {
-    const result = await platform.handleConnectionIssue({ code, reason: "Synthetic provider failure" });
-    expect(result.retryResult).toMatchObject({ queued: false, reason: "terminal-error" });
-    expect(retry.getRetryCount("tiktok")).toBe(0);
-  });
-
-  test.each([4400, 4401, 4403])("retains terminal code %i when supplied as an Error", code => {
-    const result = platform.handleRetry(Object.assign(new Error("Synthetic provider failure"), { code }));
-    expect(result).toMatchObject({ action: "skipped", reason: "non-recoverable" });
-    expect(retry.getRetryCount("tiktok")).toBe(0);
-  });
+test.each([4400, 4401, 4403])('retains terminal code %i supplied as an Error', code => {
+    expect(fixture.platform.handleRetry(Object.assign(new Error('synthetic provider failure'), { code }))).toEqual({ action: 'skipped', reason: 'non-recoverable' });
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(0);
+    expect(fixture.retry.retryTimers).toEqual({});
 });

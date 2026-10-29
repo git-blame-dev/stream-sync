@@ -11,6 +11,7 @@ import { TOKEN_REFRESH_CONFIG, OAUTH_SERVER_CONFIG } from '../utils/auth-constan
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveLogger } from '../utils/logger-resolver';
 import { saveTokens } from '../utils/token-store';
+import { withOperationDeadline } from '../utils/timeout-wrapper';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
 
@@ -35,6 +36,7 @@ type OAuthFlowOptions = {
     skipBrowserOpen?: boolean;
     scopes?: readonly string[];
     persistTokens?: boolean;
+    signal?: AbortSignal;
 };
 
 type CallbackServerBootstrapResult = {
@@ -51,6 +53,7 @@ type RunOAuthFlowDependencies = {
         autoFindPort?: boolean;
         logger: OAuthLogger;
         expectedState?: string;
+        signal?: AbortSignal;
     }) => Promise<CallbackServerBootstrapResult>;
     exchangeCodeForTokens?: typeof exchangeCodeForTokens;
     openBrowser?: typeof openBrowser;
@@ -236,7 +239,8 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
     `;
 }
 
-async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger, expectedState = generateOAuthState() }: { port?: number; autoFindPort?: boolean; logger?: unknown; expectedState?: string }): Promise<CallbackServerBootstrapResult> {
+async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger, expectedState = generateOAuthState(), signal }: { port?: number; autoFindPort?: boolean; logger?: unknown; expectedState?: string; signal?: AbortSignal }): Promise<CallbackServerBootstrapResult> {
+    signal?.throwIfAborted();
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
 
     let resolveCode: (value: string) => void = () => {};
@@ -266,6 +270,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
     const retire = () => {
         if (retired) return;
         retired = true;
+        signal?.removeEventListener('abort', onAbort);
         flushingSuccess = false;
         clearTimeout(flushTimeout);
         detachResponseListeners();
@@ -278,6 +283,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         settle(error);
         retire();
     };
+    const onAbort = () => finish(new Error('OAuth callback cancelled'));
     const onServerClose = () => finish(new Error('OAuth callback server closed'));
     const onServerError = (error: Error) => finish(error);
 
@@ -368,23 +374,34 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         return server;
     }) as typeof server.close;
 
+    signal?.addEventListener('abort', onAbort, { once: true });
     const listenOnPort = async (candidatePort: number) => {
+        signal?.throwIfAborted();
         await new Promise<void>((resolve, reject) => {
+            const onCancelled = () => {
+                server.off('error', onError);
+                server.off('listening', onListening);
+                reject(new Error('OAuth callback cancelled'));
+            };
             const onError = (error: unknown) => {
+                signal?.removeEventListener('abort', onCancelled);
                 server.off('listening', onListening);
                 reject(error);
             };
             const onListening = () => {
+                signal?.removeEventListener('abort', onCancelled);
                 server.off('error', onError);
                 resolve(undefined);
             };
 
+            signal?.addEventListener('abort', onCancelled, { once: true });
             server.once('error', onError);
             server.once('listening', onListening);
 
             try {
-                server.listen(candidatePort, '127.0.0.1');
+                server.listen({ port: candidatePort, host: '127.0.0.1', ...(signal ? { signal } : {}) });
             } catch (error) {
+                signal?.removeEventListener('abort', onCancelled);
                 server.off('error', onError);
                 server.off('listening', onListening);
                 reject(error);
@@ -419,6 +436,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         throw error;
     }
 
+    signal?.throwIfAborted();
     const serverAddress = server.address();
     boundPort = serverAddress && typeof serverAddress === 'object' ? serverAddress.port : port;
     const redirectUri = `https://localhost:${boundPort}`;
@@ -440,7 +458,8 @@ async function exchangeCodeForTokens(
         logger,
         httpsRequest,
         timeoutMs = 30_000,
-        maxResponseBytes = 64 * 1024
+        maxResponseBytes = 64 * 1024,
+        signal
     }: {
         clientId: string;
         clientSecret: string;
@@ -449,8 +468,10 @@ async function exchangeCodeForTokens(
         httpsRequest?: typeof https.request;
         timeoutMs?: number;
         maxResponseBytes?: number;
+        signal?: AbortSignal;
     }
 ): Promise<OAuthTokenResponse> {
+    signal?.throwIfAborted();
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     const postData = querystring.stringify({
         client_id: clientId,
@@ -470,11 +491,14 @@ async function exchangeCodeForTokens(
             if (settled) return;
             settled = true;
             clearTimeout(deadline);
+            signal?.removeEventListener('abort', onAbort);
             reject(new Error(message));
             try { responseStream?.destroy(); } catch { /* best effort */ }
             try { req?.destroy(); } catch { /* best effort */ }
         };
+        const onAbort = () => fail('Token exchange cancelled');
         const deadline = safeSetTimeout(() => fail('Token exchange timed out'), timeoutMs);
+        signal?.addEventListener('abort', onAbort, { once: true });
         const urlParts = new URL(TWITCH.OAUTH.TOKEN);
         const options = {
             hostname: urlParts.hostname,
@@ -508,6 +532,7 @@ async function exchangeCodeForTokens(
                     if (res.statusCode === 200 && response && typeof response.access_token === 'string' && response.access_token.trim() && typeof response.refresh_token === 'string' && response.refresh_token.trim()) {
                         settled = true;
                         clearTimeout(deadline);
+                        signal?.removeEventListener('abort', onAbort);
                         resolve({
                             accessToken: response.access_token,
                             refreshToken: response.refresh_token,
@@ -524,6 +549,7 @@ async function exchangeCodeForTokens(
             });
         });
 
+        if (settled) { req.destroy(); return; }
         req.on('error', () => {
             fail('Token exchange request failed');
         });
@@ -618,7 +644,7 @@ function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false
 }
 
 async function runOAuthFlow(
-    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES, persistTokens = true }: OAuthFlowOptions,
+    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES, persistTokens = true, signal }: OAuthFlowOptions,
     {
         startCallbackServer: startCallbackServerImpl = startCallbackServer,
         exchangeCodeForTokens: exchangeCodeForTokensImpl = exchangeCodeForTokens,
@@ -640,29 +666,50 @@ async function runOAuthFlow(
 
     let serverRef: https.Server | null = null;
     let cancelCallback: (() => void) | undefined;
+    let callbackCancelled = false;
+    const cancelOwnedCallback = () => {
+        if (callbackCancelled) return;
+        callbackCancelled = true;
+        if (cancelCallback) {
+            try { cancelCallback(); } catch { /* Cleanup must preserve the result. */ }
+        } else {
+            safeCloseServer(serverRef, true);
+        }
+    };
     try {
+        signal?.throwIfAborted();
         const state = generateOAuthState();
         const { server, waitForCode, redirectUri, cancel } = await startCallbackServerImpl({
             port,
             autoFindPort,
             logger: resolvedLogger,
-            expectedState: state
+            expectedState: state,
+            ...(signal ? { signal } : {})
         });
         serverRef = server;
         cancelCallback = cancel;
+        signal?.addEventListener('abort', cancelOwnedCallback, { once: true });
+        signal?.throwIfAborted();
 
         const authUrl = buildAuthUrl(clientId, redirectUri, scopes, state);
         displayOAuthInstructions(authUrl, resolvedLogger, { scopes, tokenStorePath });
+        signal?.throwIfAborted();
         openBrowserImpl(authUrl, resolvedLogger, { skipBrowserOpen });
 
-        const code = await waitForCode;
+        const code = await withOperationDeadline(() => waitForCode, {
+            ...(signal ? { parentAbortSignal: signal } : {}),
+            budgetMs: TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS, operationName: 'OAuth callback'
+        });
+        signal?.throwIfAborted();
         const tokenResponse = await exchangeCodeForTokensImpl(code, {
             clientId,
             clientSecret: secrets.twitch.clientSecret,
             redirectUri,
-            logger: resolvedLogger
+            logger: resolvedLogger,
+            ...(signal ? { signal } : {})
         });
 
+        signal?.throwIfAborted();
         const tokens = tokenResponse;
         if (!tokens || !tokens.accessToken) {
             throw new Error('OAuth flow did not return accessToken');
@@ -683,6 +730,7 @@ async function runOAuthFlow(
             );
         }
 
+        signal?.throwIfAborted();
         return {
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
@@ -692,11 +740,8 @@ async function runOAuthFlow(
         try { handler.handleEventProcessingError(error, 'oauth-flow', null, 'OAuth flow failed'); } catch { /* Preserve failure outcome. */ }
         return null;
     } finally {
-        if (cancelCallback) {
-            try { cancelCallback(); } catch { /* Cleanup must preserve the result. */ }
-        } else {
-            safeCloseServer(serverRef, true);
-        }
+        signal?.removeEventListener('abort', cancelOwnedCallback);
+        cancelOwnedCallback();
     }
 }
 

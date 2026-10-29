@@ -1,72 +1,28 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
-import { initializeTestLogging } from "../../../../helpers/test-setup";
+import { describe, expect, test } from 'bun:test';
+import { TikTokPlatform } from '../../../../../src/platforms/tiktok';
+import { noOpLogger } from '../../../../helpers/mock-factories';
 
-initializeTestLogging();
-
-import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
-const isPreloadMocked =
-  !TikTokPlatform ||
-  !TikTokPlatform.prototype ||
-  !TikTokPlatform.prototype.handleTikTokSocial;
-import {
-  createMockTikTokPlatformDependencies,
-  noOpLogger,
-} from "../../../../helpers/mock-factories";
-import * as testClock from "../../../../helpers/test-clock";
-
-type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
-
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
-
-describe("TikTok social filtering", () => {
-  afterEach(() => {
-    restoreAllMocks();
+for (const [name, rejected] of [
+  ['unsupported action with complete identity', { user: { uniqueId: 'synthetic-social', nickname: 'Synthetic Social' }, actionType: 'poke' }],
+  ['follow with missing nickname', { user: { uniqueId: 'synthetic-social' }, actionType: 'follow' }],
+] as const) {
+  describe('actual TikTok social filtering', () => {
+    test(name, async () => {
+      const platform = new TikTokPlatform({ enabled: false, dataLoggingEnabled: false }, { logger: noOpLogger });
+      const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+      platform.on('platform:event', event => { events.push(event); });
+      try {
+        await platform.handleTikTokSocial({ ...rejected, common: { createTime: 1767225600000, msgId: 'synthetic-rejected' } });
+        expect(events).toEqual([]);
+        await platform.handleTikTokSocial({ user: { uniqueId: 'synthetic-follow', nickname: 'Synthetic Follow' },
+          actionType: 'follow', common: { createTime: 1767225600000, msgId: 'synthetic-follow' } });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ type: 'platform:follow', data: {
+          username: 'Synthetic Follow', userId: 'synthetic-follow', timestamp: '2026-01-01T00:00:00.000Z',
+        } });
+      } finally {
+        await platform.cleanup();
+      }
+    });
   });
-
-  const baseConfig = { enabled: true, username: "social_tester" };
-
-  const createPlatform = () => {
-    const dependencies = {
-      ...createMockTikTokPlatformDependencies(),
-      logger: noOpLogger,
-      connectionFactory: { createConnection: createMockFn() },
-      WebcastEvent: WEBCAST_EVENT,
-    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
-
-    return new TikTokPlatform(baseConfig, dependencies);
-  };
-
-  test.skipIf(isPreloadMocked)(
-    "ignores social actions that are not follow/share",
-    async () => {
-      const platform = createPlatform();
-      const interactions: unknown[] = [];
-      platform.handlers = {
-        ...platform.handlers,
-        onInteraction: (data: unknown) => interactions.push(data),
-      };
-
-      await platform.handleTikTokSocial({
-        user: { userId: "tt-user-1", uniqueId: "social_user" },
-        displayType: "poke",
-        actionType: "poke",
-        common: { createTime: testClock.now() },
-      });
-
-      expect(interactions).toHaveLength(0);
-    },
-  );
-});
+}

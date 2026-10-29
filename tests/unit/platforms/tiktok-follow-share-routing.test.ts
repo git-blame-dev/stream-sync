@@ -1,9 +1,9 @@
-import { describe, it, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { createConfigFixture } from "../../helpers/config-fixture";
-import { EventEmitter } from "events";
-import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
+import { afterEach, describe, it, expect } from "bun:test";
+import { createMainPresentationFixture } from "../../helpers/main-presentation-fixture";
+
+type MainPresentationFixture = Awaited<
+  ReturnType<typeof createMainPresentationFixture>
+>;
 
 type RoutedNotification = {
   type: string;
@@ -23,14 +23,6 @@ type PlatformEventPayload = {
   };
 };
 
-type RouterEventBus = {
-  subscribe: (
-    eventName: string,
-    handler: (event: unknown) => Promise<void>,
-  ) => () => void;
-  emit: (eventName: string, payload: unknown) => boolean;
-};
-
 const getOnlyHandledNotification = (
   handled: readonly RoutedNotification[],
 ): RoutedNotification => {
@@ -43,68 +35,61 @@ const getOnlyHandledNotification = (
   return notification;
 };
 
-function createAppRuntimeMocks() {
-  const handled: RoutedNotification[] = [];
-  return {
-    handled,
-    runtime: {
-      handleFollowNotification: (
-        platform: string,
-        username: unknown,
-        payload: Record<string, unknown>,
-      ) => {
-        expect(typeof username).toBe("string");
-        if (typeof username !== "string") {
-          throw new Error("Expected follow username to be a string");
-        }
-        handled.push({ type: "platform:follow", platform, username, payload });
+const extractRoutedNotifications = (
+  presentation: MainPresentationFixture,
+): RoutedNotification[] =>
+  presentation.queue.state.queue.flatMap((item) => {
+    if (!("data" in item) || !("platform" in item)) {
+      return [];
+    }
+    const data =
+      item.data && typeof item.data === "object"
+        ? (item.data as Record<string, unknown>)
+        : {};
+    const username = typeof data.username === "string" ? data.username : "";
+    return [
+      {
+        type: item.type,
+        platform: item.platform,
+        username,
+        payload: item.data,
       },
-      handleShareNotification: (
-        platform: string,
-        username: unknown,
-        payload: Record<string, unknown>,
-      ) => {
-        expect(typeof username).toBe("string");
-        if (typeof username !== "string") {
-          throw new Error("Expected share username to be a string");
-        }
-        handled.push({ type: "platform:share", platform, username, payload });
-      },
-    },
-  };
-}
-
-function createMockEventBus(): RouterEventBus {
-  const bus = new EventEmitter();
-  return {
-    subscribe: (eventName: string, handler: (event: unknown) => Promise<void>) => {
-      bus.on(eventName, handler);
-      return () => bus.off(eventName, handler);
-    },
-    emit: (eventName: string, payload: unknown) => bus.emit(eventName, payload),
-  };
-}
+    ];
+  });
 
 describe("TikTok follow/share routing", () => {
-  it("routes follow events through platform:event to PlatformEventRouter", async () => {
-    const eventBus = createMockEventBus();
-    const { runtime, handled } = createAppRuntimeMocks();
-    new PlatformEventRouter({
-      eventBus,
-      runtime,
-      notificationManager: { handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined) },
-      config: createConfigFixture({
-        general: {
-          followsEnabled: true,
-          giftsEnabled: true,
-          messagesEnabled: true,
-          sharesEnabled: true,
-        },
-      }),
-      logger: noOpLogger,
-    });
+  const activeFixtures: MainPresentationFixture[] = [];
 
-    await eventBus.emit("platform:event", {
+  afterEach(async () => {
+    while (activeFixtures.length > 0) {
+      const fixture = activeFixtures.pop();
+      if (fixture) {
+        await fixture.dispose();
+      }
+    }
+  });
+
+  const createStartedFixture = async (): Promise<MainPresentationFixture> => {
+    const presentation = await createMainPresentationFixture();
+    activeFixtures.push(presentation);
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.general.followsEnabled = true;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.messagesEnabled = true;
+    presentation.config.general.sharesEnabled = true;
+    presentation.config.vfx.filePath = "/synthetic-only";
+    await presentation.start();
+    presentation.config.tiktok.enabled = true;
+    presentation.config.tiktok.followsEnabled = true;
+    presentation.config.tiktok.sharesEnabled = true;
+    return presentation;
+  };
+
+  it("routes follow events through platform:event to PlatformEventRouter", async () => {
+    const presentation = await createStartedFixture();
+
+    presentation.bus.emit("platform:event", {
       type: "platform:follow",
       platform: "tiktok",
       data: {
@@ -114,7 +99,9 @@ describe("TikTok follow/share routing", () => {
         metadata: {},
       },
     });
+    await new Promise((resolve) => setImmediate(resolve));
 
+    const handled = extractRoutedNotifications(presentation);
     const notification = getOnlyHandledNotification(handled);
     expect(notification).toMatchObject({
       type: "platform:follow",
@@ -122,49 +109,43 @@ describe("TikTok follow/share routing", () => {
     });
   });
 
-  it("routes share events through platform:event to PlatformEventRouter", () => {
-    const eventBus = createMockEventBus();
-    const { runtime, handled } = createAppRuntimeMocks();
-    new PlatformEventRouter({
-      eventBus,
-      runtime,
-      notificationManager: { handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined) },
-      config: createConfigFixture({
-        general: {
-          followsEnabled: true,
-          giftsEnabled: true,
-          messagesEnabled: true,
-          sharesEnabled: true,
-        },
-      }),
-      logger: noOpLogger,
-    });
+  it("routes share events through platform:event to PlatformEventRouter", async () => {
+    const presentation = await createStartedFixture();
     const emitted: PlatformEventPayload[] = [];
-    eventBus.subscribe("platform:event", async (payload: unknown) => {
-      expect(isPlatformEventPayload(payload)).toBe(true);
-      if (!isPlatformEventPayload(payload)) {
-        throw new Error("Expected platform event payload");
-      }
-      emitted.push(payload);
-    });
-
-    eventBus.emit("platform:event", {
-      type: "platform:share",
-      platform: "tiktok",
-      data: {
-        username: "Sharer",
-        userId: "user-2",
-        timestamp: new Date().toISOString(),
-        metadata: {},
+    const unsubscribe = presentation.bus.subscribe(
+      "platform:event",
+      async (payload: unknown) => {
+        expect(isPlatformEventPayload(payload)).toBe(true);
+        if (!isPlatformEventPayload(payload)) {
+          throw new Error("Expected platform event payload");
+        }
+        emitted.push(payload);
       },
-    });
+    );
 
-    expect(emitted.find((p) => p.type === "platform:share")).toBeDefined();
-    const notification = getOnlyHandledNotification(handled);
-    expect(notification).toMatchObject({
-      type: "platform:share",
-      username: "Sharer",
-    });
+    try {
+      presentation.bus.emit("platform:event", {
+        type: "platform:share",
+        platform: "tiktok",
+        data: {
+          username: "Sharer",
+          userId: "user-2",
+          timestamp: new Date().toISOString(),
+          metadata: {},
+        },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(emitted.find((p) => p.type === "platform:share")).toBeDefined();
+      const handled = extractRoutedNotifications(presentation);
+      const notification = getOnlyHandledNotification(handled);
+      expect(notification).toMatchObject({
+        type: "platform:share",
+        username: "Sharer",
+      });
+    } finally {
+      unsubscribe();
+    }
   });
 });
 

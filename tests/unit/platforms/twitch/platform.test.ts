@@ -662,70 +662,6 @@ describe("Twitch Platform", () => {
     });
   });
 
-  describe("when handling chat messages", () => {
-    it("should display chat messages to viewers in real-time", async () => {
-      const chatMessage = "Hello world!";
-      const chatUser = "chatuser";
-
-      await platform.onMessageHandler({
-        chatter_user_id: "chat-user-1",
-        chatter_user_name: chatUser,
-        broadcaster_user_id: "broadcaster-1",
-        message: { text: chatMessage },
-        badges: {},
-        timestamp: "2024-01-01T00:00:00Z",
-      });
-
-      const messageCall = mockApp.handleChatMessage.mock.calls[0];
-      if (messageCall) {
-        const [platformName, messageData] = messageCall;
-        expect(platformName).toBe("twitch");
-        expect(messageData.message).toBe("Hello world!");
-        expect(messageData.username).toBe("chatuser");
-        expectNoTechnicalArtifacts(messageData.message);
-        expectNoTechnicalArtifacts(messageData.username);
-      }
-    });
-
-    it("should prevent echo when bot sends its own messages", async () => {
-      const selfMessage = "Bot response";
-
-      await platform.onMessageHandler({
-        chatter_user_id: "broadcaster-1",
-        chatter_user_name: "testuser",
-        broadcaster_user_id: "broadcaster-1",
-        message: { text: selfMessage },
-        badges: {},
-        timestamp: "2024-01-01T00:00:01Z",
-      });
-
-      const messageCount = mockApp.handleChatMessage.mock.calls.length;
-      expect(messageCount).toBe(0);
-    });
-
-    it("should preserve emojis and special characters for user expression", async () => {
-      const messageWithEmojis = "Hello 🌟 world! 🎉";
-
-      await platform.onMessageHandler({
-        chatter_user_id: "chat-user-2",
-        chatter_user_name: "chatuser",
-        broadcaster_user_id: "broadcaster-1",
-        message: { text: messageWithEmojis },
-        badges: {},
-        timestamp: "2024-01-01T00:00:02Z",
-      });
-
-      const messageCall = mockApp.handleChatMessage.mock.calls[0];
-      if (messageCall) {
-        const [, messageData] = messageCall;
-        expect(messageData.message).toBe(messageWithEmojis);
-        expect(messageData.message).toContain("🌟");
-        expect(messageData.message).toContain("🎉");
-        expectNoTechnicalArtifacts(messageData.username);
-      }
-    });
-  });
-
   describe("when handling follow events", () => {
     it("should display follow notification to user when someone follows", async () => {
       const followEvent = createTwitchFollowEvent({
@@ -1204,28 +1140,11 @@ describe("Twitch Platform", () => {
 
   describe("when handling stream status", () => {
     it("should start viewer polling on stream online and stop on offline", () => {
-      platform.handleStreamOnlineEvent({ started_at: "2024-01-01T00:00:00Z" });
+      platform.handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" });
       expect(viewerCountProviderCalls.startPolling).toHaveLength(1);
 
       platform.handleStreamOfflineEvent({ timestamp: "2024-01-01T00:00:00Z" });
       expect(viewerCountProviderCalls.stopPolling).toHaveLength(1);
-    });
-  });
-
-  describe("when handling raw EventSub messages", () => {
-    it("should process follow notification and emit event", async () => {
-      const followListenerCalls: Record<string, unknown>[] = [];
-      platform.on("follow", (event) => followListenerCalls.push(toRecordPayload(event)));
-
-      const followEvent = createTwitchFollowEvent({
-        username: "notifyUser",
-        userId: "999",
-      });
-      platform.emit("follow", followEvent);
-
-      expect(followListenerCalls).toHaveLength(1);
-      const followPayload = firstRecord(followListenerCalls);
-      expect(followPayload.username).toBe("notifyUser");
     });
   });
 

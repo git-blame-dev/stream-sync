@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 test('actual SDK wire decoding, application mapping, signer validation and cancellation',()=>{
-    const result=spawnSync(process.execPath,['test','--config',resolve(import.meta.dir,'../../fixtures/tiktok-sdk-bunfig.toml'),'--coverage','--coverage-reporter=text','--coverage-dir=/tmp/stream-sync-real-sdk-coverage',resolve(import.meta.dir,'../../fixtures/tiktok-sdk-contract.ts')],{cwd:tmpdir(),encoding:'utf8',timeout:20000,env:{...process.env,TIKTOK_API_KEY:''}});
+    const result=spawnSync(process.execPath,['test','--no-env-file','--config',resolve(import.meta.dir,'../../fixtures/tiktok-sdk-bunfig.toml'),'--coverage','--coverage-reporter=text','--coverage-dir=/tmp/stream-sync-real-sdk-coverage',resolve(import.meta.dir,'../../fixtures/tiktok-sdk-contract.ts')],{cwd:tmpdir(),encoding:'utf8',timeout:20000,env:{PATH:process.env.PATH,NODE_ENV:'test',CHAT_BOT_CONFIG_PATH:process.env.CHAT_BOT_CONFIG_PATH,TIKTOK_API_KEY:''}});
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('"wireChat":true');
     expect(result.stdout).toContain('"wireGift":true');

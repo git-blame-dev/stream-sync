@@ -146,7 +146,15 @@ const applyNotificationMetadataFallback = (
     return applyIdFallback(timestampNormalizedEvent, metadata, subscriptionType);
 };
 
+export type TwitchStreamOnlineEvent = {
+    platform: 'twitch';
+    streamId: unknown;
+    startedAt: string;
+    timestamp: string;
+};
+
 export {
+    normalizeTimestampValue,
     applyNotificationMetadataFallback,
     applyTimestampFallback,
     normalizeMonths,

@@ -1,34 +1,44 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { createMockTikTokPlatformDependencies } from "../../helpers/mock-factories";
+import { createTikTokLifetimeFixture } from "../../helpers/tiktok-connector-fixture";
 
-import { TikTokPlatform } from "../../../src/platforms/tiktok";
+type TikTokLifetimeFixture = ReturnType<typeof createTikTokLifetimeFixture>;
 
 describe("TikTokPlatform raw event logging", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const activeFixtures: TikTokLifetimeFixture[] = [];
+
+  afterEach(async () => {
+    try {
+      while (activeFixtures.length > 0) {
+        const fixture = activeFixtures.pop();
+        if (fixture) {
+          await fixture.cleanup();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
-  const createPlatform = (configOverrides = {}) => {
-    const config = {
+  const createPlatform = (configOverrides: Record<string, unknown> = {}) => {
+    const fixture = createTikTokLifetimeFixture({
       enabled: true,
       username: "testDataLogger",
       dataLoggingEnabled: false,
+      dataLoggingPath: "/synthetic",
+      envFileReadEnabled: false,
+      envFileWriteEnabled: false,
       ...configOverrides,
+    });
+    activeFixtures.push(fixture);
+    fixture.platform.rawPlatformDataLoggingService.rawEventLogWriter = {
+      resolveLogFileName: () => "tiktok-data-log.ndjson",
+      writeRawEvent: async () => ({
+        fileName: "tiktok-data-log.ndjson",
+        filePath: "/synthetic/tiktok-data-log.ndjson",
+      }),
     };
-    const dependencies = {
-      ...createMockTikTokPlatformDependencies(),
-      WebcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        SOCIAL: "social",
-        ROOM_USER: "roomUser",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-      },
-    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
-    return new TikTokPlatform(config, dependencies);
+    return fixture.platform;
   };
 
   it("completes without error when data logging is enabled", async () => {

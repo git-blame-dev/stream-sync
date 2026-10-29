@@ -11,7 +11,7 @@ import {
   validateUserFacingString,
 } from "../../helpers/assertion-helpers";
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service.ts";
-import { scheduleTimeout } from "../../helpers/time-utils";
+import { withTimeout } from "../../../src/utils/timeout-wrapper";
 
 type InnertubeClient = Parameters<
   typeof YouTubeLiveStreamService.getLiveStreams
@@ -32,7 +32,6 @@ type LiveStreamResult = Awaited<
   ReturnType<typeof YouTubeLiveStreamService.getLiveStreams>
 >;
 type LiveStream = LiveStreamResult["streams"][number];
-type TimeoutRaceResult = LiveStreamResult | { timedOut: true };
 
 const expectPresent = <T>(value: T | null | undefined): T => {
   expect(value).toBeDefined();
@@ -45,10 +44,6 @@ const expectPresent = <T>(value: T | null | undefined): T => {
 
 const streamAt = (streams: LiveStream[], index: number): LiveStream =>
   expectPresent(streams[index]);
-
-const isTimeoutResult = (
-  result: TimeoutRaceResult,
-): result is { timedOut: true } => "timedOut" in result;
 
 const lockupView = (options: {
   contentId: string;
@@ -782,30 +777,34 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(expectPresent(result.error).length).toBeGreaterThan(20);
     });
 
-    it("should handle timeout scenarios gracefully for users", async () => {
-      const timeoutChannelId = "UCtimeout123456789012345";
-      mockInnertubeClient.getChannel.mockImplementation(
-        () => new Promise(() => {}),
-      );
-
-      const timeoutPromise = YouTubeLiveStreamService.getLiveStreams(
-        mockInnertubeClient,
-        timeoutChannelId,
-        { logger: noOpLogger, timeout: 100 },
-      );
-
-      const result: TimeoutRaceResult = await Promise.race([
-        timeoutPromise,
-        new Promise<{ timedOut: true }>((resolve) =>
-          scheduleTimeout(() => resolve({ timedOut: true }), 150),
-        ),
-      ]);
-
-      if (isTimeoutResult(result)) {
-        expect(result.timedOut).toBe(true);
-      } else {
+    it("settles the actual discovery timeout and recovers on the next request", async () => {
+      let release!: (channel: ChannelLike) => void;
+      const heldChannel = new Promise<ChannelLike>(resolve => { release = resolve; });
+      mockInnertubeClient.getChannel.mockImplementation(() => heldChannel);
+      const operation = YouTubeLiveStreamService.getLiveStreams(mockInnertubeClient,
+        "UCtimeout123456789012345", { logger: noOpLogger, timeout: 100 });
+      const recoveredChannel = { getLiveStreams: async () => ({ videos: [{
+        id: "synthetic-recovered-stream", title: { text: "Synthetic recovered stream" }, is_live: true,
+        author: { name: "Synthetic Creator" },
+      }] }) };
+      try {
+        // This outer bound rejects a hung operation; it cannot count as success.
+        const result = await withTimeout(operation, 2000, "Synthetic discovery acceptance");
         expect(result.success).toBe(false);
-        expect(result.error).toContain("timeout");
+        expect(result.error).toMatch(/timeout/i);
+        expect(result.streams).toEqual([]);
+        expect(mockInnertubeClient.getChannel).toHaveBeenCalledTimes(1);
+        release(recoveredChannel);
+        await heldChannel;
+        mockInnertubeClient.getChannel.mockResolvedValue(recoveredChannel);
+        const recovered = await withTimeout(YouTubeLiveStreamService.getLiveStreams(mockInnertubeClient,
+          "UCtimeout123456789012345", { logger: noOpLogger, timeout: 100 }), 2000);
+        expect(recovered).toMatchObject({ success: true, count: 1 });
+        expect(recovered.streams.map(stream => stream.videoId)).toEqual(["synthetic-recovered-stream"]);
+        expect(mockInnertubeClient.getChannel).toHaveBeenCalledTimes(2);
+      } finally {
+        release(recoveredChannel);
+        await Promise.allSettled([heldChannel, operation]);
       }
     });
   });
@@ -1094,64 +1093,21 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(results.every((r) => r.count === 1)).toBe(true);
     });
 
-    it("should provide stable performance characteristics for users", async () => {
-      const performanceChannelId = "UCperformance12345678901";
-      const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
-          videos: [
-            {
-              id: "perf123",
-              title: { text: "Performance Test Stream" },
-              is_live: true,
-              author: { name: "Performance Tester" },
-            },
-          ],
-        }),
-      };
-      mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
-
-      const performanceTests: Array<{
-        result: LiveStreamResult;
-        responseTime: number;
-        testIndex: number;
-      }> = [];
-
-      for (let i = 0; i < 3; i++) {
-        const startTime = testClock.now();
-        const result = await YouTubeLiveStreamService.getLiveStreams(
-          mockInnertubeClient,
-          performanceChannelId,
-          { logger: noOpLogger },
-        );
-        const simulatedResponseMs = 20;
-        testClock.advance(simulatedResponseMs);
-        const endTime = testClock.now();
-
-        performanceTests.push({
-          result: result,
-          responseTime: endTime - startTime,
-          testIndex: i,
-        });
-      }
-
-      performanceTests.forEach(({ result, responseTime }) => {
+    it("returns the same exact stream across three completed discovery requests", async () => {
+      mockInnertubeClient.getChannel.mockResolvedValue({ getLiveStreams: async () => ({ videos: [{
+        id: "synthetic-repeat-stream", title: { text: "Synthetic repeated stream" }, is_live: true,
+        author: { name: "Synthetic Creator" },
+      }] }) });
+      for (let index = 0; index < 3; index++) {
+        const result = await YouTubeLiveStreamService.getLiveStreams(mockInnertubeClient,
+          "UCperformance12345678901", { logger: noOpLogger });
         expect(result.success).toBe(true);
-        expect(responseTime).toBeLessThan(100);
-        const stream = streamAt(result.streams, 0);
-
-        expectNoTechnicalArtifacts(stream.title);
-        expectNoTechnicalArtifacts(stream.author);
-      });
-
-      const responseTimes = performanceTests.map((t) => t.responseTime);
-      const averageTime =
-        responseTimes.reduce((sum, time) => sum + time, 0) /
-        responseTimes.length;
-      const maxTime = Math.max(...responseTimes);
-      const minTime = Math.min(...responseTimes);
-
-      expect(averageTime).toBeLessThan(50);
-      expect(maxTime - minTime).toBeLessThan(30);
+        expect(result.count).toBe(1);
+        expect(result.streams).toHaveLength(1);
+        expect(streamAt(result.streams, 0)).toMatchObject({ videoId: "synthetic-repeat-stream",
+          title: "Synthetic repeated stream", author: "Synthetic Creator" });
+      }
+      expect(mockInnertubeClient.getChannel).toHaveBeenCalledTimes(3);
     });
   });
 });

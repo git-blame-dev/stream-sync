@@ -1,101 +1,27 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { afterEach, beforeEach, expect, test, vi } from 'bun:test';
+import { createTikTokLifetimeFixture, flushConnectorSetup } from '../../helpers/tiktok-connector-fixture';
+let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
+beforeEach(() => { vi.useFakeTimers(); fixture = createTikTokLifetimeFixture(); });
+afterEach(async () => { await fixture.cleanup(); vi.useRealTimers(); });
 
-import { EventEmitter } from "events";
+test('keeps initialization recovering with one real retry owner after acquisition failure', async () => {
+    const pending = fixture.platform.initialize(fixture.platform.handlers);
+    await flushConnectorSetup();
+    fixture.connectors[0]!.fail(new Error('synthetic connection failure'));
+    await expect(pending).resolves.toMatchObject({ state: 'recovering', error: expect.objectContaining({ code: 1011 }) });
+    await flushConnectorSetup();
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(1);
+    expect(Object.keys(fixture.retry.retryTimers)).toEqual(['tiktok']);
+    expect(fixture.platform.connectionActive).toBe(false);
+});
 
-import { TikTokPlatform } from "../../../src/platforms/tiktok";
-import { createMockTikTokPlatformDependencies } from "../../helpers/mock-factories";
-
-type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
-
-class FailingTikTokConnection extends EventEmitter {
-  isConnecting = false;
-  isConnected = false;
-  connect = createMockFn<[], Promise<unknown>>().mockRejectedValue(
-    new Error("room id failure"),
-  );
-  disconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-}
-
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  ROOM_USER: "roomUser",
-  ENVELOPE: "envelope",
-  SUBSCRIBE: "subscribe",
-  SUPER_FAN: "superfan",
-  SOCIAL: "social",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-  STREAM_END: "stream_end",
-} satisfies TikTokWebcastEvent;
-
-describe("TikTokPlatform initialize recovery ownership", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  it("keeps the platform registered when initial connection recovery is queued", async () => {
-    const failingConnection = new FailingTikTokConnection();
-
-    const dependencies = {
-      ...createMockTikTokPlatformDependencies({
-        controlEvent: {
-          CONNECTED: "connected",
-          DISCONNECTED: "disconnected",
-          ERROR: "error",
-        },
-      }),
-      WebcastEvent: WEBCAST_EVENT,
-      connectionFactory: {
-        createConnection: createMockFn().mockReturnValue(failingConnection),
-      },
-      retrySystem: {
-        handleConnectionError: createMockFn(),
-        resetRetryCount: createMockFn(),
-        isConnected: createMockFn(),
-      },
-    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
-
-    const platform = new TikTokPlatform(
-      { enabled: true, username: "retry_tester" },
-      dependencies,
-    );
-
-    await expect(platform.initialize(platform.handlers)).resolves.toMatchObject({
-      state: "recovering",
-      error: expect.any(Error),
-    });
-    expect(dependencies.retrySystem.handleConnectionError).toHaveBeenCalled();
-  });
-
-  it("reports monitoring when an offline stream enters deferred polling", async () => {
-    const offlineConnection = new FailingTikTokConnection();
-    offlineConnection.connect = createMockFn<[], Promise<unknown>>().mockRejectedValue(
-      new Error("Stream is not live"),
-    );
-    const dependencies = {
-      ...createMockTikTokPlatformDependencies(),
-      WebcastEvent: WEBCAST_EVENT,
-      connectionFactory: {
-        createConnection: createMockFn().mockReturnValue(offlineConnection),
-      },
-      retrySystem: {
-        handleConnectionError: createMockFn(),
-        resetRetryCount: createMockFn(),
-        isConnected: createMockFn(),
-      },
-    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
-    const platform = new TikTokPlatform(
-      { enabled: true, username: "offline_tester" },
-      dependencies,
-    );
-
-    await expect(platform.initialize(platform.handlers)).resolves.toEqual({
-      state: "monitoring",
-    });
-    await platform.cleanup();
-  });
+test('reports monitoring when upstream offline failure enters deferred polling', async () => {
+    const pending = fixture.platform.initialize(fixture.platform.handlers);
+    await flushConnectorSetup();
+    fixture.connectors[0]!.fail(Object.assign(new Error('synthetic offline'), { code: 4404 }));
+    await expect(pending).resolves.toEqual({ state: 'monitoring' });
+    expect(fixture.retry.getRetryCount('tiktok')).toBe(0);
+    expect(fixture.retry.retryTimers).toEqual({});
+    expect(fixture.platform.intervalManager.hasInterval('tiktok-stream-reconnect')).toBe(true);
+    expect(fixture.platform.connectionActive).toBe(false);
 });

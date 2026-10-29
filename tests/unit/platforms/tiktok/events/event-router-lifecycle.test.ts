@@ -255,7 +255,7 @@ describe("TikTok event router connection lifecycle", () => {
 
   test("native EventEmitter failures do not become unhandled rejections", async () => {
     const routerPath = require.resolve("../../../../../src/platforms/tiktok/events/event-router.ts");
-    const child = Bun.spawn([process.execPath, "--eval", `
+    const child = Bun.spawn([process.execPath, "--no-env-file", "--eval", `
       import { EventEmitter } from 'node:events';
       import { setImmediate } from 'node:timers/promises';
       const { setupTikTokEventListeners } = await import(${JSON.stringify(routerPath)});
@@ -273,7 +273,7 @@ describe("TikTok event router connection lifecycle", () => {
       await setImmediate();
       await setImmediate();
       if (reports !== 2) throw new Error('expected exactly two reports');
-    `], { stdout: "pipe", stderr: "pipe" });
+    `], { env: { PATH: process.env.PATH, NODE_ENV: "test", CHAT_BOT_CONFIG_PATH: process.env.CHAT_BOT_CONFIG_PATH }, stdout: "pipe", stderr: "pipe" });
     const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);

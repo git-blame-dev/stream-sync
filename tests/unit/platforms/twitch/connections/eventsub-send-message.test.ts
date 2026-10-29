@@ -51,7 +51,7 @@ describe("TwitchEventSub chat sending", () => {
 
   it("sends chat messages through the EventSub transport", async () => {
     const mockAxios = {
-      post: createMockFn().mockResolvedValue({ data: { drop_reason: null } }),
+      post: createMockFn().mockResolvedValue({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } }),
       get: createMockFn().mockResolvedValue({ data: {} }),
       delete: createMockFn().mockResolvedValue({ data: {} }),
     };
@@ -170,4 +170,52 @@ describe("TwitchEventSub chat sending", () => {
 
     await expect(eventSub.sendMessage("hello")).rejects.toThrow(/user ID/i);
   });
+});
+
+for (const response of [undefined, {}, { data: [] }, { data: [null] },
+  { data: [{ is_sent: 'true' }] }, { data: [{ is_sent: false, drop_reason: { code: 'synthetic-refusal' } }] },
+  { data: [{ is_sent: true }, { is_sent: true }] }]) {
+  it(`rejects unconfirmed Helix result ${JSON.stringify(response)} without retry`, async () => {
+    secrets.twitch.accessToken = 'synthetic-token';
+    let posts = 0;
+    let refreshes = 0;
+    const sender = new TwitchEventSub({ clientId: 'synthetic-client', broadcasterId: 'synthetic-channel' }, {
+      logger: noOpLogger, WebSocketCtor: class extends EventTarget {},
+      twitchAuth: { ...createTwitchAuth(), refreshTokens: async () => { refreshes++; return true; } },
+      axios: { post: async () => { posts++; return { data: response }; } },
+    });
+    await expect(sender.sendMessage('synthetic message')).rejects.toThrow('send failed');
+    expect(posts).toBe(1);
+    expect(refreshes).toBe(0);
+    await sender.cleanup();
+  });
+}
+it('validates the refreshed Helix response and does not retry ambiguous POST failures', async () => {
+  for (const afterRefresh of [true, false]) {
+    secrets.twitch.accessToken = 'synthetic-token';
+    let posts = 0;
+    let refreshes = 0;
+    const sender = new TwitchEventSub({ clientId: 'synthetic-client', broadcasterId: 'synthetic-channel' }, {
+      logger: noOpLogger, WebSocketCtor: class extends EventTarget {},
+      twitchAuth: { ...createTwitchAuth(), refreshTokens: async () => { refreshes++; return true; } },
+      axios: { post: async () => {
+        posts++;
+        if (posts === 1) throw { response: { status: 401 } };
+        return { data: { data: [{ is_sent: afterRefresh }] } };
+      } },
+    });
+    if (afterRefresh) expect((await sender.sendMessage('synthetic message')).success).toBe(true);
+    else await expect(sender.sendMessage('synthetic message')).rejects.toThrow('send failed');
+    expect(posts).toBe(2);
+    expect(refreshes).toBe(1);
+    await sender.cleanup();
+  }
+  let posts = 0;
+  const sender = new TwitchEventSub({ clientId: 'synthetic-client', broadcasterId: 'synthetic-channel' }, {
+    logger: noOpLogger, WebSocketCtor: class extends EventTarget {}, twitchAuth: createTwitchAuth(),
+    axios: { post: async () => { posts++; throw new Error('synthetic connection lost after POST'); } },
+  });
+  await expect(sender.sendMessage('synthetic message')).rejects.toThrow('send failed');
+  expect(posts).toBe(1);
+  await sender.cleanup();
 });

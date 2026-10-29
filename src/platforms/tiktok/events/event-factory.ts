@@ -397,6 +397,27 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             };
         },
         createEnvelope: (data: EventFactoryPayload = {}) => {
+            if (asRecord(data.envelopeInfo)) {
+                // v3 has no handle or established contribution unit/eligibility contract.
+                // Keep provider observations descriptive, outside priced contribution fields.
+                const envelope = asRecord(asRecord(data.metadata)?.envelope) || {};
+                const senderName = typeof envelope.senderName === 'string' ? envelope.senderName : '';
+                return {
+                    type: PlatformEvents.ENVELOPE,
+                    platform: platformName,
+                    isError: true,
+                    ...(senderName ? { username: senderName } : {}),
+                    avatarUrl: resolveAvatarUrl(data),
+                    giftType: envelope.isSuperFanBox === true ? 'Super Fan Box' : 'Envelope',
+                    id: getPlatformMessageId(data),
+                    timestamp: getTimestamp(data),
+                    metadata: buildEventMetadata({
+                        envelope,
+                        missingFields: [...(senderName ? [] : ['username']), 'userId', 'amount', 'currency'],
+                        degradationReason: 'Envelope identity, unit and contribution eligibility unavailable'
+                    })
+                };
+            }
             const identity = normalizeIdentityFromPayload(data);
             const avatarUrl = resolveAvatarUrl(data);
             const messageId = getPlatformMessageId(data);

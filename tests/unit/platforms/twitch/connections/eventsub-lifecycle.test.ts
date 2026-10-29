@@ -718,7 +718,7 @@ describe("TwitchEventSub lifecycle", () => {
             throw new Error("Expected Twitch sendMessage request payload");
           }
           postCalls.push({ url, payload, config });
-          return Promise.resolve({});
+          return Promise.resolve({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } });
         }),
         get: createMockFn(),
         delete: createMockFn(),
@@ -744,7 +744,7 @@ describe("TwitchEventSub lifecycle", () => {
             error.response = { status: 401 };
             return Promise.reject(error);
           }
-          return Promise.resolve({});
+          return Promise.resolve({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } });
         }),
         get: createMockFn(),
         delete: createMockFn(),

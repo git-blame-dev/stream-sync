@@ -1,1081 +1,290 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../../../helpers/mock-factories";
+import { afterEach, describe, expect, test } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { setImmediate as checkpoint } from 'node:timers/promises';
+import { YouTubePlatform } from '../../../../../src/platforms/youtube';
+import { InnertubeService } from '../../../../../src/services/innertube-service';
+import { YouTubeStreamDetectionService } from '../../../../../src/services/youtube-stream-detection-service';
+import { ViewerCountExtractionService } from '../../../../../src/services/viewer-count-extraction-service';
+import { noOpLogger } from '../../../../helpers/mock-factories';
 
-import { createYouTubeConnectionFactory } from "../../../../../src/platforms/youtube/connections/youtube-connection-factory.ts";
-import { InnertubeService } from "../../../../../src/services/innertube-service";
-
-type FactoryOptions = NonNullable<
-  Parameters<typeof createYouTubeConnectionFactory>[0]
->;
-type FactoryPlatform = NonNullable<FactoryOptions["platform"]>;
-type UnknownRecord = Record<string, unknown>;
-type ChatEventHandler = (payload?: unknown) => void;
-type HandlerMap = Record<string, ChatEventHandler>;
-type RecordedMessage = UnknownRecord;
-type RawLogCall = [channel: string, payload: unknown];
-type ProcessingErrorCall = [
-  message: string,
-  error: unknown,
-  category: string,
-  metadata?: UnknownRecord,
-];
-type DisconnectCall = {
-  videoId: string;
-  reason: string;
-  options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number };
+type Deferred = { promise: Promise<void>; resolve(): void };
+type SdkPlan = {
+  info?: Record<string, unknown>;
+  infoFailure?: unknown;
+  chatFailure?: Error;
+  startFailure?: Error;
+  stopFailure?: unknown;
+  filterFailure?: Error;
+  earlyStart?: boolean;
+  acquire?: Deferred;
+  stopGate?: Deferred;
 };
-
-type ValidationResult = {
-  shouldConnect: boolean;
-  reason?: string;
-};
-
-type LiveChatBehavior = {
-  value?: unknown;
-  error?: Error;
-  pending?: Promise<unknown>;
-};
-
-const services: Array<{ dispose(): Promise<void> }> = [];
-afterEach(async () => { await Promise.all(services.splice(0).map(service => service.dispose())); });
-const attemptContext = () => ({ signal: new AbortController().signal, adopt: () => {} });
-
-const getHandler = (handlers: HandlerMap, event: string): ChatEventHandler => {
-  const handler = handlers[event];
-  expect(handler).toBeDefined();
-  if (!handler) {
-    throw new Error(`Expected ${event} handler to be registered`);
-  }
-  return handler;
-};
-
-const firstCall = <T>(calls: T[]): T => {
-  const call = calls[0];
-  expect(call).toBeDefined();
-  if (!call) {
-    throw new Error("Expected at least one recorded call");
-  }
-  return call;
-};
-
-const recordDisconnectCall = (
-  calls: DisconnectCall[],
-  videoId: string,
-  reason: string,
-  options?: DisconnectCall["options"],
-): number => {
-  const call = options === undefined ? { videoId, reason } : { videoId, reason, options };
-  return calls.push(call);
-};
-
-const createFactory = ({
-  validationResult,
-  liveChatBehavior,
-  platformOverrides,
-  timeoutMs = 1000,
-}: {
-  validationResult?: ValidationResult;
-  liveChatBehavior?: LiveChatBehavior;
-  platformOverrides?: Record<string, unknown>;
-  timeoutMs?: number;
-} = {}) => {
-  const platform: FactoryPlatform = {
-    logger: noOpLogger,
-    _validateVideoForConnection: () =>
-      validationResult ?? { shouldConnect: true },
-    config: {},
-    isCurrentYouTubeConnection: createMockFn().mockReturnValue(true),
-    setYouTubeConnectionReady: createMockFn(),
-    disconnectFromYouTubeStream: createMockFn().mockResolvedValue(false),
-    handleChatMessage: createMockFn(),
-    logRawPlatformData: createMockFn().mockResolvedValue(),
-    _handleProcessingError: createMockFn(),
-    _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-    _shouldSkipMessage: createMockFn().mockReturnValue(false),
-    _resolveChatItemAuthorName: createMockFn().mockReturnValue("Author"),
-    ...(platformOverrides || {}),
+const retirements: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  const results = await Promise.allSettled(retirements.splice(0).reverse().map(retire => retire()));
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed?.status === 'rejected') throw failed.reason;
+});
+function fixture() {
+  const plans = new Map<string, SdkPlan>();
+  const chats = new Map<string, Array<EventEmitter & { start(): void; stop(): Promise<void>; applyFilter(filter: string): void }>>();
+  const calls: string[] = [], diagnostics: unknown[][] = [];
+  const logger = { ...noOpLogger, warn: (...args: unknown[]) => { diagnostics.push(args); },
+    error: (...args: unknown[]) => { diagnostics.push(args); } };
+  const entered = new Map<string, Deferred>();
+  const releases = new Set<Deferred>();
+  const owner = new InnertubeService({ createWithTimeout: async () => ({
+    getInfo: async (id: string) => {
+      calls.push(`info:${id}`);
+      const plan = plans.get(id) ?? {};
+      entered.get(id)?.resolve();
+      if (plan.acquire) { releases.add(plan.acquire); await plan.acquire.promise; }
+      if ('infoFailure' in plan) throw plan.infoFailure;
+      const chat = Object.assign(new EventEmitter(), {
+        start() {
+          calls.push(`start:${id}`);
+          if (plan.startFailure) throw plan.startFailure;
+          if (plan.earlyStart) chat.emit('start', { actions: [] });
+        },
+        async stop() {
+          calls.push(`stop:${id}`);
+          if (plan.stopGate) { releases.add(plan.stopGate); await plan.stopGate.promise; }
+          if ('stopFailure' in plan) throw plan.stopFailure;
+        },
+        applyFilter(filter: string) {
+          calls.push(`filter:${id}:${filter}`);
+          if (plan.filterFailure) throw plan.filterFailure;
+        },
+      });
+      chats.set(id, [...(chats.get(id) ?? []), chat]);
+      return { basic_info: { id, is_live: true }, ...plan.info,
+        getLiveChat: async () => {
+          calls.push(`chat:${id}`);
+          if (plan.chatFailure) throw plan.chatFailure;
+          return chat;
+        } };
+    },
+  }) }, { logger });
+  const detector = new YouTubeStreamDetectionService(owner, { logger });
+  let platform: YouTubePlatform | undefined;
+  retirements.push(async () => {
+    for (const plan of plans.values()) { plan.acquire?.resolve(); plan.stopGate?.resolve(); }
+    for (const release of releases) release.resolve();
+    try { await platform?.cleanup(); } finally { try { await detector.cleanup(); } finally { await owner.dispose(); } }
+  });
+  platform = new YouTubePlatform({ enabled: true, enableAPI: false, chatMode: 'live',
+    dataLoggingEnabled: false, envFileReadEnabled: false, envFileWriteEnabled: false }, {
+    logger, innertubeService: owner, streamDetectionService: detector,
+    viewerExtractionService: new ViewerCountExtractionService(owner, { logger }),
+  });
+  const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+  platform.on('platform:event', event => { events.push(event); });
+  const chat = (id: string) => {
+    const value = chats.get(id)?.at(-1);
+    if (!value) throw new Error(`Missing synthetic SDK chat ${id}`);
+    return value;
   };
-
-  const liveChat = liveChatBehavior?.value || null;
-  const getLiveChat = liveChatBehavior?.error
-    ? createMockFn().mockRejectedValue(liveChatBehavior.error)
-    : liveChatBehavior?.pending
-      ? createMockFn(() => liveChatBehavior.pending)
-      : createMockFn().mockResolvedValue(liveChat);
-
-  const info = {
-    getLiveChat,
+  return { platform, manager: platform.connectionManager, owner, detector, plans, chats, chat, calls, diagnostics, entered, events,
+    connect: (id: string) => platform!.connectionManager.connectToStream(id,
+      (videoId, attempt, context) => platform!._createYouTubeConnection(videoId, attempt, context)),
   };
+}
+const direct = (name = 'Synthetic viewer') => ({ author: { id: 'UC_SYNTHETIC', name }, text: 'Synthetic hello' });
+const messages = (f: ReturnType<typeof fixture>) => f.events.filter(event => event.type === 'platform:chat-message');
 
-  const yt = {
-    getInfo: createMockFn().mockResolvedValue(info),
-  };
+import { createYouTubeConnectionFactory } from '../../../../../src/platforms/youtube/connections/youtube-connection-factory';
 
-  const service = new InnertubeService({ createWithTimeout: async () => yt }, { logger: noOpLogger });
-  services.push(service);
-
-  const factory = createYouTubeConnectionFactory({
-    platform,
-    innertubeService: service,
-    innertubeCreationTimeoutMs: timeoutMs,
+describe('default YouTube factory with actual platform owners', () => {
+  test('validates constructor inputs without executing an internal substitute', () => {
+    expect(() => createYouTubeConnectionFactory()).toThrow('requires platform instance');
+    const f = fixture();
+    expect(() => createYouTubeConnectionFactory({ platform: f.platform._createConnectionFactoryPlatformAdapter() }))
+      .toThrow('requires positive innertubeCreationTimeoutMs');
+    for (const budget of [0, -1, Number.NaN]) {
+      expect(() => createYouTubeConnectionFactory({ platform: f.platform._createConnectionFactoryPlatformAdapter(), innertubeCreationTimeoutMs: budget }))
+        .toThrow('requires positive innertubeCreationTimeoutMs');
+    }
   });
 
-  return {
-    factory,
-    liveChat,
-    getLiveChat,
-  };
-};
-
-describe("YouTube connection factory", () => {
-  test("throws immediately when stream validation says not to connect", async () => {
-    const liveChat = { id: "live-chat", on: createMockFn() };
-    const validationResult = {
-      shouldConnect: false,
-      reason: "Video is not live content (replay/VOD)",
-    };
-
-    const { factory, getLiveChat } = createFactory({
-      validationResult,
-      liveChatBehavior: { value: liveChat },
-    });
-
-    await expect(factory.createConnection("video-1", attemptContext())).rejects.toThrow(
-      "Stream validation failed: Video is not live content (replay/VOD)",
-    );
-    expect(getLiveChat).toHaveBeenCalledTimes(0);
+  for (const unavailable of [false, true]) test(`rejects real VOD validation before chat acquisition (unavailable=${unavailable})`, async () => {
+    const f = fixture();
+    f.plans.set('synthetic-vod', { info: { basic_info: { is_live: false } },
+      ...(unavailable ? { chatFailure: new Error('Live Chat is not available') } : {}) });
+    const controller = new AbortController();
+    await expect(f.platform._youtubeConnectionFactory.createConnection('synthetic-vod', {
+      signal: controller.signal, adopt() { throw new Error('Rejected VOD must not adopt'); },
+    })).rejects.toThrow('Stream validation failed: Video is not live content (replay/VOD)');
+    expect(f.calls).toEqual(['info:synthetic-vod']);
   });
 
-  test("throws when validation fails and live chat is unavailable", async () => {
-    const validationResult = {
-      shouldConnect: false,
-      reason: "Video is not live content (replay/VOD)",
-    };
-
-    const { factory } = createFactory({
-      validationResult,
-      liveChatBehavior: { error: new Error("Live Chat is not available") },
+  test('adopts the actual managed resource before start and preserves setup error identity', async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    const adopted: unknown[] = [];
+    const connection = await f.platform._youtubeConnectionFactory.createConnection('synthetic-adopt', {
+      signal: controller.signal, adopt(value) { adopted.push(value); },
     });
-
-    await expect(factory.createConnection("video-2", attemptContext())).rejects.toThrow(
-      "Stream validation failed: Video is not live content (replay/VOD)",
-    );
+    try {
+      expect(adopted).toEqual([connection]);
+      expect(f.calls).toEqual(['info:synthetic-adopt', 'chat:synthetic-adopt']);
+    } finally { await connection.stop(); }
+    expect(f.calls.at(-1)).toBe('stop:synthetic-adopt');
+    const failure = new Error('Synthetic getLiveChat failure');
+    f.plans.set('synthetic-failed', { chatFailure: failure });
+    await expect(f.platform._youtubeConnectionFactory.createConnection('synthetic-failed', {
+      signal: controller.signal, adopt() { throw new Error('Failed setup must not adopt'); },
+    })).rejects.toBe(failure);
   });
 
-  test("adopts an unstarted managed connection after valid setup", async () => {
-    const liveChat = { id: "live-chat", on: createMockFn(), start: createMockFn(), stop: createMockFn() };
-
-    const { factory } = createFactory({
-      validationResult: {
-        shouldConnect: true,
-        reason: "Stream is live",
-      },
-      liveChatBehavior: { value: liveChat },
-    });
-
-    const adopt = createMockFn();
-    const connection = await factory.createConnection("video-3", { ...attemptContext(), adopt });
-    expect(adopt).toHaveBeenCalledWith(connection);
-    expect(liveChat.start).not.toHaveBeenCalled();
-    await connection.stop();
-    expect(liveChat.stop).toHaveBeenCalledTimes(1);
+  test('start failure retires the adopted SDK even when SDK stop fails, and a fresh attempt recovers', async () => {
+    const f = fixture();
+    f.plans.set('synthetic-start', { startFailure: new Error('Synthetic start failed'), stopFailure: new Error('Synthetic stop failed') });
+    expect(await f.connect('synthetic-start')).toBe(false);
+    expect(f.manager.hasConnection('synthetic-start')).toBe(false);
+    expect(f.calls.filter(call => call === 'stop:synthetic-start')).toHaveLength(1);
+    f.plans.delete('synthetic-start');
+    expect(await f.connect('synthetic-start')).toBe(true);
+    f.chat('synthetic-start').emit('chat-update', direct());
+    await checkpoint();
+    expect(messages(f)).toHaveLength(1);
   });
 
-  test("surfaces a getLiveChat setup failure without replacing the originating error", async () => {
-    const { factory } = createFactory({
-      validationResult: {
-        shouldConnect: true,
-        reason: "Stream is live",
-      },
-      liveChatBehavior: { error: new Error("synthetic getLiveChat failure") },
-    });
-
-    await expect(factory.createConnection("video-4", attemptContext())).rejects.toThrow(
-      "synthetic getLiveChat failure",
-    );
+  for (const [mode, selected, expected] of [
+    ['live', 0, 'LIVE_CHAT'], ['top', 1, 'TOP_CHAT'], ['live', 1, null],
+  ] as const) test(`external start selects ${mode} from menu index ${selected}`, async () => {
+    const f = fixture(); f.platform.config.chatMode = mode;
+    expect(await f.connect('synthetic-mode')).toBe(true);
+    expect(f.manager.isConnectionReady('synthetic-mode')).toBe(false);
+    f.chat('synthetic-mode').emit('start', { header: { view_selector: { sub_menu_items: [
+      { selected: selected === 0, continuation: 'synthetic-top' },
+      { selected: selected === 1, continuation: selected === 1 ? null : 'synthetic-live' },
+    ] } }, actions: [{ item: { type: 'LiveChatTextMessage' } }] });
+    await checkpoint();
+    expect(f.manager.isConnectionReady('synthetic-mode')).toBe(true);
+    expect(f.calls.filter(call => call.startsWith('filter:'))).toEqual(expected ? [`filter:synthetic-mode:${expected}`] : []);
+    expect(messages(f)).toEqual([]);
   });
 
-  test("ignores every callback from a detached connection attempt", async () => {
-    let current = true;
-    const handlers: HandlerMap = {};
-    const setReady = createMockFn();
-    const disconnect = createMockFn().mockResolvedValue(false);
-    const handleChatMessage = createMockFn();
-    const { factory } = createFactory({
-      platformOverrides: {
-        isCurrentYouTubeConnection: () => current,
-        setYouTubeConnectionReady: setReady,
-        disconnectFromYouTubeStream: disconnect,
-        handleChatMessage,
-      },
-    });
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        handlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-    };
-    await factory.setupConnectionEventListeners(connection, "stale-video", 7);
-    current = false;
-
-    getHandler(handlers, "start")({ actions: [] });
-    getHandler(handlers, "chat-update")({
-      author: { id: "UC_STALE", name: "StaleUser" },
-      text: "stale chat",
-    });
-    getHandler(handlers, "error")(new Error("terminal stale error"));
-    getHandler(handlers, "end")();
-
-    expect(setReady).not.toHaveBeenCalled();
-    expect(handleChatMessage).not.toHaveBeenCalled();
-    expect(disconnect).not.toHaveBeenCalled();
+  test('missing selector and failed external filter preserve readiness and subsequent chat', async () => {
+    const f = fixture();
+    f.plans.set('synthetic-mode', { filterFailure: new Error('Synthetic filter failed') });
+    expect(await f.connect('synthetic-mode')).toBe(true);
+    const chat = f.chat('synthetic-mode');
+    chat.emit('start', { actions: [] }); await checkpoint();
+    expect(f.calls.filter(call => call.startsWith('filter:'))).toEqual([]);
+    expect(f.manager.isConnectionReady('synthetic-mode')).toBe(true);
+    chat.emit('start', { header: { view_selector: { sub_menu_items: [
+      { selected: true, continuation: 'top' }, { selected: false, continuation: 'live' },
+    ] } } });
+    await checkpoint();
+    expect(f.diagnostics.flat().some(value => String(value).includes('Synthetic filter failed'))).toBe(true);
+    chat.emit('chat-update', direct()); await checkpoint();
+    expect(messages(f)).toHaveLength(1);
   });
 
-  test("cleans up an unowned connection when listener setup fails", async () => {
-    const processingError = createMockFn();
-    const stop = createMockFn().mockRejectedValue(new Error("stop cleanup failed"));
-    const disconnect = createMockFn().mockResolvedValue(undefined);
-    const { factory } = createFactory({
-      platformOverrides: {
-        _handleProcessingError: processingError,
-      },
-    });
-    const connection = {
-      on: createMockFn(),
-      start: createMockFn(() => {
-        throw new Error("start failed");
-      }),
-      stop,
-      disconnect,
-    };
-
-    await expect(factory.setupConnectionEventListeners(connection, "setup-failure", 3))
-      .rejects.toThrow("start failed");
-
-    expect(stop).toHaveBeenCalledTimes(1);
-    expect(disconnect).toHaveBeenCalledTimes(1);
-    expect(processingError).toHaveBeenCalledWith(
-      expect.stringContaining("stop cleanup failed"),
-      expect.any(Error),
-      "connection-cleanup",
-      { videoId: "setup-failure", attemptId: 3, method: "stop" },
-    );
+  for (const [field, value] of [
+    ['timestamp_usec', '1704067200000000'], ['timestamp', 1704067200000],
+  ] as const) test(`normalizes direct SDK chat and preserves ${field}`, async () => {
+    const f = fixture(); expect(await f.connect('synthetic-chat')).toBe(true);
+    f.chat('synthetic-chat').emit('chat-update', { ...direct(), [field]: value });
+    await checkpoint();
+    expect(messages(f)).toHaveLength(1);
+    expect(messages(f)[0]?.data).toMatchObject({ platform: 'youtube', username: 'Synthetic viewer',
+      userId: 'UC_SYNTHETIC', message: { text: 'Synthetic hello' }, timestamp: '2024-01-01T00:00:00.000Z' });
   });
 
-  test("normalizes direct chat-update payloads before handleChatMessage", async () => {
-    const handleChatMessageCalls: RecordedMessage[] = [];
-    const processRegularChatMessageCalls: RecordedMessage[] = [];
-    const chatUpdateHandlers: HandlerMap = {};
-    const logRawPlatformDataCalls: RawLogCall[] = [];
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage: (msg: UnknownRecord) => handleChatMessageCalls.push(msg),
-        _processRegularChatMessage: (msg: UnknownRecord) =>
-          processRegularChatMessageCalls.push(msg),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: async (...args: RawLogCall) => {
-          logRawPlatformDataCalls.push(args);
-        },
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: true },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 7);
-
-    const rawChatItem = {
-      author: { id: "UC_TEST_1", name: "TestUser" },
-      text: "hello there",
-    };
-
-    getHandler(chatUpdateHandlers, "chat-update")(rawChatItem);
-
-    expect(logRawPlatformDataCalls).toHaveLength(1);
-    const logCall = firstCall(logRawPlatformDataCalls);
-    expect(logCall[0]).toBe("chat");
-    expect(logCall[1]).toBe(rawChatItem);
-
-    expect(processRegularChatMessageCalls).toHaveLength(0);
-    expect(handleChatMessageCalls).toHaveLength(1);
-    expect(firstCall(handleChatMessageCalls)).toMatchObject({
-      item: {
-        type: "LiveChatTextMessage",
-        author: { id: "UC_TEST_1", name: "TestUser" },
-        message: { text: "hello there" },
-      },
-      videoId: "video-1",
-    });
+  test('rejects missing direct identity and complex missing authors, then dispatches a healthy complex action', async () => {
+    const f = fixture(); expect(await f.connect('synthetic-chat')).toBe(true);
+    const chat = f.chat('synthetic-chat');
+    chat.emit('chat-update', { author: { name: 'Synthetic missing ID' }, text: 'Synthetic reject' });
+    chat.emit('chat-update', { type: 'AddChatItemAction', item: { type: 'LiveChatTickerSponsorItem', id: 'synthetic-missing' } });
+    chat.emit('chat-update', { type: 'AddChatItemAction', item: { type: 'LiveChatTextMessage', id: 'synthetic-valid',
+      author: { id: 'UC_SYNTHETIC', name: 'Synthetic complex' }, message: { text: 'Synthetic complex text' } } });
+    await checkpoint();
+    expect(messages(f)).toHaveLength(1);
+    expect(messages(f)[0]?.data).toMatchObject({ username: 'Synthetic complex', message: { text: 'Synthetic complex text' } });
   });
 
-  test("normalizes direct chat-update payloads with timestamp_usec", async () => {
-    const handleChatMessage = createMockFn();
-    const chatUpdateHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage,
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(chatUpdateHandlers, "chat-update")({
-      author: { id: "UC_TS_1", name: "TimestampUser" },
-      text: "timestamp check",
-      timestamp_usec: "1704067200000000",
-    });
-
-    const handleCall = firstCall(handleChatMessage.mock.calls);
-    const message = handleCall[0] as UnknownRecord;
-    const item = message.item as UnknownRecord;
-    expect(item.timestamp_usec).toBe("1704067200000000");
+  test('real batch extraction filters a system action while preserving the following viewer message', async () => {
+    const f = fixture(); expect(await f.connect('synthetic-batch')).toBe(true);
+    f.chat('synthetic-batch').emit('chat-update', { actions: [
+      { addChatItemAction: { item: { type: 'LiveChatPlaceholderItem', id: 'synthetic-skip',
+        author: { id: 'UC_SYNTHETIC_SKIP', name: 'Synthetic skipped' }, message: { text: 'Synthetic skip' } } } },
+      { addChatItemAction: { item: { type: 'LiveChatTextMessage', id: 'synthetic-keep',
+        author: { id: 'UC_SYNTHETIC_KEEP', name: 'Synthetic kept' }, message: { text: 'Synthetic kept text' } } } },
+    ] });
+    await checkpoint();
+    expect(messages(f)).toHaveLength(1);
+    expect(messages(f)[0]?.data).toMatchObject({ username: 'Synthetic kept', userId: 'UC_SYNTHETIC_KEEP',
+      message: { text: 'Synthetic kept text' } });
   });
 
-  test("normalizes direct chat-update payloads with timestamp when microseconds are missing", async () => {
-    const handleChatMessage = createMockFn();
-    const chatUpdateHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage,
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
+  test('public listener setup preserves SDK start failure and attempts both unowned SDK shutdown methods', async () => {
+    const f = fixture(), calls: string[] = [];
+    const failure = new Error('Synthetic unowned start failed');
+    const raw = Object.assign(new EventEmitter(), {
+      start() { throw failure; },
+      stop() { calls.push('stop'); throw new Error('Synthetic unowned stop failed'); },
+      disconnect() { calls.push('disconnect'); },
     });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(chatUpdateHandlers, "chat-update")({
-      author: { id: "UC_TS_2", name: "TimestampUser" },
-      text: "timestamp check",
-      timestamp: 1704067200000,
-    });
-
-    const handleCall = firstCall(handleChatMessage.mock.calls);
-    const message = handleCall[0] as UnknownRecord;
-    const item = message.item as UnknownRecord;
-    expect(item.timestamp).toBe(1704067200000);
+    await expect(f.platform._youtubeConnectionFactory.setupConnectionEventListeners(raw, 'synthetic-unowned', 7)).rejects.toBe(failure);
+    expect(calls).toEqual(['stop', 'disconnect']);
+    expect(f.diagnostics).toContainEqual(expect.arrayContaining([expect.objectContaining({ error: 'Synthetic unowned stop failed' })]));
+    raw.removeAllListeners();
   });
 
-  test("skips direct chat-update payloads with missing author id", async () => {
-    const handleChatMessageCalls: RecordedMessage[] = [];
-    const chatUpdateHandlers: HandlerMap = {};
-    const logRawPlatformDataCalls: RawLogCall[] = [];
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage: (msg: UnknownRecord) => handleChatMessageCalls.push(msg),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: async (...args: RawLogCall) => {
-          logRawPlatformDataCalls.push(args);
-        },
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: true },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    const rawChatItem = {
-      author: { name: "MissingIdUser" },
-      text: "hello there",
-    };
-
-    getHandler(chatUpdateHandlers, "chat-update")(rawChatItem);
-
-    expect(logRawPlatformDataCalls).toHaveLength(1);
-    const logCall = firstCall(logRawPlatformDataCalls);
-    expect(logCall[0]).toBe("chat");
-    expect(logCall[1]).toBe(rawChatItem);
-    expect(handleChatMessageCalls).toHaveLength(0);
+  test('real extractor hydrates gift purchase header and modern GiftMessageView authors', async () => {
+    const f = fixture(); expect(await f.connect('synthetic-gifts')).toBe(true);
+    const chat = f.chat('synthetic-gifts');
+    chat.emit('chat-update', { type: 'AddChatItemAction', item: {
+      type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement', id: 'synthetic-memberships',
+      timestamp_usec: '1704067200000000', author_external_channel_id: 'UC_SYNTHETIC_GIFTER',
+      header: { type: 'LiveChatSponsorshipsHeader', author_name: { text: '@SyntheticGifter' },
+        author_photo: [{ url: 'https://synthetic.invalid/avatar.png' }], author_badges: [] },
+      giftMembershipsCount: 5, message: { text: '' },
+    } });
+    chat.emit('chat-update', { type: 'AddChatItemAction', item: {
+      type: 'GiftMessageView', id: 'synthetic-gift-view', timestamp_usec: '1704067200000000',
+      text: { content: 'sent Let em cook' }, author_name: { content: '@SyntheticModern ' },
+      gift_image: { sources: [{ url: 'https://synthetic.invalid/gift.png', width: 640, height: 640 }] },
+      gift_image_a11y_label: 'Let em cook',
+    } });
+    await checkpoint();
+    const gifts = f.events.filter(event => ['platform:gift', 'platform:giftpaypiggy'].includes(event.type));
+    expect(gifts).toHaveLength(2);
+    expect(gifts[0]?.data).toMatchObject({ username: 'SyntheticGifter', giftCount: 5 });
+    expect(gifts[1]?.data).toMatchObject({ username: 'SyntheticModern', giftCount: 1 });
   });
 
-  test("forwards complex YouTube gift purchase announcements so header author hydration can run", async () => {
-    const handleChatMessage = createMockFn();
-    const extractMessagesFromChatItem = createMockFn().mockReturnValue([
-      {
-        type: "AddChatItemAction",
-        item: {
-          type: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
-          id: "LCC.test-gift-purchase-connection-001",
-          timestamp_usec: "1704067200000000",
-          author_external_channel_id: "UC_TEST_GIFTER_001",
-          header: {
-            type: "LiveChatSponsorshipsHeader",
-            author_name: {
-              text: "@GiftGiver",
-              rtl: false,
-            },
-            author_photo: [
-              {
-                url: "https://example.invalid/yt-gift-giver.png",
-                width: 64,
-                height: 64,
-              },
-            ],
-            author_badges: [],
-          },
-          giftMembershipsCount: 5,
-          message: { text: "" },
-        },
-      },
-    ]);
-    const chatUpdateHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage,
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: extractMessagesFromChatItem,
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        _resolveChatItemAuthorName: createMockFn().mockReturnValue(""),
-        config: { dataLoggingEnabled: false },
-      },
+  for (const error of ['403 forbidden', '503 upstream unavailable', 'Unexpected live chat incremental continuation response', 'end'])
+    test(`actual callbacks contain ${error} and allow recovery`, async () => {
+      const f = fixture(); expect(await f.connect('synthetic-error')).toBe(true);
+      const original = f.chat('synthetic-error');
+      if (error === 'end') original.emit('end'); else original.emit('error', new Error(error));
+      await checkpoint();
+      expect(f.manager.hasConnection('synthetic-error')).toBe(error.startsWith('503'));
+      if (!error.startsWith('503')) expect(await f.connect('synthetic-error')).toBe(true);
+      f.chat('synthetic-error').emit('chat-update', direct()); await checkpoint();
+      expect(messages(f)).toHaveLength(1);
     });
 
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(chatUpdateHandlers, "chat-update")({
-      type: "AddChatItemAction",
-      item: {
-        type: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
-      },
-    });
-
-    expect(handleChatMessage).toHaveBeenCalledTimes(1);
-    expect(firstCall(handleChatMessage.mock.calls)[0]).toMatchObject({
-      videoId: "video-1",
-      item: {
-        type: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
-        author_external_channel_id: "UC_TEST_GIFTER_001",
-        header: {
-          author_name: {
-            text: "@GiftGiver",
-          },
-        },
-        giftMembershipsCount: 5,
-      },
-    });
-  });
-
-  test("forwards modern GiftMessageView events without item.author.name", async () => {
-    const handleChatMessage = createMockFn();
-    const extractMessagesFromChatItem = createMockFn().mockReturnValue([
-      {
-        type: "AddChatItemAction",
-        item: {
-          type: "GiftMessageView",
-          id: "gift-message-view-001",
-          timestamp_usec: "1704067200000000",
-          text: { content: "sent Let em cook" },
-          author_name: { content: "@test-youtube-gifter " },
-          gift_image: {
-            sources: [
-              { url: "https://example.invalid/let-em-cook-480.png", width: 480, height: 480 },
-              { url: "https://example.invalid/let-em-cook-640.png", width: 640, height: 640 },
-            ],
-          },
-          gift_image_a11y_label: "Let em cook",
-        },
-      },
-    ]);
-    const chatUpdateHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage,
-        _extractMessagesFromChatItem: extractMessagesFromChatItem,
-        _resolveChatItemAuthorName: createMockFn().mockReturnValue("test-youtube-gifter"),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-    getHandler(chatUpdateHandlers, "chat-update")({ type: "AddChatItemAction" });
-
-    expect(handleChatMessage).toHaveBeenCalledTimes(1);
-    expect(firstCall(handleChatMessage.mock.calls)[0]).toMatchObject({
-      videoId: "video-1",
-      item: { type: "GiftMessageView", author_name: { content: "@test-youtube-gifter " } },
-    });
-  });
-
-  test("still skips non-gift complex chat updates when author is missing", async () => {
-    const handleChatMessage = createMockFn();
-    const extractMessagesFromChatItem = createMockFn().mockReturnValue([
-      {
-        type: "AddChatItemAction",
-        item: {
-          type: "LiveChatTickerSponsorItem",
-          id: "LCC.test-non-gift-missing-author-001",
-          timestamp_usec: "1704067200000000",
-          message: { text: "" },
-        },
-      },
-    ]);
-    const chatUpdateHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage,
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: extractMessagesFromChatItem,
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        _resolveChatItemAuthorName: createMockFn().mockReturnValue(""),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(chatUpdateHandlers, "chat-update")({
-      type: "AddChatItemAction",
-      item: {
-        type: "LiveChatTickerSponsorItem",
-      },
-    });
-
-    expect(handleChatMessage).not.toHaveBeenCalled();
-  });
-
-  test("marks connection ready on start events, logs initial batches, and applies live chat mode", async () => {
-    const connectionReadyCalls: string[] = [];
-    const startHandlers: HandlerMap = {};
-    const selectedChatFilter: { value: string | null } = { value: null };
-    let applyFilterCalls = 0;
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        setYouTubeConnectionReady: (videoId: string) =>
-          connectionReadyCalls.push(videoId),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        config: { dataLoggingEnabled: false, chatMode: "live" },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        startHandlers[event] = handler;
-      }),
-      applyFilter: (filter: string) => {
-        applyFilterCalls += 1;
-        selectedChatFilter.value = filter;
-      },
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(startHandlers, "start")({
-      header: {
-        view_selector: {
-          sub_menu_items: [
-            { selected: true, continuation: "top-cont" },
-            { selected: false, continuation: "live-cont" },
-          ],
-        },
-      },
-      actions: [{ type: "AddChatItemAction" }, { type: "AddChatItemAction" }],
-    });
-
-    expect(applyFilterCalls).toBe(1);
-    expect(selectedChatFilter.value).toBe("LIVE_CHAT");
-    expect(connectionReadyCalls).toHaveLength(1);
-    expect(connectionReadyCalls[0]).toBe("video-1");
-  });
-
-  test("applies top chat mode when configured", async () => {
-    const startHandlers: HandlerMap = {};
-    const selectedChatFilter: { value: string | null } = { value: null };
-    let applyFilterCalls = 0;
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        setYouTubeConnectionReady: createMockFn(),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        config: { dataLoggingEnabled: false, chatMode: "top" },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        startHandlers[event] = handler;
-      }),
-      applyFilter: (filter: string) => {
-        applyFilterCalls += 1;
-        selectedChatFilter.value = filter;
-      },
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(startHandlers, "start")({
-      header: {
-        view_selector: {
-          sub_menu_items: [
-            { selected: false, continuation: "top-cont" },
-            { selected: true, continuation: "live-cont" },
-          ],
-        },
-      },
-      actions: [],
-    });
-
-    expect(applyFilterCalls).toBe(1);
-    expect(selectedChatFilter.value).toBe("TOP_CHAT");
-  });
-
-  test("keeps connection ready when chat mode selector is unavailable", async () => {
-    const startHandlers: HandlerMap = {};
-    let selectedChatFilter: string | null = null;
-    const connectionReadyCalls: string[] = [];
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        setYouTubeConnectionReady: (videoId: string) =>
-          connectionReadyCalls.push(videoId),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        config: { dataLoggingEnabled: false, chatMode: "live" },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        startHandlers[event] = handler;
-      }),
-      applyFilter: (filter: string) => {
-        selectedChatFilter = filter;
-      },
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(startHandlers, "start")({ actions: [] });
-
-    expect(selectedChatFilter).toBeNull();
-    expect(connectionReadyCalls).toHaveLength(1);
-    expect(connectionReadyCalls[0]).toBe("video-1");
-  });
-
-  test("does not apply filter when requested chat mode is already selected", async () => {
-    const startHandlers: HandlerMap = {};
-    let selectedChatFilter: string | null = null;
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        setYouTubeConnectionReady: createMockFn(),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        config: { dataLoggingEnabled: false, chatMode: "live" },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        startHandlers[event] = handler;
-      }),
-      applyFilter: (filter: string) => {
-        selectedChatFilter = filter;
-      },
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(startHandlers, "start")({
-      header: {
-        view_selector: {
-          sub_menu_items: [
-            { selected: false, continuation: "top-cont" },
-            { selected: true, continuation: null },
-          ],
-        },
-      },
-      actions: [],
-    });
-
-    expect(selectedChatFilter).toBeNull();
-  });
-
-  test("reports processing error when applyFilter throws", async () => {
-    const startHandlers: HandlerMap = {};
-    const processingErrors: ProcessingErrorCall[] = [];
-    const applyFilter = createMockFn(() => {
-      throw new Error("filter failed");
-    });
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        setYouTubeConnectionReady: createMockFn(),
-        _handleProcessingError: (...args: ProcessingErrorCall) => processingErrors.push(args),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        config: { dataLoggingEnabled: false, chatMode: "live" },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        startHandlers[event] = handler;
-      }),
-      applyFilter,
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(startHandlers, "start")({
-      header: {
-        view_selector: {
-          sub_menu_items: [
-            { selected: true, continuation: "top-cont" },
-            { selected: false, continuation: "live-cont" },
-          ],
-        },
-      },
-      actions: [],
-    });
-
-    expect(processingErrors).toHaveLength(1);
-    expect(firstCall(processingErrors)[2]).toBe("chat-mode");
-  });
-
-  test("handles API errors from live chat with disconnect", async () => {
-    const disconnectCalls: DisconnectCall[] = [];
-    const errorHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        disconnectFromYouTubeStream: (videoId: string, reason: string, options?: DisconnectCall["options"]) =>
-          recordDisconnectCall(disconnectCalls, videoId, reason, options),
-        _handleProcessingError: createMockFn(),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        errorHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 7);
-
-    getHandler(errorHandlers, "error")(new Error("403 forbidden"));
-
-    expect(disconnectCalls).toHaveLength(1);
-    const disconnectCall = firstCall(disconnectCalls);
-    expect(disconnectCall.videoId).toBe("video-1");
-    expect(disconnectCall.reason).toBe("API error: 403 forbidden");
-    expect(disconnectCall.options).toEqual({ expectedAttemptId: 7 });
-  });
-
-  test("does not disconnect on temporary live chat errors", async () => {
-    const disconnectCalls: DisconnectCall[] = [];
-    const errorHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        disconnectFromYouTubeStream: (videoId: string, reason: string, options?: DisconnectCall["options"]) =>
-          recordDisconnectCall(disconnectCalls, videoId, reason, options),
-        _handleProcessingError: createMockFn(),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        errorHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(errorHandlers, "error")(new Error("503 upstream unavailable"));
-
-    expect(disconnectCalls).toHaveLength(0);
-  });
-
-  test("passes immediate-refresh context for terminal non-API errors", async () => {
-    const disconnectCalls: DisconnectCall[] = [];
-    const errorHandlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        disconnectFromYouTubeStream: (videoId: string, reason: string, options?: DisconnectCall["options"]) =>
-          recordDisconnectCall(disconnectCalls, videoId, reason, options),
-        _handleProcessingError: createMockFn(),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        errorHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(errorHandlers, "error")(
-      new Error("Unexpected live chat incremental continuation response"),
-    );
-
-    expect(disconnectCalls).toHaveLength(1);
-    expect(firstCall(disconnectCalls)).toEqual({
-      videoId: "video-1",
-      reason: "Error: Unexpected live chat incremental continuation response",
-      options: { requestImmediateRefresh: true, source: "livechat-error", expectedAttemptId: 1 },
-    });
-  });
-
-  test("routes complex chat items through extractors and logging", async () => {
-    const handleChatMessageCalls: RecordedMessage[] = [];
-    const chatUpdateHandlers: HandlerMap = {};
-    const logRawPlatformDataCalls: RawLogCall[] = [];
-    const shouldSkipMessage = createMockFn(
-      (message: UnknownRecord) => (message.item as UnknownRecord | undefined)?.id === "skip-me",
-    );
-    const resolveChatItemAuthorName = createMockFn(
-      (message: UnknownRecord) => {
-        const item = message.item as UnknownRecord | undefined;
-        const author = item?.author as UnknownRecord | undefined;
-        return typeof author?.name === "string" ? author.name : "Author";
-      },
-    );
-    const messages = [
-      {
-        item: {
-          id: "skip-me",
-          type: "LiveChatTextMessage",
-          message: { text: "skip" },
-          author: { name: "Skip" },
-        },
-      },
-      {
-        item: {
-          id: "process-me",
-          type: "LiveChatTextMessage",
-          message: { text: "process" },
-          author: { name: "Author" },
-        },
-      },
-    ];
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        handleChatMessage: (msg: UnknownRecord) => handleChatMessageCalls.push(msg),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue(messages),
-        _shouldSkipMessage: shouldSkipMessage,
-        _resolveChatItemAuthorName: resolveChatItemAuthorName,
-        logRawPlatformData: async (...args: RawLogCall) => {
-          logRawPlatformDataCalls.push(args);
-        },
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: true },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        chatUpdateHandlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    const rawChatItem = { type: "AddChatItemAction" };
-    getHandler(chatUpdateHandlers, "chat-update")(rawChatItem);
-
-    expect(handleChatMessageCalls).toHaveLength(1);
-    expect(firstCall(handleChatMessageCalls).videoId).toBe("video-1");
-    expect(logRawPlatformDataCalls).toHaveLength(1);
-    const logCall = firstCall(logRawPlatformDataCalls);
-    expect(logCall[0]).toBe("chat");
-    expect(logCall[1]).toBe(rawChatItem);
-  });
-
-  test("disconnects when live chat ends", async () => {
-    const disconnectCalls: DisconnectCall[] = [];
-    const handlers: HandlerMap = {};
-
-    const { factory } = createFactory({
-      validationResult: { shouldConnect: true },
-      platformOverrides: {
-        disconnectFromYouTubeStream: (videoId: string, reason: string, options?: DisconnectCall["options"]) =>
-          recordDisconnectCall(disconnectCalls, videoId, reason, options),
-        handleChatMessage: createMockFn(),
-        _processRegularChatMessage: createMockFn(),
-        _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-        _shouldSkipMessage: createMockFn().mockReturnValue(false),
-        logRawPlatformData: createMockFn().mockResolvedValue(),
-        setYouTubeConnectionReady: createMockFn(),
-        config: { dataLoggingEnabled: false },
-      },
-    });
-
-    const connection = {
-      on: createMockFn((event: string, handler: ChatEventHandler) => {
-        handlers[event] = handler;
-      }),
-      start: createMockFn<[], void>(),
-      removeAllListeners: createMockFn(),
-    };
-
-    await factory.setupConnectionEventListeners(connection, "video-1", 1);
-
-    getHandler(handlers, "end")();
-
-    expect(disconnectCalls).toHaveLength(1);
-    const disconnectCall = firstCall(disconnectCalls);
-    expect(disconnectCall.videoId).toBe("video-1");
-    expect(disconnectCall.reason).toBe("stream ended");
-    expect(disconnectCall.options).toEqual({
-      requestImmediateRefresh: true,
-      source: "livechat-end",
-      expectedAttemptId: 1,
-    });
+  test('detached generation cannot deliver start, chat, error or end into a successful replacement', async () => {
+    const f = fixture(); expect(await f.connect('synthetic-stale')).toBe(true);
+    const stale = f.chat('synthetic-stale');
+    // Keep external references to the SDK listeners to model already queued late delivery.
+    const queued = ['start', 'chat-update', 'error', 'end'].map(event => stale.listeners(event));
+    await f.manager.removeConnection('synthetic-stale');
+    expect(await f.connect('synthetic-stale')).toBe(true);
+    for (const [index, payload] of [{ actions: [] }, direct('Synthetic stale'), new Error('403 stale'), undefined].entries()) {
+      for (const listener of queued[index]!) listener(payload);
+    }
+    await checkpoint();
+    expect(f.manager.getConnectionCount()).toBe(1);
+    expect(f.manager.isConnectionReady('synthetic-stale')).toBe(false);
+    expect(messages(f)).toEqual([]);
+    f.chat('synthetic-stale').emit('start', { actions: [] });
+    f.chat('synthetic-stale').emit('chat-update', direct('Synthetic current')); await checkpoint();
+    expect(f.manager.isConnectionReady('synthetic-stale')).toBe(true);
+    expect(messages(f).map(event => event.data.username)).toEqual(['Synthetic current']);
   });
 });

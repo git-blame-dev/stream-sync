@@ -369,7 +369,7 @@ describe("TwitchPlatform core behavior", () => {
     };
 
     expect(() =>
-      requireDefined(platform, "platform").handleStreamOnlineEvent({ started_at: "2024-01-01T00:00:00Z" }),
+      requireDefined(platform, "platform").handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" }),
     ).not.toThrow();
   });
 
@@ -382,14 +382,14 @@ describe("TwitchPlatform core behavior", () => {
       },
     };
 
-    platform.handleStreamOnlineEvent({ started_at: "2024-01-01T00:00:00Z" });
+    platform.handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" });
 
     const payload = requireDefined(emittedPayload, "stream status payload");
     expect(payload.metadata).toBeDefined();
     expect(payload.metadata?.correlationId).toEqual(expect.any(String));
   });
 
-  it("does not emit stream status when stream online lacks started_at", () => {
+  it("does not emit stream status when stream online lacks a valid startedAt", () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     const emitted: Record<string, unknown>[] = [];
     platform.on("platform:event", (payload) => {
@@ -399,6 +399,7 @@ describe("TwitchPlatform core behavior", () => {
     });
 
     platform.handleStreamOnlineEvent({});
+    platform.handleStreamOnlineEvent({ startedAt: "invalid", timestamp: "2024-01-01T00:00:00Z" });
 
     expect(emitted).toHaveLength(0);
   });
@@ -688,7 +689,7 @@ describe("TwitchPlatform core behavior", () => {
     platform.viewerCountProvider = mockProvider;
     platform.handlers = { onStreamStatus: () => {} };
 
-    platform.handleStreamOnlineEvent({ started_at: "2024-01-01T00:00:00Z" });
+    platform.handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" });
 
     expect(startPollingCalls).toHaveLength(1);
   });

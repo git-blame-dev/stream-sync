@@ -1,12 +1,12 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
+import { InnertubeService } from "../../../../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../../../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../../../../src/services/viewer-count-extraction-service";
 import { createYouTubeSuperChatEvent } from "../../../../helpers/youtube-test-data";
-import { createMockPlatformDependencies } from "../../../../helpers/test-setup";
+import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
 
 type YouTubeGiftEvent = {
@@ -64,25 +64,68 @@ const expectMembershipEvent = (event: unknown): YouTubeMembershipEvent => {
 };
 
 describe("YouTube monetized event pipeline", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   const baseConfig = createYouTubeConfigFixture({
     enabled: true,
     username: "notification-test",
+    dataLoggingPath: "",
+    dataLoggingEnabled: false,
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
   });
 
-  const createPlatform = () =>
-    new YouTubePlatform(baseConfig, {
-      ...createMockPlatformDependencies("youtube"),
-      streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
-          success: true,
-          videoIds: [],
+  const createPlatform = () => {
+    const metadata = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getInfo: async (_videoId: string) => ({}),
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
         }),
       },
+      { logger: noOpLogger },
+    );
+    const detector = new YouTubeStreamDetectionService(metadata, {
+      logger: noOpLogger,
     });
+    const viewerExtractionService = new ViewerCountExtractionService(metadata, {
+      logger: noOpLogger,
+    });
+    const platform = new YouTubePlatform(baseConfig, {
+      logger: noOpLogger,
+      innertubeService: metadata,
+      streamDetectionService: detector,
+      viewerExtractionService,
+    });
+    cleanups.push(async () => {
+      try {
+        await platform.cleanup();
+      } finally {
+        try {
+          await detector.cleanup();
+        } finally {
+          await metadata.dispose();
+        }
+      }
+    });
+    return platform;
+  };
 
   test("emits a single gift event for SuperChats through the unified pipeline", async () => {
     const youtubePlatform = createPlatform();

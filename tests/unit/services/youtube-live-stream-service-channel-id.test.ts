@@ -5,7 +5,6 @@ import {
   type TestMockFn,
 } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
-import * as testClock from "../../helpers/test-clock";
 import {
   expectNoTechnicalArtifacts,
   validateUserFacingString,
@@ -303,8 +302,8 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
     });
   });
 
-  describe("Performance and Efficiency User Experience", () => {
-    it("should provide fast response when user provides Channel ID", async () => {
+  describe("Direct channel acquisition", () => {
+    it("queries a supplied channel ID without resolving a handle", async () => {
       const channelId = "UC" + "p".repeat(22);
       const mockChannel = {
         videos: [],
@@ -315,18 +314,18 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
       mockInnertubeClient.search.mockResolvedValue({ videos: [] });
 
-      const startTime = testClock.now();
       const result = await YouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         channelId,
         { logger: noOpLogger },
       );
-      const simulatedResponseMs = 20;
-      testClock.advance(simulatedResponseMs);
-      const responseTime = testClock.now() - startTime;
 
       expect(result.success).toBe(true);
-      expect(responseTime).toBeLessThan(100);
+      expect(result.count).toBe(0);
+      expect(result.streams).toEqual([]);
+      expect(mockInnertubeClient.getChannel).toHaveBeenCalledTimes(1);
+      expect(mockInnertubeClient.getChannel).toHaveBeenCalledWith(channelId);
+      expect(mockInnertubeClient.resolveURL).not.toHaveBeenCalled();
     });
 
 it("resolves handles only for username input and skips it for Channel ID input", async () => {

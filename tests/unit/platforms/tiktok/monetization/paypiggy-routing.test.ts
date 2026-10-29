@@ -2,24 +2,15 @@ import { describe, test, expect, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
-import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
-import { createMockTikTokPlatformDependencies } from "../../../../helpers/mock-factories";
+import { createTikTokLifetimeFixture } from "../../../../helpers/tiktok-connector-fixture";
 import * as testClock from "../../../../helpers/test-clock";
+
+type TikTokLifetimeFixture = ReturnType<typeof createTikTokLifetimeFixture>;
 
 type PaypiggyEvent = {
   userId: string;
   username: string;
   tier?: string;
-};
-
-const requiredWebcastEvents = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
 };
 
 const getOnlyPaypiggyEvent = (
@@ -35,17 +26,35 @@ const getOnlyPaypiggyEvent = (
 };
 
 describe("TikTok paypiggy routing", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const activeFixtures: TikTokLifetimeFixture[] = [];
+
+  afterEach(async () => {
+    try {
+      while (activeFixtures.length > 0) {
+        const fixture = activeFixtures.pop();
+        if (fixture) {
+          await fixture.cleanup();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
-  const baseConfig = { enabled: true, username: "paypiggy_tester" };
+  const baseConfig = {
+    enabled: true,
+    username: "paypiggy_tester",
+    dataLoggingEnabled: false,
+    dataLoggingPath: "",
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
+  };
 
-  const createPlatform = () =>
-    new TikTokPlatform(baseConfig, {
-      ...createMockTikTokPlatformDependencies(),
-      WebcastEvent: requiredWebcastEvents,
-    });
+  const createPlatform = () => {
+    const fixture = createTikTokLifetimeFixture(baseConfig);
+    activeFixtures.push(fixture);
+    return fixture.platform;
+  };
 
   test("emits paypiggy for subscription events with nested identity", async () => {
     const platform = createPlatform();

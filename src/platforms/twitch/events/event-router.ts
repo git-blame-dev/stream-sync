@@ -3,9 +3,11 @@ import { validateLoggerInterface } from '../../../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
 import {
     applyNotificationMetadataFallback,
+    normalizeTimestampValue,
     normalizeMonths,
     normalizeUserIdentity
 } from './event-normalizer';
+import type { TwitchStreamOnlineEvent } from './event-normalizer';
 
 type EventRouterOptions = {
     config?: Record<string, unknown>;
@@ -511,7 +513,7 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         logRawIfEnabled('stream_online', rawEvent, 'stream-online-log', 'Error logging raw stream online data');
 
         safeLogger.info('Stream went online, starting viewer count polling', 'twitch');
-        const startedAt = getString(event, 'started_at');
+        const startedAt = normalizeTimestampValue(event?.started_at);
         const timestamp = getString(event, 'timestamp');
         if (!startedAt || !timestamp) {
             errorHandler.handleEventProcessingError(
@@ -522,12 +524,13 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             return;
         }
 
-        safeEmit('streamOnline', {
+        const payload: TwitchStreamOnlineEvent = {
             platform: 'twitch',
             streamId: event?.id,
             startedAt,
             timestamp
-        });
+        };
+        safeEmit('streamOnline', payload);
     };
 
     const handleStreamOfflineEvent = (event: TwitchEventPayload | null | undefined, rawEvent: unknown = event) => {

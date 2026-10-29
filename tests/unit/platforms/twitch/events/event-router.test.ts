@@ -998,6 +998,7 @@ describe("Twitch EventSub event router", () => {
     const offlineEvent = requireEmitted(emitted, "streamOffline");
     expect(onlineEvent.payload).toMatchObject({
       streamId: "stream-1",
+      startedAt: "2024-02-01T00:00:00.000Z",
       timestamp: "2024-02-01T00:00:00.000Z",
     });
     expect(offlineEvent.payload).toMatchObject({

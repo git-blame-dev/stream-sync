@@ -1,82 +1,52 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { expect, it } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { YouTubePlatform } from '../../../../../src/platforms/youtube';
+import { InnertubeService } from '../../../../../src/services/innertube-service';
+import { YouTubeStreamDetectionService } from '../../../../../src/services/youtube-stream-detection-service';
+import { ViewerCountExtractionService } from '../../../../../src/services/viewer-count-extraction-service';
+import { noOpLogger } from '../../../../helpers/mock-factories';
 
-import {
-  initializeTestLogging,
-  createMockPlatformDependencies,
-} from "../../../../helpers/test-setup";
-import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
-
-initializeTestLogging();
-
-import { YouTubePlatform } from "../../../../../src/platforms/youtube";
-
-type YouTubeConfigFixture = ReturnType<typeof createYouTubeConfigFixture>;
-type PlatformDependencies = ReturnType<typeof createMockPlatformDependencies>;
-
-describe("YouTubePlatform connection state reporting", () => {
-  let config: YouTubeConfigFixture;
-  let dependencies: PlatformDependencies;
-
-  beforeEach(() => {
-    config = createYouTubeConfigFixture({
-      enabled: true,
-      username: "test-channel",
-    });
-    dependencies = createMockPlatformDependencies("youtube");
+it('reports actual acquired connections, monitoring and removal in state and stats', async () => {
+  const stopped: string[] = [];
+  const owner = new InnertubeService({ createWithTimeout: async () => ({
+    getChannel: async () => { throw new Error('Synthetic discovery unavailable'); },
+    getInfo: async (id: string) => {
+      const chat = new EventEmitter();
+      return { basic_info: { id, is_live: true }, getLiveChat: async () => Object.assign(chat, {
+        start() { chat.emit('start', {}); },
+        stop() { stopped.push(id); },
+      }) };
+    },
+  }) }, { logger: noOpLogger });
+  const detector = new YouTubeStreamDetectionService(owner, { logger: noOpLogger });
+  const platform = new YouTubePlatform({ enabled: true, username: 'synthetic-channel', enableAPI: false,
+    dataLoggingEnabled: false, envFileReadEnabled: false, envFileWriteEnabled: false,
+    streamPollingInterval: 600, fullCheckInterval: 60000, maxStreams: 2 }, {
+    logger: noOpLogger, innertubeService: owner, streamDetectionService: detector,
+    viewerExtractionService: new ViewerCountExtractionService(owner, { logger: noOpLogger }),
   });
-
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  it("returns connection state based on connection manager data", () => {
-    const platform = new YouTubePlatform(config, dependencies);
-    Object.assign(platform, {
-      connectionManager: {
-      getConnectionCount: createMockFn(() => 2),
-      },
-      monitoringInterval: 1,
-    });
-    platform.getActiveYouTubeVideoIds = createMockFn(() => [
-      "video-1",
-      "video-2",
-    ]);
-    platform.isAnyYouTubeStreamReady = createMockFn(() => false);
-
-    const state = platform.getConnectionState();
-
-    expect(state).toEqual({
-      isConnected: true,
-      isMonitoring: true,
-      activeConnections: ["video-1", "video-2"],
-      totalConnections: 2,
-    });
-  });
-
-  it("summarizes stats using connection and monitoring status", () => {
-    const platform = new YouTubePlatform(config, dependencies);
-    Object.assign(platform, {
-      connectionManager: {
-      getConnectionCount: createMockFn(() => 1),
-      },
-      monitoringInterval: 1,
-    });
-    platform.getActiveYouTubeVideoIds = createMockFn(() => ["video-1"]);
-    platform.isAnyYouTubeStreamReady = createMockFn(() => false);
-
-    const stats = platform.getStats();
-
-    expect(stats).toEqual({
-      platform: "youtube",
-      enabled: config.enabled,
-      connected: true,
-      monitoring: true,
-      activeConnections: 1,
-      totalConnections: 1,
-    });
-  });
+  try {
+    expect(platform.getConnectionState()).toEqual({ isConnected: false, isMonitoring: false,
+      activeConnections: [], totalConnections: 0 });
+    for (const id of ['synthetic-video-1', 'synthetic-video-2']) {
+      expect(await platform.connectToYouTubeStream(id)).toBe(true);
+      expect(platform.connectionManager.isConnectionReady(id)).toBe(true);
+    }
+    await platform.startMultiStreamMonitoring();
+    expect(platform.getConnectionState()).toEqual({ isConnected: true, isMonitoring: true,
+      activeConnections: ['synthetic-video-1', 'synthetic-video-2'], totalConnections: 2 });
+    expect(platform.getStats()).toEqual({ platform: 'youtube', enabled: true, connected: true,
+      monitoring: true, activeConnections: 2, totalConnections: 2 });
+    await platform.connectionManager.removeConnection('synthetic-video-1');
+    expect(stopped).toEqual(['synthetic-video-1']);
+    expect(platform.getConnectionState()).toEqual({ isConnected: true, isMonitoring: true,
+      activeConnections: ['synthetic-video-2'], totalConnections: 1 });
+    expect(platform.getStats()).toEqual({ platform: 'youtube', enabled: true, connected: true,
+      monitoring: true, activeConnections: 1, totalConnections: 1 });
+  } finally {
+    try { await platform.cleanup(); } finally { try { await detector.cleanup(); } finally { await owner.dispose(); } }
+  }
+  expect(stopped).toEqual(['synthetic-video-1', 'synthetic-video-2']);
+  expect(platform.getConnectionState()).toEqual({ isConnected: false, isMonitoring: false,
+    activeConnections: [], totalConnections: 0 });
 });

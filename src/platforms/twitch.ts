@@ -4,6 +4,7 @@ import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { ConnectionStateFactory } from '../utils/platform-connection-state';
 import { createTwitchEventFactory } from './twitch/events/event-factory';
+import { normalizeTimestampValue } from './twitch/events/event-normalizer';
 import { createTwitchEventSubWiring } from './twitch/connections/wiring';
 import { getUnifiedLogger } from '../core/logging';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
@@ -262,6 +263,13 @@ const isRetryableStartupError = (error: unknown): boolean => {
 };
 
 class TwitchPlatform extends EventEmitter {
+    private dataRegistration = 0;
+
+    _captureDataOwner(): () => boolean {
+        const registration = this.dataRegistration;
+        return () => registration === this.dataRegistration;
+    }
+
     TwitchEventSub: TwitchEventSubConstructor;
     logger: LoggerLike;
     errorHandler: PlatformErrorHandlerLike;
@@ -375,6 +383,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async initializeEventSub(broadcasterId: string): Promise<void> {
+        this.dataRegistration++;
         this.logger.debug('initializeEventSub called', 'twitch', {
             authReady: this.twitchAuth?.isReady?.(),
             hasTwitchAuth: !!this.twitchAuth,
@@ -436,6 +445,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     _clearEventSubWiringState(): void {
+        this.dataRegistration++;
         this.eventSubWiring?.unbindAll?.();
         this.eventSubListeners.length = 0;
         this.eventSubWiring = null;
@@ -571,7 +581,8 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async onMessageHandler(event: Record<string, unknown>): Promise<void> {
+    async onMessageHandler(event: Record<string, unknown>, isCurrent = this._captureDataOwner()): Promise<void> {
+        if (!isCurrent()) return;
         const isSelf = event?.broadcaster_user_id && event?.chatter_user_id
             ? event.broadcaster_user_id === event.chatter_user_id
             : false;
@@ -591,9 +602,11 @@ class TwitchPlatform extends EventEmitter {
         try {
             await this._logRawEvent('chat', event);
         } catch (loggingError) {
+            if (!isCurrent()) return;
             this.errorHandler.handleDataLoggingError(loggingError, 'chat');
         }
 
+        if (!isCurrent()) return;
         try {
             const userId = typeof event?.chatter_user_id === 'string' ? event.chatter_user_id.trim() : '';
             const username = typeof event?.chatter_user_name === 'string' ? event.chatter_user_name.trim() : '';
@@ -673,8 +686,10 @@ class TwitchPlatform extends EventEmitter {
                 }),
                 rawData: { event }
             };
-            normalizedData.badgeImages = await this._resolveBadgeImages(event);
-            normalizedData.avatarUrl = await this._resolveAvatarUrl(normalizedData);
+            normalizedData.badgeImages = await this._resolveBadgeImages(event, isCurrent);
+            if (!isCurrent()) return;
+            normalizedData.avatarUrl = await this._resolveAvatarUrl(normalizedData, isCurrent);
+            if (!isCurrent()) return;
 
             const validation = this.validateNormalizedMessage(normalizedData);
 
@@ -716,9 +731,11 @@ class TwitchPlatform extends EventEmitter {
                 }
                 this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
             } catch (messageError) {
+                if (!isCurrent()) return;
                 this._logPlatformError(`Error emitting chat message event: ${getErrorMessage(messageError)}`, messageError, 'chat-message-emission');
             }
         } catch (error) {
+            if (!isCurrent()) return;
             this._logPlatformError(`Error processing chat message: ${getErrorMessage(error)}`, error, 'chat-message-processing');
         }
     }
@@ -752,7 +769,7 @@ class TwitchPlatform extends EventEmitter {
         return [];
     }
 
-    async _ensureBadgeCatalogs(broadcasterUserId = '', forceReload = false) {
+    async _ensureBadgeCatalogs(broadcasterUserId = '', forceReload = false, isCurrent = this._captureDataOwner()) {
         if (!this.apiClient) {
             return;
         }
@@ -762,15 +779,16 @@ class TwitchPlatform extends EventEmitter {
             return;
         }
 
-        this.badgeCatalogCache.global = await this.apiClient.getGlobalChatBadges();
-        this.badgeCatalogCache.channel = broadcasterId
-            ? await this.apiClient.getChannelChatBadges(broadcasterId)
-            : [];
-        this.badgeCatalogCache.broadcasterId = broadcasterId;
-        this.badgeCatalogCache.loaded = true;
+        if (!isCurrent()) return;
+        const apiClient = this.apiClient;
+        const global = await apiClient.getGlobalChatBadges();
+        if (!isCurrent()) return;
+        const channel = broadcasterId ? await apiClient.getChannelChatBadges(broadcasterId) : [];
+        if (!isCurrent()) return;
+        this.badgeCatalogCache = { global, channel, broadcasterId, loaded: true };
     }
 
-    async _ensureCheermoteCatalog(forceReload = false) {
+    async _ensureCheermoteCatalog(forceReload = false, isCurrent = this._captureDataOwner()) {
         if (!this.apiClient || typeof this.apiClient.getCheermotes !== 'function') {
             return;
         }
@@ -782,9 +800,10 @@ class TwitchPlatform extends EventEmitter {
             return;
         }
 
-        this.cheermoteCatalogCache.catalog = await this.apiClient.getCheermotes(broadcasterId);
-        this.cheermoteCatalogCache.broadcasterId = broadcasterId;
-        this.cheermoteCatalogCache.loaded = true;
+        if (!isCurrent()) return;
+        const catalog = await this.apiClient.getCheermotes(broadcasterId);
+        if (!isCurrent()) return;
+        this.cheermoteCatalogCache = { catalog, broadcasterId, loaded: true };
     }
 
     _hasMixedCheermotes(cheermoteInfo: unknown = {}): boolean {
@@ -850,7 +869,7 @@ class TwitchPlatform extends EventEmitter {
         return this._resolveCheermoteTierImageUrl(tierEntry);
     }
 
-    async _resolveGiftCheermoteImageUrl(giftData: GiftEventData = {}): Promise<string> {
+    async _resolveGiftCheermoteImageUrl(giftData: GiftEventData = {}, isCurrent = this._captureDataOwner()): Promise<string> {
         if (!isRecord(giftData)) {
             return '';
         }
@@ -873,14 +892,17 @@ class TwitchPlatform extends EventEmitter {
         }
 
         try {
-            await this._ensureCheermoteCatalog(false);
+            await this._ensureCheermoteCatalog(false, isCurrent);
+            if (!isCurrent()) return '';
             let imageUrl = this._resolveCheermoteImageFromCatalog(cheermoteInfo);
             if (!imageUrl) {
-                await this._ensureCheermoteCatalog(true);
+                await this._ensureCheermoteCatalog(true, isCurrent);
+                if (!isCurrent()) return '';
                 imageUrl = this._resolveCheermoteImageFromCatalog(cheermoteInfo);
             }
             return imageUrl;
         } catch (error) {
+            if (!isCurrent()) return '';
             this.errorHandler.handleEventProcessingError(
                 error,
                 'cheermote-image-resolution',
@@ -891,12 +913,12 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async _enrichGiftPayload(giftData: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    async _enrichGiftPayload(giftData: Record<string, unknown> = {}, isCurrent = this._captureDataOwner()): Promise<Record<string, unknown>> {
         if (!isRecord(giftData)) {
             return giftData;
         }
 
-        const giftImageUrl = await this._resolveGiftCheermoteImageUrl(giftData);
+        const giftImageUrl = await this._resolveGiftCheermoteImageUrl(giftData, isCurrent);
         if (!giftImageUrl) {
             return giftData;
         }
@@ -918,7 +940,7 @@ class TwitchPlatform extends EventEmitter {
         return set.versions.filter(isRecord).find((entry): entry is TwitchBadgeVersion => String(entry.id) === version) || null;
     }
 
-    async _resolveBadgeImages(event: Record<string, unknown> = {}): Promise<unknown[]> {
+    async _resolveBadgeImages(event: Record<string, unknown> = {}, isCurrent = this._captureDataOwner()): Promise<unknown[]> {
         const badgeKeys = this._normalizeBadgeKeyList(event);
         if (badgeKeys.length === 0) {
             return [];
@@ -926,7 +948,8 @@ class TwitchPlatform extends EventEmitter {
 
         try {
             const broadcasterUserId = typeof event.broadcaster_user_id === 'string' ? event.broadcaster_user_id : '';
-            await this._ensureBadgeCatalogs(broadcasterUserId);
+            await this._ensureBadgeCatalogs(broadcasterUserId, false, isCurrent);
+            if (!isCurrent()) return [];
             const resolveFromCache = () => {
                 const resolved: Array<Record<string, unknown>> = [];
                 const unresolved: Array<{ setId: string; version: string; info: string }> = [];
@@ -952,12 +975,14 @@ class TwitchPlatform extends EventEmitter {
 
             let { resolved, unresolved } = resolveFromCache();
             if (unresolved.length > 0) {
-                await this._ensureBadgeCatalogs(broadcasterUserId, true);
+                await this._ensureBadgeCatalogs(broadcasterUserId, true, isCurrent);
+                if (!isCurrent()) return [];
                 ({ resolved } = resolveFromCache());
             }
 
             return normalizeBadgeImages(resolved);
         } catch (error) {
+            if (!isCurrent()) return [];
             this.errorHandler.handleEventProcessingError(
                 error,
                 'badge-resolution',
@@ -1010,7 +1035,8 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async _resolveAvatarUrl(data: Record<string, unknown> = {}): Promise<string> {
+    async _resolveAvatarUrl(data: Record<string, unknown> = {}, isCurrent = this._captureDataOwner()): Promise<string> {
+        if (!isCurrent()) return this.fallbackAvatarUrl;
         const payloadAvatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         const userId = typeof data?.userId === 'string'
             ? data.userId.trim()
@@ -1036,6 +1062,7 @@ class TwitchPlatform extends EventEmitter {
         if (userId && this.apiClient && typeof this.apiClient.getUserById === 'function') {
             try {
                 const user = await this.apiClient.getUserById(userId);
+                if (!isCurrent()) return this.fallbackAvatarUrl;
                 const userRecord = asRecord(user);
                 const resolvedAvatarUrl = typeof userRecord.profile_image_url === 'string'
                     ? userRecord.profile_image_url.trim()
@@ -1051,6 +1078,7 @@ class TwitchPlatform extends EventEmitter {
                     this._setAvatarLookupMiss(cacheKey);
                 }
             } catch (error) {
+                if (!isCurrent()) return this.fallbackAvatarUrl;
                 this.errorHandler.handleEventProcessingError(
                     error,
                     'avatar-lookup',
@@ -1082,7 +1110,8 @@ class TwitchPlatform extends EventEmitter {
         return mapping[eventType];
     }
 
-    async _handleStandardEvent(eventType: TwitchStandardEventType, data: Record<string, unknown>, options: StandardEventOptions = {}): Promise<void> {
+    async _handleStandardEvent(eventType: TwitchStandardEventType, data: Record<string, unknown>, options: StandardEventOptions = {}, isCurrent = this._captureDataOwner()): Promise<void> {
+        if (!isCurrent()) return;
         const payloadTimestamp = this._getTimestamp(data);
         const errorNotificationType = eventType === 'gift'
             ? 'gift'
@@ -1128,7 +1157,8 @@ class TwitchPlatform extends EventEmitter {
             if (!errorNotificationType) {
                 return;
             }
-            const avatarUrl = await this._resolveAvatarUrl(data);
+            const avatarUrl = await this._resolveAvatarUrl(data, isCurrent);
+            if (!isCurrent()) return;
             const errorPayload = createMonetizationErrorPayload({
                 notificationType: errorNotificationType,
                 platform: this.platformName,
@@ -1176,15 +1206,18 @@ class TwitchPlatform extends EventEmitter {
 
             const logEventType = options.logEventType || eventType;
             await this._logRawEvent(logEventType, data);
+            if (!isCurrent()) return;
 
             const factoryMethod = options.factoryMethod || this._resolveFactoryMethod(eventType);
             const normalizedPayload: Record<string, unknown> = { ...(data || {}), timestamp: payloadTimestamp };
-            normalizedPayload.avatarUrl = await this._resolveAvatarUrl(normalizedPayload);
+            normalizedPayload.avatarUrl = await this._resolveAvatarUrl(normalizedPayload, isCurrent);
+            if (!isCurrent()) return;
             const eventData: Record<string, unknown> = this.eventFactory[factoryMethod](normalizedPayload);
 
             const emitEventType = options.emitEventType || (typeof eventData.type === 'string' ? eventData.type : '') || this._resolvePlatformEventType(eventType);
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
+            if (!isCurrent()) return;
             this.errorHandler.handleEventProcessingError(error, eventType, data);
             await emitMonetizationError(payloadTimestamp);
         }
@@ -1228,12 +1261,14 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async handleGiftEvent(giftData: Record<string, unknown>): Promise<void> {
-        const enrichedGiftData = await this._enrichGiftPayload(giftData);
+    async handleGiftEvent(giftData: Record<string, unknown>, isCurrent = this._captureDataOwner()): Promise<void> {
+        if (!isCurrent()) return;
+        const enrichedGiftData = await this._enrichGiftPayload(giftData, isCurrent);
+        if (!isCurrent()) return;
         return this._handleStandardEvent('gift', enrichedGiftData, {
             validateUser: true,
             emitEventType: PlatformEvents.GIFT
-        });
+        }, isCurrent);
     }
 
     _resolvePlatformEventType(eventType: string): string {
@@ -1279,9 +1314,10 @@ class TwitchPlatform extends EventEmitter {
 
         this._logRawEvent('stream-online', data);
 
-        if (!data?.started_at) {
+        const startedAt = normalizeTimestampValue(data?.startedAt);
+        if (!startedAt) {
             this.errorHandler.handleEventProcessingError(
-                new Error('Stream online event requires started_at'),
+                new Error('Stream online event requires a valid startedAt'),
                 'stream-online',
                 data
             );
@@ -1290,7 +1326,7 @@ class TwitchPlatform extends EventEmitter {
 
         const eventData = this.eventFactory.createStreamOnlineEvent({
             ...(data || {}),
-            timestamp: data.started_at
+            timestamp: startedAt
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 

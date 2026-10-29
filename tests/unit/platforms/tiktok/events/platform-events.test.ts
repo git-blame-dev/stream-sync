@@ -1,13 +1,11 @@
 import { describe, expect, it, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
-import { createMockTikTokPlatformDependencies, noOpLogger } from "../../../../helpers/mock-factories";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import { createTikTokLifetimeFixture } from "../../../../helpers/tiktok-connector-fixture";
 const {
   createTikTokSocialNotificationFixture,
   createTikTokGiftNotificationFixture,
@@ -57,11 +55,29 @@ const isPlatformEventPayload = (data: unknown): data is PlatformEventPayload =>
   typeof data === "object" && data !== null;
 
 describe("TikTokPlatform event emissions", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
-  const baseConfig = { enabled: true, username: "event_tester" };
+  const baseConfig = {
+    enabled: true,
+    username: "event_tester",
+    dataLoggingEnabled: false,
+    dataLoggingPath: "",
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
+  };
   const eventTimestamp = Date.parse("2024-01-01T00:00:00Z");
   const fallbackAvatarUrl = DEFAULT_AVATAR_URL;
 
@@ -80,32 +96,27 @@ describe("TikTokPlatform event emissions", () => {
       STREAM_END: "streamEnd",
     } as const;
 
-    const dependencies = {
-      ...createMockTikTokPlatformDependencies({ webcastEvent }),
-      logger,
-      WebcastEvent: webcastEvent,
-      connectionFactory: {
-        createConnection: createMockFn().mockReturnValue({
-          on: createMockFn(),
-          connect: createMockFn().mockResolvedValue(undefined),
-          disconnect: createMockFn().mockResolvedValue(undefined),
-          removeAllListeners: createMockFn(),
-        }),
-        cleanup: createMockFn(),
-      },
-    };
-    const platform = new TikTokPlatform(baseConfig, dependencies);
+    const fixture = createTikTokLifetimeFixture(baseConfig);
+    cleanups.push(() => fixture.cleanup());
 
-    const eventHandlers: EventHandlerMap = {};
-    platform.connection = {
-      on: createMockFn<[event: string, handler: EventHandler], void>((event, handler) => {
-        eventHandlers[event] = handler;
-        return platform.connection;
-      }),
-      connect: createMockFn().mockResolvedValue(undefined),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      removeAllListeners: createMockFn(),
-    };
+    const platform =
+      logger === noOpLogger
+        ? fixture.platform
+        : new TikTokPlatform(baseConfig, {
+            logger,
+            TikTokWebSocketClient:
+              fixture.platform.TikTokWebSocketClient as never,
+            WebcastEvent: webcastEvent,
+            ControlEvent: fixture.platform.ControlEvent as never,
+            retrySystem: fixture.retry as never,
+          });
+    if (platform !== fixture.platform) {
+      cleanups.push(() => platform.cleanup());
+    }
+
+    platform.WebcastEvent = webcastEvent;
+    const connection = fixture.createConnection();
+    platform.connection = connection;
 
     const envelopes: PlatformEventPayload[] = [];
     const shares: PlatformEventPayload[] = [];
@@ -128,6 +139,14 @@ describe("TikTokPlatform event emissions", () => {
     };
 
     platform.setupEventListeners();
+
+    const eventHandlers: EventHandlerMap = {};
+    for (const eventName of Object.values(webcastEvent)) {
+      const listeners = connection.listeners(eventName);
+      if (listeners[0]) {
+        eventHandlers[eventName] = listeners[0] as EventHandler;
+      }
+    }
 
     return {
       platform,
@@ -177,8 +196,8 @@ describe("TikTokPlatform event emissions", () => {
   });
 
   it("contains rejected legacy observers in a child runtime", () => {
-    const child = spawnSync(process.execPath, ["test", import.meta.path, "-t", "TikTok legacy callback rejection child"], {
-      encoding: "utf8", timeout: 15000, env: { ...process.env, STREAM_SYNC_LEGACY_OBSERVER_CHILD: "tiktok" },
+    const child = spawnSync(process.execPath, ["test", "--no-env-file", import.meta.path, "-t", "TikTok legacy callback rejection child"], {
+      encoding: "utf8", timeout: 15000, env: { PATH: process.env.PATH, NODE_ENV: "test", STREAM_SYNC_LEGACY_OBSERVER_CHILD: "tiktok" },
     });
     expect(child.status).toBe(0);
     expect(`${child.stdout}${child.stderr}`).toContain("1 pass");

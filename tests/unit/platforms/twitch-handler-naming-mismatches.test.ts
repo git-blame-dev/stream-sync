@@ -1,153 +1,56 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { expect, test } from 'bun:test';
+import { join } from 'node:path';
+import { TwitchPlatform } from '../../../src/platforms/twitch';
+import { TwitchAuth } from '../../../src/auth/TwitchAuth';
+import { PlatformLifecycleService } from '../../../src/services/PlatformLifecycleService';
+import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
+import { createTwitchConfigFixture } from '../../helpers/config-fixture';
+import { noOpLogger } from '../../helpers/mock-factories';
+import { waitFor } from '../../helpers/event-driven-testing';
 
-type HandlerPayload = {
-  username: string;
-  displayName: string;
-  userId: string;
-  timestamp: Date;
-  tier?: string;
-  viewerCount?: number;
-  giftType?: string;
-  giftCount?: number;
-  amount?: number;
-  currency?: string;
-  message?: string;
-};
-
-type HandlerName = "onFollow" | "onPaypiggy" | "onRaid" | "onGift";
-
-type HandlerCalls = Record<HandlerName, HandlerPayload[]>;
-type TwitchHandlers = Record<
-  HandlerName,
-  (data: HandlerPayload) => Promise<void>
->;
-
-describe("Twitch Handler Integration", () => {
-  let handlers: TwitchHandlers;
-  let handlerCalls: HandlerCalls;
-
-  beforeEach(() => {
-    handlerCalls = {
-      onFollow: [],
-      onPaypiggy: [],
-      onRaid: [],
-      onGift: [],
-    };
-    handlers = {
-      onFollow: async (data) => {
-        handlerCalls.onFollow.push(data);
-      },
-      onPaypiggy: async (data) => {
-        handlerCalls.onPaypiggy.push(data);
-      },
-      onRaid: async (data) => {
-        handlerCalls.onRaid.push(data);
-      },
-      onGift: async (data) => {
-        handlerCalls.onGift.push(data);
-      },
-    };
+for (const { method, handler, type, fields } of [
+  { method: 'handleFollowEvent', handler: 'onFollow', type: 'platform:follow', fields: {} },
+  { method: 'handlePaypiggyEvent', handler: 'onPaypiggy', type: 'platform:paypiggy', fields: { tier: '1000' } },
+  { method: 'handleRaidEvent', handler: 'onRaid', type: 'platform:raid', fields: { viewerCount: 42 } },
+  { method: 'handleGiftEvent', handler: 'onGift', type: 'platform:gift', fields: {
+    giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', message: 'Synthetic great stream!',
+  } },
+] as const) {
+  test(`${method} uses the actual ${handler} lifecycle callback and produces its canonical row`, async () => {
+    const h = await createMainPresentationFixture();
+    h.config.logging.file.enabled = false;
+    h.config.logging.chat.enabled = false;
+    let auth: TwitchAuth | undefined;
+    let platform: TwitchPlatform | undefined;
+    let lifecycle: PlatformLifecycleService | undefined;
+    try {
+      auth = new TwitchAuth({ tokenStorePath: join(h.dir, 'synthetic-handler-tokens.json'),
+        clientId: 'synthetic-client', expectedUsername: 'synthetic-user', logger: noOpLogger });
+      const axios = { get: async () => ({ data: { data: [] } }), post: async () => ({ data: {} }), delete: async () => ({ data: {} }) };
+      platform = new TwitchPlatform(createTwitchConfigFixture({ enabled: false, clientId: 'synthetic-client' }),
+        { twitchAuth: auth, axios, logger: noOpLogger });
+      await h.start();
+      lifecycle = new PlatformLifecycleService({ config: { twitch: { enabled: true } }, eventBus: h.bus, logger: noOpLogger });
+      platform.handlers = lifecycle.createDefaultEventHandlers('twitch');
+      expect(typeof platform.handlers[handler]).toBe('function');
+      await platform[method]({ username: 'Synthetic Handler Viewer', userId: 'synthetic-handler-viewer',
+        timestamp: '2026-01-01T00:00:00.000Z', id: 'synthetic-handler-event', ...fields });
+      await waitFor(() => h.queue.getQueueLength() === 1, { timeout: 1000, interval: 1 });
+      await h.drain();
+      expect(h.rows).toHaveLength(1);
+      expect(h.rows[0]!.data.isError).not.toBe(true);
+      expect(h.rows[0]).toMatchObject({ type, platform: 'twitch', data: {
+        username: 'Synthetic Handler Viewer', userId: 'synthetic-handler-viewer', ...fields,
+      } });
+    } finally {
+      try { await platform?.cleanup(); }
+      finally {
+        try { lifecycle?.dispose(); }
+        finally {
+          try { await h.dispose(); }
+          finally { await auth?.dispose(); }
+        }
+      }
+    }
   });
-
-  describe("Handler Naming Validation", () => {
-    it("verifies expected handler names match Twitch event types", () => {
-      const expectedHandlerNames: HandlerName[] = [
-        "onFollow",
-        "onPaypiggy",
-        "onRaid",
-        "onGift",
-      ];
-
-      expectedHandlerNames.forEach((handlerName: HandlerName) => {
-        expect(handlers[handlerName]).toBeDefined();
-        expect(typeof handlers[handlerName]).toBe("function");
-      });
-    });
-
-    it("handler functions are callable", async () => {
-      const testFollowData = {
-        username: "testFollower",
-        displayName: "testFollower",
-        userId: "test-12345",
-        timestamp: new Date(),
-      };
-
-      await handlers.onFollow(testFollowData);
-
-      expect(handlerCalls.onFollow).toHaveLength(1);
-      expect(handlerCalls.onFollow[0]).toEqual(testFollowData);
-    });
-
-    it("paypiggy handler accepts subscriber data", async () => {
-      const testPaypiggyData = {
-        username: "testSubscriber",
-        displayName: "testSubscriber",
-        userId: "test-67890",
-        tier: "1000",
-        timestamp: new Date(),
-      };
-
-      await handlers.onPaypiggy(testPaypiggyData);
-
-      expect(handlerCalls.onPaypiggy).toHaveLength(1);
-      expect(handlerCalls.onPaypiggy[0]).toEqual(testPaypiggyData);
-    });
-
-    it("raid handler accepts raid data", async () => {
-      const testRaidData = {
-        username: "testRaider",
-        displayName: "testRaider",
-        userId: "test-11111",
-        viewerCount: 42,
-        timestamp: new Date(),
-      };
-
-      await handlers.onRaid(testRaidData);
-
-      expect(handlerCalls.onRaid).toHaveLength(1);
-      expect(handlerCalls.onRaid[0]).toEqual(testRaidData);
-    });
-
-    it("gift handler accepts gift data", async () => {
-      const testGiftData = {
-        username: "testCheerer",
-        displayName: "testCheerer",
-        userId: "test-22222",
-        giftType: "bits",
-        giftCount: 1,
-        amount: 100,
-        currency: "bits",
-        message: "Great stream!",
-        timestamp: new Date(),
-      };
-
-      await handlers.onGift(testGiftData);
-
-      expect(handlerCalls.onGift).toHaveLength(1);
-      expect(handlerCalls.onGift[0]).toEqual(testGiftData);
-    });
-  });
-
-  describe("Handler Integration Status", () => {
-    it("confirms all handler names are properly defined", () => {
-      const workingHandlerNames: HandlerName[] = [
-        "onFollow",
-        "onPaypiggy",
-        "onRaid",
-        "onGift",
-      ];
-
-      workingHandlerNames.forEach((handlerName: HandlerName) => {
-        expect(handlers[handlerName]).toBeDefined();
-        expect(typeof handlers[handlerName]).toBe("function");
-      });
-
-      expect(workingHandlerNames).toEqual([
-        "onFollow",
-        "onPaypiggy",
-        "onRaid",
-        "onGift",
-      ]);
-    });
-  });
-});
+}

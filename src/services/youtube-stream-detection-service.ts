@@ -144,7 +144,7 @@ class YouTubeStreamDetectionService {
     }
 
     async detectLiveStreams(channelHandle: unknown, options: DetectOptions = {}): Promise<DetectionServiceResponse> {
-        const startTime = Date.now();
+        const startTime = performance.now();
         if (this._isShuttingDown) {
             return this._formatErrorResponse(new Error('YouTube stream detection service stopped'), options.debug, startTime);
         }
@@ -227,10 +227,11 @@ class YouTubeStreamDetectionService {
 
             // Complete negatives and partial positives remain usable successes.
             this._metrics.successfulRequests += 1;
-            this._metrics.totalResponseTime += Date.now() - startTime;
+            const responseTime = performance.now() - startTime;
+            this._metrics.totalResponseTime += responseTime;
             this._resetCircuitBreaker();
 
-            return this._formatSuccessResponse(validVideoIds, options.debug, startTime, detectionResult);
+            return this._formatSuccessResponse(validVideoIds, options.debug, responseTime, detectionResult);
         } catch (error) {
             const normalizedError = asError(error);
 
@@ -377,10 +378,9 @@ _isValidVideoId(videoId: unknown): videoId is string {
     _formatSuccessResponse(
         videoIds: string[],
         includeDebug: boolean | undefined,
-        startTime: number,
+        responseTime: number,
         detectionResult: DetectionResult
     ): DetectionServiceResponse {
-        const responseTime = Date.now() - startTime;
 
         let message: string;
         if (videoIds.length === 0) {
@@ -427,7 +427,7 @@ _isValidVideoId(videoId: unknown): videoId is string {
         retryable: boolean | null = null,
         cancellationType?: 'AbortError'
     ): DetectionServiceResponse {
-        const responseTime = Date.now() - startTime;
+        const responseTime = performance.now() - startTime;
 
         let message = 'Unable to detect streams';
         let isRetryable: boolean | null = retryable;

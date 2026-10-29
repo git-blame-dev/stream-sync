@@ -318,10 +318,13 @@ async function reportEventFailure(platform: TikTokPlatformRouterContract, error:
 function registerListener(platform: TikTokPlatformRouterContract, event: string, handler: RouterCallback) {
     const connection = platform.connection;
     if (!connection) return;
+    const registration = ownedListeners.get(platform);
     const callback: RouterCallback = async (payload) => {
+        if (ownedListeners.get(platform) !== registration) return;
         try {
             await handler(payload);
         } catch (error) {
+            if (ownedListeners.get(platform) !== registration) return;
             await reportEventFailure(platform, error, event === platform.WebcastEvent.CHAT ? 'chat-message' : event);
         }
     };
@@ -374,12 +377,16 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     const registeredConnection = platform.connection;
     const registeredGeneration = platform.connectionGeneration;
+    const registration = [] as NonNullable<ReturnType<typeof ownedListeners.get>>;
+    ownedListeners.set(platform, registration);
     const isCurrentRegistration = () => platform.connection === registeredConnection
         && platform.connectionGeneration === registeredGeneration
-        && (ownedListeners.get(platform)?.some(({ connection }) => connection === registeredConnection) ?? false);
+        && ownedListeners.get(platform) === registration;
 
     registerListener(platform, platform.WebcastEvent.CHAT, async (payload: unknown) => {
+        if (!isCurrentRegistration()) return;
         await platform._logIncomingEvent('chat', payload);
+        if (!isCurrentRegistration()) return;
         const payloadRecord = asRecord(payload);
         const data = asTikTokRawEvent(payload);
 
@@ -438,6 +445,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     ...(platform.timestampService !== undefined ? { timestampService: platform.timestampService } : {})
                 }) as Record<string, unknown>;
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 if (!isRecoverableTikTokChatNormalizationError(error)) {
                     throw error;
                 }
@@ -486,6 +494,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
             await platform._handleChatMessage(data, normalizedData);
         } catch (error) {
+            if (!isCurrentRegistration()) return;
             await reportEventFailure(platform,
                 error,
                 'chat-message',
@@ -495,23 +504,29 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     });
 
     registerListener(platform, platform.WebcastEvent.GIFT, async (payload: unknown) => {
+        if (!isCurrentRegistration()) return;
         const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('gift', data);
+        if (!isCurrentRegistration()) return;
 
         try {
             await platform.handleTikTokGift(data);
         } catch (error) {
+            if (!isCurrentRegistration()) return;
             await reportEventFailure(platform, error, 'gift', 'Error processing gift');
         }
     });
 
     registerListener(platform, platform.WebcastEvent.FOLLOW, async (payload: unknown) => {
+        if (!isCurrentRegistration()) return;
         const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('follow', data);
+        if (!isCurrentRegistration()) return;
 
         try {
             await platform.handleTikTokFollow(data);
         } catch (error) {
+            if (!isCurrentRegistration()) return;
             await reportEventFailure(platform,
                 error,
                 'follow',
@@ -522,12 +537,15 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     if (typeof platform.WebcastEvent.SHARE !== 'undefined') {
         registerListener(platform, platform.WebcastEvent.SHARE, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('share', data);
+            if (!isCurrentRegistration()) return;
 
             try {
                 await platform.handleTikTokShare(data);
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 await reportEventFailure(platform, error, 'share', 'Error processing share event');
             }
         });
@@ -535,14 +553,17 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     if (typeof platform.WebcastEvent.ENVELOPE !== 'undefined') {
         registerListener(platform, platform.WebcastEvent.ENVELOPE, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
             try {
                 await platform._logIncomingEvent('envelope', data);
+                if (!isCurrentRegistration()) return;
                 await platform._handleStandardEvent('envelope', data, {
                     factoryMethod: 'createEnvelope',
                     emitType: PlatformEvents.ENVELOPE
                 });
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 await reportEventFailure(platform, error, 'envelope', 'Error in handleEnvelopeNotification');
             }
         });
@@ -550,8 +571,10 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     if (typeof platform.WebcastEvent.SUBSCRIBE !== 'undefined') {
         registerListener(platform, platform.WebcastEvent.SUBSCRIBE, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('subscribe', data);
+            if (!isCurrentRegistration()) return;
 
             try {
                 await platform._handleStandardEvent('paypiggy', data, {
@@ -559,6 +582,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 await reportEventFailure(platform, error, 'subscribe', 'Error in handleSubscriptionNotification');
             }
         });
@@ -566,8 +590,10 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     if (typeof platform.WebcastEvent.SUPER_FAN !== 'undefined') {
         registerListener(platform, platform.WebcastEvent.SUPER_FAN, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('superfan', data);
+            if (!isCurrentRegistration()) return;
 
             try {
                 await platform._handleStandardEvent('paypiggy', data, {
@@ -575,6 +601,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 await reportEventFailure(platform, error, 'superfan', 'Error in handleSuperfanNotification');
             }
         });
@@ -582,18 +609,22 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     if (typeof platform.WebcastEvent.SOCIAL !== 'undefined') {
         registerListener(platform, platform.WebcastEvent.SOCIAL, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('social', data);
+            if (!isCurrentRegistration()) return;
 
             try {
                 await platform.handleTikTokSocial(data);
             } catch (error) {
+                if (!isCurrentRegistration()) return;
                 await reportEventFailure(platform, error, 'social', 'Error processing social event');
             }
         });
     }
 
     registerListener(platform, platform.WebcastEvent.ROOM_USER, async (payload: unknown) => {
+        if (!isCurrentRegistration()) return;
         const data = asTikTokRawEvent(payload);
         const incomingLog = platform._logIncomingEvent('roomUser', data);
         try {

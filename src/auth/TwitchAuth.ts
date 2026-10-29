@@ -5,7 +5,7 @@ import { secrets } from '../core/secrets';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveLogger } from '../utils/logger-resolver';
 import { loadTokens, saveTokens } from '../utils/token-store';
-import { AuthConstants } from '../utils/auth-constants';
+import { TOKEN_REFRESH_CONFIG, AuthConstants } from '../utils/auth-constants';
 import { createHttpRetryExecutor, type RetryExecutor } from '../utils/http-retry-executor';
 import { runOAuthFlow } from './oauth-flow';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
@@ -56,6 +56,7 @@ type OAuthFlowRunner = (options: {
     clientId: string;
     tokenStorePath: string;
     logger: ReturnType<typeof resolveLogger>;
+    signal: AbortSignal;
 }) => Promise<OAuthTokenPayload | null>;
 
 type TwitchAuthOptions = {
@@ -67,6 +68,7 @@ type TwitchAuthOptions = {
     oauthFlow?: OAuthFlowRunner;
     retryExecutor?: RetryExecutor;
     monitoringNow?: () => number;
+    networkTimeoutMs?: number;
 };
 
 type ValidationInvalidation = {
@@ -213,6 +215,9 @@ const isAuthDisabled = () => {
 };
 
 class TwitchAuth {
+    #lifetime = new AbortController();
+    #retirement: Promise<void> | null = null;
+    #networkTimeoutMs: number;
     #initialized = false;
     #userId: string | null = null;
     #refreshPromise: Promise<TokenRefreshResult> | null = null;
@@ -229,7 +234,11 @@ class TwitchAuth {
     #lastAcceptedAt = 0;
     #monitor: ValidationMonitor | null = null;
 
-    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retryExecutor, monitoringNow }: TwitchAuthOptions) {
+    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retryExecutor, monitoringNow, networkTimeoutMs = 30_000 }: TwitchAuthOptions) {
+        if (!Number.isFinite(networkTimeoutMs) || networkTimeoutMs <= 0 || networkTimeoutMs > 2_147_483_647) {
+            throw new RangeError('networkTimeoutMs must be a positive supported timeout');
+        }
+        this.#networkTimeoutMs = networkTimeoutMs;
         this.#tokenStorePath = typeof tokenStorePath === 'string' ? tokenStorePath : '';
         this.#clientId = typeof clientId === 'string' ? clientId : '';
         this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
@@ -244,6 +253,7 @@ class TwitchAuth {
     }
 
     async initialize() {
+        this.#requireActive();
         this.#requireConfig();
         const generation = this.#generation;
 
@@ -251,6 +261,7 @@ class TwitchAuth {
             tokenStorePath: this.#tokenStorePath,
             logger: this.#logger
         });
+        this.#requireActive();
         const normalized = ensureCamelTokenPayload(tokenData, 'Token store');
         if (generation !== this.#generation) {
             throw new Error('Twitch credential candidate was superseded');
@@ -266,6 +277,7 @@ class TwitchAuth {
         }
 
         const validation = await this.#validateToken(normalized.accessToken);
+        this.#requireActive();
         if (generation !== this.#generation) {
             throw new Error('Twitch credential candidate was superseded');
         }
@@ -275,6 +287,7 @@ class TwitchAuth {
             }
             const hadRefreshToken = !!normalized.refreshToken;
             const refreshResult = await this.#refreshTokenResult(normalized.refreshToken);
+            this.#requireActive();
             if (refreshResult.refreshed) {
                 return this.#userId;
             } else if (hadRefreshToken) {
@@ -301,12 +314,20 @@ class TwitchAuth {
         return this.#userId;
     }
 
-    async refreshTokens() {
-        const result = await this.#refreshTokenResult();
+    async refreshTokens(signal?: AbortSignal) {
+        this.#requireActive();
+        signal?.throwIfAborted();
+        // Caller cancellation releases only this waiter; the shared rotation belongs
+        // to auth and must remain available to other callers.
+        const operation = this.#refreshTokenResult();
+        const result = signal ? await withOperationDeadline(() => operation, {
+            parentAbortSignal: signal, operationName: 'Twitch refresh caller'
+        }) : await operation;
         return result.refreshed;
     }
 
     async #refreshTokenResult(refreshToken = secrets.twitch.refreshToken): Promise<TokenRefreshResult> {
+        this.#requireActive();
         if (this.#refreshPromise) {
             return this.#refreshPromise;
         }
@@ -316,6 +337,25 @@ class TwitchAuth {
         } finally {
             this.#refreshPromise = null;
         }
+    }
+
+    #requireActive() {
+        if (this.#lifetime.signal.aborted) throw new Error('Twitch auth is disposed');
+    }
+
+    // Irreversible retirement differs from recoverable monitor stop. There is no
+    // deadline on this actual persistence join: hung filesystem I/O means drain
+    // remains incomplete. The runtime must not replace this owner before it settles.
+    dispose(): Promise<void> {
+        if (this.#retirement) return this.#retirement;
+        let complete!: () => void;
+        let fail!: (error: unknown) => void;
+        this.#retirement = new Promise<void>((resolve, reject) => { complete = resolve; fail = reject; });
+        this.#initialized = false;
+        this.#generation++;
+        this.#lifetime.abort(new Error('Twitch auth is disposed'));
+        void Promise.all([this.stopValidationMonitoring(), this.#commitPromise]).then(() => complete(), fail);
+        return this.#retirement;
     }
 
     getUserId() {
@@ -329,6 +369,7 @@ class TwitchAuth {
     // Invalidation callbacks must honor their signal across asynchronous effects.
     // Explicit validated recovery retires an invalidated monitor; start it again afterward.
     startValidationMonitoring(options: ValidationMonitoringOptions): void {
+        this.#requireActive();
         if (this.#monitor) {
             if (this.#monitor.retirement) {
                 throw new Error('Twitch validation monitoring is still retiring');
@@ -382,7 +423,7 @@ class TwitchAuth {
     }
 
     #isCurrentMonitor(monitor: ValidationMonitor): boolean {
-        return this.#monitor === monitor && !monitor.controller.signal.aborted;
+        return !this.#lifetime.signal.aborted && this.#monitor === monitor && !monitor.controller.signal.aborted;
     }
 
     #reportMonitorFailure(message: string) {
@@ -454,7 +495,7 @@ class TwitchAuth {
             request.signal.addEventListener('abort', rejectAborted, { once: true });
         });
         try {
-            const validation = this.#trackMonitorOperation(monitor, this.#validateToken(accessToken, request.signal));
+            const validation = this.#trackMonitorOperation(monitor, this.#validateToken(accessToken, request.signal, monitor));
             return await Promise.race([validation, aborted]);
         } finally {
             globalThis.clearTimeout(timer);
@@ -560,6 +601,7 @@ class TwitchAuth {
     }
 
     #publishCandidate(candidate: OAuthTokenPayload, validation: TokenValidationSuccess, generation: number) {
+        this.#requireActive();
         if (generation !== this.#generation) {
             throw new Error('Twitch credential candidate was superseded');
         }
@@ -574,7 +616,10 @@ class TwitchAuth {
     }
 
     async #acceptCandidate(candidate: OAuthTokenPayload, generation: number) {
+        this.#requireActive();
+        if (generation !== this.#generation) throw new Error('Twitch credential candidate was superseded');
         const validation = await this.#validateToken(candidate.accessToken);
+        this.#requireActive();
         if (isValidationFailure(validation)) {
             throw validation.error;
         }
@@ -583,7 +628,9 @@ class TwitchAuth {
     }
 
     async #commitCandidate(candidate: OAuthTokenPayload, validation: TokenValidationSuccess, generation: number, persist: boolean) {
+        this.#requireActive();
         const commit = this.#commitPromise.then(async () => {
+            this.#requireActive();
             if (generation !== this.#generation) {
                 throw new Error('Twitch credential candidate was superseded');
             }
@@ -611,19 +658,26 @@ class TwitchAuth {
     }
 
     async #runOAuthFlow(): Promise<OAuthTokenPayload | null> {
-        return await this.#oauthFlowRunner({
+        this.#requireActive();
+        return await withOperationDeadline(({ signal }) => this.#oauthFlowRunner({
             clientId: this.#clientId,
             tokenStorePath: this.#tokenStorePath,
-            logger: this.#logger
-        });
+            logger: this.#logger,
+            signal
+        }), { parentAbortSignal: this.#lifetime.signal,
+            budgetMs: TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS + 30_000,
+            operationName: 'Twitch OAuth' });
     }
 
     async #runOAuthAndPersistTokens(failureMessage: string): Promise<OAuthTokenPayload> {
+        this.#requireActive();
         if (isAuthDisabled()) {
             throw new Error('TWITCH_DISABLE_AUTH is set; interactive authentication is disabled');
         }
         const generation = this.#generation;
         const oauthTokens = await this.#runOAuthFlow();
+        this.#requireActive();
+        if (generation !== this.#generation) throw new Error('Twitch credential candidate was superseded');
         const oauthNormalized = ensureCamelTokenPayload(oauthTokens, 'OAuth flow');
         if (!oauthNormalized || !oauthNormalized.accessToken) {
             throw new Error(failureMessage);
@@ -635,7 +689,25 @@ class TwitchAuth {
         return oauthNormalized;
     }
 
+    #refreshRequest<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+        this.#requireActive();
+        const controller = new AbortController();
+        const signal = AbortSignal.any([this.#lifetime.signal, controller.signal]);
+        // Admit the single non-idempotent POST synchronously, preserving refresh
+        // coalescing semantics. Its result alone cannot admit a candidate.
+        const request = operation(signal);
+        void request.catch(() => {});
+        return withOperationDeadline(async ({ signal: deadlineSignal }) => {
+            const onAbort = () => controller.abort(deadlineSignal.reason);
+            deadlineSignal.addEventListener('abort', onAbort, { once: true });
+            try { return await request; }
+            finally { deadlineSignal.removeEventListener('abort', onAbort); }
+        }, { parentAbortSignal: this.#lifetime.signal, budgetMs: this.#networkTimeoutMs,
+            operationName: 'Twitch token refresh' });
+    }
+
     async #doRefresh(previousRefreshToken: string | null) {
+        this.#requireActive();
         const generation = this.#generation;
         if (!previousRefreshToken) {
             return { refreshed: false, error: null };
@@ -656,15 +728,19 @@ class TwitchAuth {
                 client_secret: clientSecret
             }).toString();
 
-            const response = await this.#httpClient.post(
+            const response = await this.#refreshRequest(signal => this.#httpClient.post(
                 TWITCH.OAUTH.TOKEN,
                 form,
                 {
+                    signal,
+                    timeout: this.#networkTimeoutMs,
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     }
                 }
-            );
+            ));
+            this.#requireActive();
+            if (generation !== this.#generation) throw new Error('Twitch credential candidate was superseded');
 
             const data = response && response.data ? response.data : null;
             const normalized = parseRefreshResponse(data);
@@ -680,7 +756,7 @@ class TwitchAuth {
             return { refreshed: true, error: null };
         } catch (error) {
             const httpError = asHttpError(error);
-            if (generation !== this.#generation) {
+            if (this.#lifetime.signal.aborted || generation !== this.#generation) {
                 return { refreshed: false, error: new Error('Twitch credential candidate was superseded') };
             }
             if (this.#isTerminalRefreshError(httpError)) {
@@ -718,28 +794,33 @@ class TwitchAuth {
         return false;
     }
 
-    async #validateToken(accessToken: string, signal?: AbortSignal): Promise<TokenValidationResult> {
+    async #validateToken(accessToken: string, signal?: AbortSignal, monitor?: ValidationMonitor): Promise<TokenValidationResult> {
         const handler = createTwitchAuthErrorHandler(this.#logger);
         if (!accessToken) {
             return { error: new Error('Access token is missing'), status: null };
         }
 
         try {
-            const response = await this.#retryExecutor.executeWithRetry(
+            this.#requireActive();
+            const response = await withOperationDeadline(({ signal: requestSignal }) => this.#retryExecutor.executeWithRetry(
                 'twitch-auth-validation',
-                () => this.#httpClient.get(
-                    TWITCH.OAUTH.VALIDATE,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${accessToken}`
-                        },
-                        timeout: TWITCH_VALIDATION_TIMEOUT_MS,
-                        ...(signal ? { signal } : {})
-                    }
-                ),
+                () => {
+                    const request = this.#httpClient.get(
+                        TWITCH.OAUTH.VALIDATE,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`
+                            },
+                            timeout: TWITCH_VALIDATION_TIMEOUT_MS,
+                            signal: requestSignal
+                        }
+                    );
+                    return monitor ? this.#trackMonitorOperation(monitor, request) : request;
+                },
                 signal ? 1 : 3,
-                signal ? { signal } : undefined
-            );
+                { signal: requestSignal }
+            ), { parentAbortSignal: signal ? AbortSignal.any([signal, this.#lifetime.signal]) : this.#lifetime.signal,
+                budgetMs: TWITCH_VALIDATION_TIMEOUT_MS, operationName: 'Twitch token validation' });
 
             const data = asRecord(response && response.data ? response.data : null);
             if (typeof data.user_id !== 'string' || !data.user_id.trim()

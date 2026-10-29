@@ -1,10 +1,10 @@
-import { describe, it, beforeEach, expect } from "bun:test";
+import { describe, it, beforeEach, afterEach, expect, spyOn } from "bun:test";
 import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import testClock from "../../helpers/test-clock";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
 import { InnertubeService } from "../../../src/services/innertube-service";
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service";
-import * as testClock from "../../helpers/test-clock";
 
 type DetectionClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>[0];
 type DetectionService = InstanceType<typeof YouTubeStreamDetectionService>;
@@ -77,6 +77,16 @@ function createMockInnertubeClient(
   };
 }
 
+const detectionFixtures: Array<{ service: DetectionService; owner: InnertubeService }> = [];
+afterEach(async () => {
+  const results = await Promise.allSettled(detectionFixtures.splice(0).map(async ({ service, owner }) => {
+    try { await service.cleanup(); }
+    finally { await owner.dispose(); }
+  }));
+  const errors = results.filter(result => result.status === "rejected").map(result => result.reason);
+  if (errors.length) throw new AggregateError(errors, "Synthetic detection fixture cleanup failed");
+});
+
 function createStreamDetectionService(
   mockClient: DetectionClient = createMockInnertubeClient(),
   timeout = 2000,
@@ -85,7 +95,9 @@ function createStreamDetectionService(
   const owner = new InnertubeService({
     createWithTimeout: async () => ({ ...client, getInfo: async () => ({}) }),
   }, { logger: noOpLogger });
-  return new YouTubeStreamDetectionService(owner, { logger: noOpLogger, timeout });
+  const service = new YouTubeStreamDetectionService(owner, { logger: noOpLogger, timeout });
+  detectionFixtures.push({ service, owner });
+  return service;
 }
 
 function createLiveStreamData(): StreamFixture[] {
@@ -214,23 +226,12 @@ describe("YouTubeStreamDetectionService", () => {
     });
   });
 
-  describe("Performance Requirements", () => {
-    it("should complete detection within 2 seconds", async () => {
-      const liveStreams = createLiveStreamData();
-      mockClient = createMockInnertubeClient(liveStreams);
-      service = createStreamDetectionService(mockClient);
-
-      const startTime = testClock.now();
+  describe("Detection behavior", () => {
+    it("returns live streams", async () => {
+      service = createStreamDetectionService(createMockInnertubeClient(createLiveStreamData()));
       const result = await service.detectLiveStreams("@testchannel");
-      const simulatedDurationMs = 25;
-      testClock.advance(simulatedDurationMs);
-      const endTime = testClock.now();
-
-      const duration = endTime - startTime;
-      expect(duration).toBeLessThan(2000);
       expect(result.success).toBe(true);
-      expect(result.responseTime).toBeDefined();
-      expect(result.responseTime).toBeLessThan(2000);
+      expect(result.videoIds).toEqual(["live123", "live456"]);
     });
 
     it("should timeout gracefully for slow responses", async () => {
@@ -446,4 +447,64 @@ describe("YouTubeStreamDetectionService", () => {
       expect(metrics.errorRate).toBe(0);
     });
   });
+});
+
+
+it("uses completed monotonic detection samples despite wall clock changes", async () => {
+  let mono = 100;
+  let wall = 1000000;
+  const clock = spyOn(performance, "now").mockImplementation(() => mono);
+  const previousWall = testClock.now();
+  testClock.set(wall);
+  let release!: () => void;
+  let entered!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const client = createMockInnertubeClient(createLiveStreamData());
+  const getChannel = client.getChannel!.bind(client);
+  client.getChannel = async (...args) => { entered(); await hold; return getChannel(...args); };
+  const service = createStreamDetectionService(client);
+  try {
+    const pending = service.detectLiveStreams("@testchannel", { debug: true });
+    await started; wall -= 10000; testClock.set(wall); mono += 2.5; release();
+    const first = await pending;
+    expect(first.success).toBe(true);
+    expect(first.responseTime).toBe(2.5);
+    expect(first.debug?.responseTimeMs).toBe(2.5);
+    expect(Number.isFinite(Date.parse(first.debug!.requestTime))).toBe(true);
+    wall += 20000; testClock.set(wall);
+    const second = await service.detectLiveStreams("@testchannel", { debug: true });
+    expect(second.responseTime).toBe(0);
+    expect(service.getUsageMetrics().averageResponseTime).toBe(1);
+    const invalid = await service.detectLiveStreams("", { debug: true });
+    expect(invalid.success).toBe(false);
+    expect(invalid.responseTime).toBe(0);
+    expect(service.getUsageMetrics().successfulRequests).toBe(2);
+  } finally { release(); testClock.set(previousWall); clock.mockRestore(); }
+});
+
+
+it("reports a held external detection failure with monotonic elapsed time", async () => {
+  let mono = 20;
+  let wall = 1000000;
+  const clock = spyOn(performance, "now").mockImplementation(() => mono);
+  const previousWall = testClock.now();
+  testClock.set(wall);
+  let release!: () => void;
+  let entered!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const client = createMockInnertubeClient();
+  client.getChannel = async () => { entered(); await hold; throw new Error("Network synthetic failure"); };
+  const service = createStreamDetectionService(client);
+  try {
+    const pending = service.detectLiveStreams("@synthetic", { debug: true });
+    await started; wall += 50000; testClock.set(wall); mono += 3.25; release();
+    const result = await pending;
+    expect(result.success).toBe(false);
+    expect(result.responseTime).toBe(3.25);
+    expect(result.debug?.responseTimeMs).toBe(3.25);
+    expect(service.getUsageMetrics().averageResponseTime).toBe(0);
+    expect(service.getUsageMetrics().failedRequests).toBe(1);
+  } finally { release(); testClock.set(previousWall); clock.mockRestore(); }
 });

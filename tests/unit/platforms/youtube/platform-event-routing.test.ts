@@ -1,11 +1,13 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { noOpLogger } from "../../../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../helpers/bun-mock-utils";
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
+import { InnertubeService } from "../../../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../../../src/services/viewer-count-extraction-service";
 import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
-import { createMockPlatformDependencies } from "../../../helpers/test-setup";
 import { createYouTubeConfigFixture } from "../../../helpers/config-fixture";
 
 type PlatformPayload = {
@@ -25,13 +27,28 @@ const isEmittedPlatformEvent = (
   isPlatformPayload(value) && "data" in value;
 
 describe("YouTube Platform Event Routing", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   const baseConfig = createYouTubeConfigFixture({
     enabled: true,
     username: "test-channel",
+    dataLoggingPath: "",
+    dataLoggingEnabled: false,
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
   });
 
   const YOUTUBE_HANDLER_MAP = {
@@ -61,7 +78,7 @@ describe("YouTube Platform Event Routing", () => {
 
   const FIXED_TIMESTAMP = "2024-06-15T12:00:00.000Z";
 
-  const PAYLOAD_BY_TYPE = {
+  const PAYLOAD_BY_TYPE: Record<string, PlatformPayload> = {
     [PlatformEvents.CHAT_MESSAGE]: {
       platform: "youtube",
       username: "test-user",
@@ -113,17 +130,42 @@ describe("YouTube Platform Event Routing", () => {
     },
   } satisfies Record<string, PlatformPayload>;
 
-  const createPlatform = (logger = noOpLogger) =>
-    new YouTubePlatform(baseConfig, {
-      ...createMockPlatformDependencies("youtube"),
-      logger,
-      streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
-          success: true,
-          videoIds: [],
+  const createPlatform = (logger = noOpLogger) => {
+    const metadata = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getInfo: async (_videoId: string) => ({}),
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
         }),
       },
+      { logger },
+    );
+    const detector = new YouTubeStreamDetectionService(metadata, { logger });
+    const viewerExtractionService = new ViewerCountExtractionService(metadata, {
+      logger,
     });
+    const platform = new YouTubePlatform(baseConfig, {
+      logger,
+      innertubeService: metadata,
+      streamDetectionService: detector,
+      viewerExtractionService,
+    });
+    cleanups.push(async () => {
+      try {
+        await platform.cleanup();
+      } finally {
+        try {
+          await detector.cleanup();
+        } finally {
+          await metadata.dispose();
+        }
+      }
+    });
+    return platform;
+  };
 
   test("isolates a throwing legacy observer while preserving synchronous publication and payload identity", () => {
     const reports: unknown[][] = [];
@@ -158,8 +200,8 @@ describe("YouTube Platform Event Routing", () => {
   });
 
   test("contains rejected legacy observers in a child runtime", () => {
-    const child = spawnSync(process.execPath, ["test", import.meta.path, "-t", "YouTube legacy callback rejection child"], {
-      encoding: "utf8", timeout: 15000, env: { ...process.env, STREAM_SYNC_LEGACY_OBSERVER_CHILD: "youtube" },
+    const child = spawnSync(process.execPath, ["test", "--no-env-file", import.meta.path, "-t", "YouTube legacy callback rejection child"], {
+      encoding: "utf8", timeout: 15000, env: { PATH: process.env.PATH, NODE_ENV: "test", STREAM_SYNC_LEGACY_OBSERVER_CHILD: "youtube" },
     });
     expect(child.status).toBe(0);
     expect(`${child.stdout}${child.stderr}`).toContain("1 pass");

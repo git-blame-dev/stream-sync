@@ -1,17 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 import {
   useFakeTimers,
   useRealTimers,
   runOnlyPendingTimers,
 } from "../../../../helpers/bun-timers";
 
-import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
-import { createMockTikTokPlatformDependencies } from "../../../../helpers/mock-factories";
+import { createTikTokLifetimeFixture } from "../../../../helpers/tiktok-connector-fixture";
 import * as testClock from "../../../../helpers/test-clock";
+
+type TikTokLifetimeFixture = ReturnType<typeof createTikTokLifetimeFixture>;
 
 describe("TikTokPlatform gift aggregation and schema behavior", () => {
   type GiftEvent = {
@@ -36,34 +34,22 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     enabled: true,
     username: "gift_tester",
     giftAggregationEnabled: true,
+    dataLoggingEnabled: false,
+    dataLoggingPath: "",
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
   };
 
-  const createDependencies = () => ({
-    ...createMockTikTokPlatformDependencies(),
-    WebcastEvent: {
-      CHAT: "chat",
-      GIFT: "gift",
-      FOLLOW: "follow",
-      SOCIAL: "social",
-      ROOM_USER: "roomUser",
-      ERROR: "error",
-      DISCONNECT: "disconnect",
-    },
-    timestampService: {
-      extractTimestamp: createMockFn(() =>
-        new Date(testClock.now()).toISOString(),
-      ),
-    },
-    connectionFactory: {
-      createConnection: createMockFn(() => ({
-        on: createMockFn(),
-        removeAllListeners: createMockFn(),
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn(),
-        isConnected: false,
-      })),
-    },
-  });
+  const activeFixtures: TikTokLifetimeFixture[] = [];
+
+  const createPlatform = (configOverrides: Record<string, unknown> = {}) => {
+    const fixture = createTikTokLifetimeFixture({
+      ...baseConfig,
+      ...configOverrides,
+    });
+    activeFixtures.push(fixture);
+    return fixture.platform;
+  };
 
   const createGiftEvent = (repeatCount = 1) => {
     const timestamp = testClock.now();
@@ -98,13 +84,22 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     useRealTimers();
-    restoreAllMocks();
+    try {
+      while (activeFixtures.length > 0) {
+        const fixture = activeFixtures.pop();
+        if (fixture) {
+          await fixture.cleanup();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   it("emits aggregated gifts with normalized user schema and correct amount", async () => {
-    const platform = new TikTokPlatform(baseConfig, createDependencies());
+    const platform = createPlatform();
     const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
@@ -128,7 +123,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
   });
 
   it("emits chat messages with normalized user schema", async () => {
-    const platform = new TikTokPlatform(baseConfig, createDependencies());
+    const platform = createPlatform();
     const chatEvents: ChatEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
@@ -155,10 +150,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
   });
 
   it("emits TikTok gifts with giftType/amount/currency fields", async () => {
-    const platform = new TikTokPlatform(
-      { ...baseConfig, giftAggregationEnabled: false },
-      createDependencies(),
-    );
+    const platform = createPlatform({ giftAggregationEnabled: false });
     const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
@@ -197,10 +189,10 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
   });
 
   it("emits aggregated TikTok gifts with normalized amount and metadata", async () => {
-    const platform = new TikTokPlatform(
-      { ...baseConfig, giftAggregationEnabled: true, giftAggregationDelay: 25 },
-      createDependencies(),
-    );
+    const platform = createPlatform({
+      giftAggregationEnabled: true,
+      giftAggregationDelay: 25,
+    });
     const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,

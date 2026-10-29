@@ -378,6 +378,7 @@ class TikTokPlatform extends EventEmitter {
     declare retryLock: boolean;
     declare _disconnectionInProgress: boolean;
     declare _terminalStreamEndEmitted: boolean;
+    private dataRegistration = 0;
     declare _connectionGeneration: number;
     declare giftAggregation: Record<string, TikTokGiftAggregationState>;
     declare giftAggregationDelay: number;
@@ -794,6 +795,7 @@ class TikTokPlatform extends EventEmitter {
         const adapter = this._createEventRouterPlatformAdapter();
         if (isTikTokEventListenerSetupCurrent(adapter)) return;
         this._connectionGeneration += 1;
+        this.dataRegistration += 1;
         this._terminalStreamEndEmitted = false;
         setupTikTokEventListeners(adapter);
     }
@@ -1560,10 +1562,12 @@ class TikTokPlatform extends EventEmitter {
     }
 
     cleanupEventListeners() {
+        this.dataRegistration += 1;
         cleanupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
     async cleanup(cancelRecovery = true) {
+        this.cleanupEventListeners();
         if (cancelRecovery) {
             this.isPlannedDisconnection = true;
             this.retrySystem?.cancelConnectionRetry?.('tiktok');
@@ -1601,7 +1605,6 @@ class TikTokPlatform extends EventEmitter {
             );
         }
 
-        this.cleanupEventListeners();
         this.listenersConfigured = false;
 
         this.connectionStateManager.cleanup();
@@ -1907,10 +1910,13 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async _handleStandardEvent(eventType: string, data: unknown, options: StandardEventOptions = {}) {
+        const registration = this.dataRegistration;
+        const isCurrent = () => registration === this.dataRegistration;
         const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}`;
         const emitType = options.emitType || eventType;
         try {
             await this._logRawEvent(options.logEventType || emitType, data);
+            if (!isCurrent()) return { success: false };
             const normalizedInput = {
                 ...asRecord(data),
                 avatarUrl: this._resolveAvatarUrl(data)
@@ -1923,6 +1929,7 @@ class TikTokPlatform extends EventEmitter {
             this._emitPlatformEvent(emitType, eventData);
             return { success: true };
         } catch (error) {
+            if (!isCurrent()) return { success: false };
             return this._handleEventProcessingError(emitType, data, error);
         }
     }
