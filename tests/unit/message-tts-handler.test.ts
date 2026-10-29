@@ -49,7 +49,7 @@ describe('MessageTTSHandler', () => {
             });
             expect(stages[1]).toEqual({
                 text: 'TestUser says Thanks for the stream!',
-                delay: 4000,
+                delay: 0,
                 type: 'message'
             });
         });
@@ -91,7 +91,7 @@ describe('MessageTTSHandler', () => {
             });
             expect(stages[1]).toEqual({
                 text: 'TwitchUser says Love this channel!',
-                delay: 4000,
+                delay: 0,
                 type: 'message'
             });
         });
@@ -109,7 +109,7 @@ describe('MessageTTSHandler', () => {
             expect(stages).toHaveLength(2);
             expect(stages[1]).toEqual({
                 text: 'RenewalUser says Still here after three months!',
-                delay: 4000,
+                delay: 0,
                 type: 'message'
             });
         });
@@ -186,7 +186,7 @@ describe('MessageTTSHandler', () => {
             expect(stages).toHaveLength(1);
             expect(stages[0]).toEqual({
                 text: 'TestUser says Thanks!',
-                delay: 4000,
+                delay: 0,
                 type: 'message'
             });
         });
@@ -353,9 +353,9 @@ describe('MessageTTSHandler', () => {
     });
 
     describe('getMessageDelay', () => {
-        test('should return 4000ms delay for SuperChat', () => {
+        test('should return 0ms delay for SuperChat', () => {
             const notification = { type: 'platform:gift', isSuperChat: true };
-            expect(MessageTTSHandler.getMessageDelay(notification)).toBe(4000);
+            expect(MessageTTSHandler.getMessageDelay(notification)).toBe(0);
         });
 
         test('should return paypiggy delay for canonical paypiggy messages', () => {
@@ -363,9 +363,9 @@ describe('MessageTTSHandler', () => {
             expect(MessageTTSHandler.getMessageDelay(notification)).toBe(MessageTTSHandler.MESSAGE_DELAYS.paypiggy);
         });
 
-        test('should return 3000ms delay for Twitch bits', () => {
+        test('should return 0ms delay for Twitch bits', () => {
             const notification = { type: 'platform:gift', giftType: 'bits', currency: 'bits' };
-            expect(MessageTTSHandler.getMessageDelay(notification)).toBe(3000);
+            expect(MessageTTSHandler.getMessageDelay(notification)).toBe(0);
         });
 
         test('should return 0ms delay for TikTok comments', () => {

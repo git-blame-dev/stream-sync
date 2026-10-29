@@ -21,8 +21,8 @@ type TtsStage = {
 
 class MessageTTSHandler {
     static MESSAGE_DELAYS = {
-        paypiggy: 4000,
-        bits: 3000,
+        paypiggy: 0,
+        bits: 0,
         comment: 0
     } as const;
 
@@ -112,7 +112,7 @@ class MessageTTSHandler {
 
         if (notification?.isComment === true) return this.MESSAGE_DELAYS.comment;
 
-        return 4000;
+        return 0;
     }
 
     static isPaypiggyWithMessage(notification: MessageTtsNotification): boolean {

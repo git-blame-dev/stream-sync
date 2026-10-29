@@ -28,6 +28,37 @@ function createTestLogger() {
 }
 
 describe('NeuralTtsProcessManager', () => {
+    it("is a no-op during ensureStarted() when both ttsNotificationsEnabled and ttsChatEnabled are false", async () => {
+        let fetchCalled = 0;
+        let spawnCalled = 0;
+        const { logger } = createTestLogger();
+        const manager = new NeuralTtsProcessManager({
+            config: {
+                obs: {
+                    ttsNotificationsEnabled: false,
+                    ttsChatEnabled: false,
+                    neuralTtsCommand: "neural-tts serve"
+                }
+            },
+            logger,
+            fetch: async () => {
+                fetchCalled += 1;
+                return new Response(null, { status: 200 });
+            },
+            spawn: () => {
+                spawnCalled += 1;
+                return { kill: () => true };
+            }
+        });
+
+        await manager.ensureStarted();
+
+        expect(fetchCalled).toBe(0);
+        expect(spawnCalled).toBe(0);
+        expect(manager.spawnedByUs).toBe(false);
+        expect(manager.hasAcquiredLease).toBe(false);
+    });
+
     it('spawns neuralTtsCommand when /health is unreachable, waits for 200 OK, acquires lease, and tears down on stop() when should_shutdown is true', async () => {
         const requests: RecordedRequest[] = [];
         const spawnedCommands: Array<{ command: string; options: unknown }> = [];
@@ -60,7 +91,10 @@ describe('NeuralTtsProcessManager', () => {
             }
 
             if (url.endsWith('/v1/lease/acquire')) {
-                return new Response(JSON.stringify({ active_clients: 1 }), { status: 200 });
+                return new Response(
+                    JSON.stringify({ active_clients: 1, active_jobs: 0 }),
+                    { status: 200, headers: { 'content-type': 'application/json' } }
+                );
             }
 
             if (url.endsWith('/v1/lease/release')) {
@@ -75,7 +109,10 @@ describe('NeuralTtsProcessManager', () => {
             }
 
             if (url.endsWith('/v1/shutdown')) {
-                return new Response(JSON.stringify({ status: 'shutting_down' }), { status: 200 });
+                return new Response(
+                    JSON.stringify({ shutting_down: true }),
+                    { status: 200, headers: { 'content-type': 'application/json' } }
+                );
             }
 
             return new Response(null, { status: 404 });
@@ -86,7 +123,7 @@ describe('NeuralTtsProcessManager', () => {
         const manager = new NeuralTtsProcessManager({
             config: {
                 obs: {
-                    ttsMethod: 'neural-tts',
+                    ttsNotificationsEnabled: true,
                     neuralTtsEndpoint: 'http://127.0.0.1:8765',
                     neuralTtsCommand: 'neural-tts serve --port 8765'
                 }
@@ -107,6 +144,7 @@ describe('NeuralTtsProcessManager', () => {
         await manager.ensureStarted();
 
         expect(manager.spawnedByUs).toBe(true);
+        expect(manager.hasAcquiredLease).toBe(true);
         expect(spawnedCommands).toEqual([
             {
                 command: 'neural-tts serve --port 8765',
@@ -123,6 +161,7 @@ describe('NeuralTtsProcessManager', () => {
 
         await manager.stop();
 
+        expect(manager.hasAcquiredLease).toBe(false);
         expect(requests.slice(4).map((r) => [r.method, r.url])).toEqual([
             ['POST', 'http://127.0.0.1:8765/v1/lease/release'],
             ['POST', 'http://127.0.0.1:8765/v1/shutdown']
@@ -154,7 +193,10 @@ describe('NeuralTtsProcessManager', () => {
                     return new Response(JSON.stringify({ ready: true }), { status: 200 });
                 }
                 if (url.endsWith('/v1/lease/acquire')) {
-                    return new Response(JSON.stringify({ active_clients: 1 }), { status: 200 });
+                    return new Response(
+                        JSON.stringify({ active_clients: 1, active_jobs: 0 }),
+                        { status: 200, headers: { 'content-type': 'application/json' } }
+                    );
                 }
                 if (url.endsWith('/v1/lease/release')) {
                     return new Response(JSON.stringify(releasePayload), {
@@ -169,7 +211,7 @@ describe('NeuralTtsProcessManager', () => {
             const manager = new NeuralTtsProcessManager({
                 config: {
                     obs: {
-                        ttsMethod: 'neural-tts',
+                        ttsNotificationsEnabled: true,
                         neuralTtsCommand: 'neural-tts serve'
                     }
                 },
@@ -188,6 +230,7 @@ describe('NeuralTtsProcessManager', () => {
 
             await manager.ensureStarted();
             expect(manager.spawnedByUs).toBe(true);
+            expect(manager.hasAcquiredLease).toBe(true);
 
             await manager.stop();
 
@@ -216,23 +259,25 @@ describe('NeuralTtsProcessManager', () => {
                 return new Response(JSON.stringify({ ready: true }), { status: 200 });
             }
             if (url.endsWith('/v1/lease/acquire')) {
-                return new Response(null, { status: 404 }); // Also verifies 404 on older servers is ignored gracefully
+                return new Response(
+                    JSON.stringify({ active_clients: 1, active_jobs: 0 }),
+                    { status: 200, headers: { 'content-type': 'application/json' } }
+                );
             }
             if (url.endsWith('/v1/lease/release')) {
                 return new Response(
                     JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: true }),
-                    { status: 200 }
+                    { status: 200, headers: { 'content-type': 'application/json' } }
                 );
             }
             return new Response(null, { status: 200 });
         };
 
-        let currentTime = 0;
         const { logger } = createTestLogger();
         const manager = new NeuralTtsProcessManager({
             config: {
                 obs: {
-                    ttsMethod: 'neural-tts',
+                    ttsNotificationsEnabled: true,
                     neuralTtsCommand: 'neural-tts serve'
                 }
             },
@@ -242,8 +287,8 @@ describe('NeuralTtsProcessManager', () => {
                 spawnCalled += 1;
                 return { kill: () => true };
             },
-            delay: async (ms) => { currentTime += ms; },
-            now: () => currentTime,
+            pollIntervalMs: 1,
+            warmupTimeoutMs: 100,
             clientId: 'synthetic-external-client'
         });
 
@@ -251,6 +296,7 @@ describe('NeuralTtsProcessManager', () => {
 
         expect(spawnCalled).toBe(0);
         expect(manager.spawnedByUs).toBe(false);
+        expect(manager.hasAcquiredLease).toBe(true);
         expect(requests.map((r) => [r.method, r.url])).toEqual([
             ['GET', 'http://127.0.0.1:8765/health'],
             ['POST', 'http://127.0.0.1:8765/v1/lease/acquire'],
@@ -265,12 +311,276 @@ describe('NeuralTtsProcessManager', () => {
         expect(requests.some((r) => r.url.endsWith('/v1/shutdown'))).toBe(false);
     });
 
+    it('leaves hasAcquiredLease false when lease acquisition fails and prevents stop() from releasing, shutting down, or killing the process', async () => {
+        const failureCases: Array<{
+            label: string;
+            onAcquire: () => Promise<Response>;
+        }> = [
+            {
+                label: 'HTTP 404',
+                onAcquire: async () => new Response(null, { status: 404 })
+            },
+            {
+                label: 'HTTP 500',
+                onAcquire: async () => new Response('internal error', { status: 500 })
+            },
+            {
+                label: 'malformed JSON missing active_jobs',
+                onAcquire: async () => new Response(JSON.stringify({ active_clients: 1 }), { status: 200 })
+            },
+            {
+                label: 'network timeout',
+                onAcquire: async () => {
+                    throw new Error('Request timed out');
+                }
+            }
+        ];
+
+        for (const failureCase of failureCases) {
+            const requests: RecordedRequest[] = [];
+            const killedSignals: Array<NodeJS.Signals | number | undefined> = [];
+            let healthCalls = 0;
+
+            const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+                const url = String(input);
+                const method = init?.method || 'GET';
+                requests.push({ url, method });
+
+                if (url.endsWith('/health')) {
+                    healthCalls += 1;
+                    if (healthCalls === 1) {
+                        throw new Error('ECONNREFUSED');
+                    }
+                    return new Response(JSON.stringify({ ready: true }), { status: 200 });
+                }
+                if (url.endsWith('/v1/lease/acquire')) {
+                    return await failureCase.onAcquire();
+                }
+                return new Response(null, { status: 200 });
+            };
+
+            const { logger, warnings } = createTestLogger();
+            const manager = new NeuralTtsProcessManager({
+                config: {
+                    obs: {
+                        ttsNotificationsEnabled: true,
+                        neuralTtsCommand: 'neural-tts serve'
+                    }
+                },
+                logger,
+                fetch,
+                spawn: () => ({
+                    pid: 7777,
+                    kill: (signal) => {
+                        killedSignals.push(signal);
+                        return true;
+                    }
+                }),
+                delay: async () => {},
+                clientId: `synthetic-acquire-fail-${failureCase.label}`
+            });
+
+            await manager.ensureStarted();
+
+            expect(manager.spawnedByUs).toBe(true);
+            expect(manager.hasAcquiredLease).toBe(false);
+            expect(warnings.length).toBeGreaterThan(0);
+
+            await manager.stop();
+
+            expect(requests.some((r) => r.url.endsWith('/v1/lease/release'))).toBe(false);
+            expect(requests.some((r) => r.url.endsWith('/v1/shutdown'))).toBe(false);
+            expect(killedSignals).toEqual([]);
+        }
+    });
+
+    it('keeps the spawned child process alive without calling /v1/shutdown when lease release fails or returns malformed/non-shutdown payloads', async () => {
+        const releaseCases: Array<{
+            label: string;
+            onRelease: () => Promise<Response>;
+        }> = [
+            {
+                label: 'HTTP 500',
+                onRelease: async () => new Response('release failed', { status: 500 })
+            },
+            {
+                label: 'network timeout',
+                onRelease: async () => {
+                    throw new Error('Release request timed out');
+                }
+            },
+            {
+                label: 'empty object missing fields',
+                onRelease: async () => new Response(JSON.stringify({}), { status: 200 })
+            },
+            {
+                label: 'should_shutdown false',
+                onRelease: async () => new Response(
+                    JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: false }),
+                    { status: 200 }
+                )
+            }
+        ];
+
+        for (const releaseCase of releaseCases) {
+            const requests: RecordedRequest[] = [];
+            const killedSignals: Array<NodeJS.Signals | number | undefined> = [];
+            let healthCalls = 0;
+
+            const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+                const url = String(input);
+                const method = init?.method || 'GET';
+                requests.push({ url, method });
+
+                if (url.endsWith('/health')) {
+                    healthCalls += 1;
+                    if (healthCalls === 1) {
+                        throw new Error('ECONNREFUSED');
+                    }
+                    return new Response(JSON.stringify({ ready: true }), { status: 200 });
+                }
+                if (url.endsWith('/v1/lease/acquire')) {
+                    return new Response(
+                        JSON.stringify({ active_clients: 1, active_jobs: 0 }),
+                        { status: 200 }
+                    );
+                }
+                if (url.endsWith('/v1/lease/release')) {
+                    return await releaseCase.onRelease();
+                }
+                return new Response(null, { status: 200 });
+            };
+
+            const { logger, infos } = createTestLogger();
+            const manager = new NeuralTtsProcessManager({
+                config: {
+                    obs: {
+                        ttsNotificationsEnabled: true,
+                        neuralTtsCommand: 'neural-tts serve'
+                    }
+                },
+                logger,
+                fetch,
+                spawn: () => ({
+                    pid: 8888,
+                    kill: (signal) => {
+                        killedSignals.push(signal);
+                        return true;
+                    }
+                }),
+                delay: async () => {},
+                clientId: `synthetic-release-fail-${releaseCase.label}`
+            });
+
+            await manager.ensureStarted();
+            expect(manager.hasAcquiredLease).toBe(true);
+
+            await manager.stop();
+
+            expect(requests.some((r) => r.url.endsWith('/v1/lease/release'))).toBe(true);
+            expect(requests.some((r) => r.url.endsWith('/v1/shutdown'))).toBe(false);
+            expect(killedSignals).toEqual([]);
+            expect(infos.some((msg) => msg.includes('Keeping Neural TTS service alive'))).toBe(true);
+        }
+    });
+
+    it('keeps the spawned child process alive when /v1/shutdown returns 409, 500, invalid payload, or throws', async () => {
+        const shutdownCases: Array<{
+            label: string;
+            onShutdown: () => Promise<Response>;
+        }> = [
+            {
+                label: 'HTTP 409 Conflict',
+                onShutdown: async () => new Response(JSON.stringify({ shutting_down: false }), { status: 409 })
+            },
+            {
+                label: 'HTTP 500 Internal Server Error',
+                onShutdown: async () => new Response('server error', { status: 500 })
+            },
+            {
+                label: 'network timeout',
+                onShutdown: async () => {
+                    throw new Error('Shutdown request timed out');
+                }
+            },
+            {
+                label: 'shutting_down false',
+                onShutdown: async () => new Response(JSON.stringify({ shutting_down: false }), { status: 200 })
+            }
+        ];
+
+        for (const shutdownCase of shutdownCases) {
+            const requests: RecordedRequest[] = [];
+            const killedSignals: Array<NodeJS.Signals | number | undefined> = [];
+            let healthCalls = 0;
+
+            const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+                const url = String(input);
+                const method = init?.method || 'GET';
+                requests.push({ url, method });
+
+                if (url.endsWith('/health')) {
+                    healthCalls += 1;
+                    if (healthCalls === 1) {
+                        throw new Error('ECONNREFUSED');
+                    }
+                    return new Response(JSON.stringify({ ready: true }), { status: 200 });
+                }
+                if (url.endsWith('/v1/lease/acquire')) {
+                    return new Response(
+                        JSON.stringify({ active_clients: 1, active_jobs: 0 }),
+                        { status: 200 }
+                    );
+                }
+                if (url.endsWith('/v1/lease/release')) {
+                    return new Response(
+                        JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: true }),
+                        { status: 200 }
+                    );
+                }
+                if (url.endsWith('/v1/shutdown')) {
+                    return await shutdownCase.onShutdown();
+                }
+                return new Response(null, { status: 200 });
+            };
+
+            const { logger } = createTestLogger();
+            const manager = new NeuralTtsProcessManager({
+                config: {
+                    obs: {
+                        ttsNotificationsEnabled: true,
+                        neuralTtsCommand: 'neural-tts serve'
+                    }
+                },
+                logger,
+                fetch,
+                spawn: () => ({
+                    pid: 9999,
+                    kill: (signal) => {
+                        killedSignals.push(signal);
+                        return true;
+                    }
+                }),
+                delay: async () => {},
+                clientId: `synthetic-shutdown-fail-${shutdownCase.label}`
+            });
+
+            await manager.ensureStarted();
+            expect(manager.hasAcquiredLease).toBe(true);
+
+            await manager.stop();
+
+            expect(requests.some((r) => r.url.endsWith('/v1/shutdown'))).toBe(true);
+            expect(killedSignals).toEqual([]);
+        }
+    });
+
     it('rejects non-loopback endpoints during ensureStarted() and logs warning on warmup timeout without crashing', async () => {
         const { logger, warnings } = createTestLogger();
         const invalidManager = new NeuralTtsProcessManager({
             config: {
                 obs: {
-                    ttsMethod: 'neural-tts',
+                    ttsNotificationsEnabled: true,
                     neuralTtsEndpoint: 'http://example.test:8765'
                 }
             },
@@ -283,7 +593,7 @@ describe('NeuralTtsProcessManager', () => {
         const timeoutManager = new NeuralTtsProcessManager({
             config: {
                 obs: {
-                    ttsMethod: 'neural-tts',
+                    ttsNotificationsEnabled: true,
                     neuralTtsEndpoint: 'http://127.0.0.1:8765',
                     neuralTtsCommand: 'neural-tts serve'
                 }
@@ -307,7 +617,7 @@ describe('NeuralTtsProcessManager', () => {
         const h = await createMainPresentationFixture();
         h.config.logging.file.enabled = false;
         h.config.logging.chat.enabled = false;
-        h.config.obs.ttsMethod = 'neural-tts';
+        h.config.obs.ttsNotificationsEnabled = true;
         h.config.obs.neuralTtsEndpoint = 'http://127.0.0.1:8765';
         const requests: string[] = [];
         const leaseBodies: unknown[] = [];
@@ -318,7 +628,7 @@ describe('NeuralTtsProcessManager', () => {
             requests.push(path);
             if (path.startsWith('/v1/lease/')) leaseBodies.push(JSON.parse(String(init?.body)));
             if (path === '/health') return new Response('{}', { status: 200 });
-            if (path === '/v1/lease/acquire') return new Response('{}', { status: 200 });
+            if (path === '/v1/lease/acquire') return new Response(JSON.stringify({ active_clients: 1, active_jobs: 0 }), { status: 200 });
             if (path === '/v1/lease/release') lifecycle.push('lease released');
             if (path === '/v1/lease/release') return new Response(JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: false }), { status: 200 });
             throw new Error(`Unexpected synthetic neural request: ${path}`);
@@ -353,7 +663,7 @@ describe('NeuralTtsProcessManager', () => {
         const h = await createMainPresentationFixture();
         h.config.logging.file.enabled = false;
         h.config.logging.chat.enabled = false;
-        h.config.obs.ttsMethod = 'neural-tts';
+        h.config.obs.ttsNotificationsEnabled = true;
         h.config.obs.neuralTtsEndpoint = 'https://synthetic.invalid';
         try {
             await h.start();

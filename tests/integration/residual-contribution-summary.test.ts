@@ -1,7 +1,10 @@
 import { afterEach, expect, it } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import NotificationManager from '../../src/notifications/NotificationManager';
+import NotificationManager, { type NotificationPreparationResult } from '../../src/notifications/NotificationManager';
 import { createDonationSpamDetection, createSpamDetectionConfig } from '../../src/utils/spam-detection';
+import { createDisplayQueue } from '../../src/obs/display-queue';
+import { createOperatorControlService } from '../../src/services/operator/operator-control-service';
+import { createFundingGoalService } from '../../src/services/funding-goal-service';
 import { noOpLogger } from '../helpers/mock-factories';
 import { createConfigFixture } from '../helpers/config-fixture';
 import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../helpers/bun-timers';
@@ -43,6 +46,139 @@ function harness(limit = 2, enabled = true) {
     };
     const payloads = () => queued.map(item => item.data as Record<string, unknown>);
     return { detector, manager, send, flush, queued, payloads };
+}
+
+function createMemoryFs() {
+    const files = new Map<string, string>();
+    return {
+        readFile: async (path: string) => {
+            const value = files.get(path);
+            if (value === undefined) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+            return value;
+        },
+        mkdir: async () => undefined,
+        writeFile: async (path: string, data: string) => { files.set(path, data); },
+        rename: async (from: string, to: string) => {
+            const value = files.get(from);
+            if (value !== undefined) {
+                files.set(to, value);
+                files.delete(from);
+            }
+        },
+        unlink: async (path: string) => { files.delete(path); }
+    };
+}
+
+async function createRealOwnerHarness(options: {
+    maxQueueSize?: number;
+    maxIndividualNotifications?: number;
+    getVFXConfig?: (commandKey: string, message: string | null) => Promise<unknown> | unknown;
+} = {}) {
+    useFakeTimers();
+    const fs = createMemoryFs();
+    const config = createConfigFixture({
+        general: { giftsEnabled: true, paypiggiesEnabled: true },
+        youtube: { giftsEnabled: true },
+        twitch: { giftsEnabled: true },
+        tiktok: { giftsEnabled: true },
+        obs: { enabled: false, ttsChatEnabled: false, ttsNotificationsEnabled: false },
+        displayQueue: { autoProcess: false, maxQueueSize: options.maxQueueSize ?? 100, rowIntervalMs: 0 },
+        fundingGoal: { enabled: true, id: 'test-funding', label: 'Test Funding', targetUsd: 100 },
+        monetizationValues: {
+            tiktokGiftUnitUsd: 0.01,
+            twitchBitUsd: 0.01,
+            youtubeJewelUsd: 0.01,
+            tiktokMembershipUsd: 5,
+            twitchMembershipUsd: 5,
+            youtubeMembershipUsd: 5
+        }
+    });
+    const operatorControlService = await createOperatorControlService({
+        defaults: {
+            messagesEnabled: true, commandsEnabled: true, greetingsEnabled: true, farewellsEnabled: true,
+            followsEnabled: true, giftsEnabled: true, paypiggiesEnabled: true, raidsEnabled: true, sharesEnabled: true
+        },
+        fs
+    });
+    const funding = await createFundingGoalService({
+        config: config.fundingGoal,
+        monetizationValuesConfig: config.monetizationValues,
+        fiatToUsd: (amount, currency) => currency.trim().toUpperCase() === 'USD' ? amount : null,
+        fs
+    });
+    const eventBus = new EventEmitter();
+    const rows: Record<string, unknown>[] = [];
+    eventBus.on('display:row', row => { rows.push(row as Record<string, unknown>); });
+    const queue = createDisplayQueue(
+        { isReady: async () => false, call: async () => ({}) },
+        {
+            autoProcess: false,
+            maxQueueSize: options.maxQueueSize ?? 100,
+            rowIntervalMs: 0,
+            obs: config.obs,
+            ttsChatEnabled: false,
+            ttsNotificationsEnabled: false
+        },
+        { PRIORITY_LEVELS },
+        eventBus,
+        {
+            operatorControls: operatorControlService,
+            sourcesManager: { updateTextSource: async () => undefined, clearTextSource: async () => undefined },
+            goalsManager: { processDonationGoal: async () => ({ success: true }), processPaypiggyGoal: async () => ({ success: true }), initializeGoalDisplay: async () => undefined } as never,
+            delay: async () => undefined,
+            notificationDelay: async () => undefined,
+            onPresentationStarted: async (item) => {
+                if (Array.isArray(item.data.contributions)) {
+                    await funding.processPresentedContributions(item.data.contributions);
+                }
+            }
+        }
+    );
+    const summaries: Promise<NotificationPreparationResult>[] = [];
+    const detector = createDonationSpamDetection(createSpamDetectionConfig({
+        enabled: true,
+        lowValueThreshold: 5,
+        detectionWindow: 1,
+        maxIndividualNotifications: options.maxIndividualNotifications ?? 1
+    }, { logger: noOpLogger }), {
+        logger: noOpLogger,
+        autoCleanup: false,
+        onAggregatedDonation: summary => { summaries.push(manager.handleAggregatedDonation(summary)); }
+    });
+    detectors.push(detector);
+    const manager = new NotificationManager({
+        logger: noOpLogger,
+        constants: { NOTIFICATION_CONFIGS, PRIORITY_LEVELS },
+        eventBus,
+        config,
+        displayQueue: queue,
+        donationSpamDetector: detector,
+        ...(options.getVFXConfig ? { vfxCommandService: { getVFXConfig: options.getVFXConfig } } : {})
+    });
+    const sendGift = (id: string, overrides: Record<string, unknown> = {}, platform = 'youtube') =>
+        manager.handleNotification('platform:gift', platform, {
+            id,
+            timestamp: '2026-01-01T00:00:00.000Z',
+            userId: 'test-donor',
+            username: 'Test Donor',
+            giftType: 'Super Chat',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD',
+            ...overrides
+        });
+    const drain = async () => { await queue.processQueue(); };
+    return {
+        detector,
+        manager,
+        queue,
+        operatorControlService,
+        funding,
+        summaries,
+        rows,
+        sendGift,
+        drain
+    };
 }
 
 it('admits first two gifts and only their suppressed residual with original replay inputs', async () => {
@@ -174,4 +310,226 @@ it('captures ordinary membership and no-id replay inputs exactly without generat
         membershipLevel: 'test-level', isRenewal: true, giftType: 'Rose', giftCount: 1, amount: 5, currency: 'coins'
     } }]);
     expect(Object.isFrozen(sources[0]?.data)).toBe(true);
+});
+
+it('admits residual summary through real queue and credits funding only upon presentation without double-crediting replays', async () => {
+    const { queue, funding, summaries, rows, sendGift, drain } = await createRealOwnerHarness();
+    try {
+        expect((await sendGift('test-gift-1')).success).toBe(true);
+        expect((await sendGift('test-gift-2')).suppressed).toBe(true);
+        expect((await sendGift('test-gift-3')).suppressed).toBe(true);
+
+        advanceTimersByTime(1000);
+        const results = await Promise.all(summaries);
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({
+            success: true,
+            notificationType: 'platform:gift',
+            platform: 'youtube'
+        });
+        expect(queue.getQueueLength()).toBe(2);
+        expect(funding.snapshot.currentUsd).toBe(0);
+
+        await drain();
+        expect(rows).toHaveLength(2);
+        const aggregatedContributions = (rows[1]?.data as Record<string, unknown>)?.contributions as NotificationContribution[];
+        expect(aggregatedContributions.map(c => c.data.id)).toEqual(['test-gift-2', 'test-gift-3']);
+        expect(funding.snapshot.currentUsd).toBe(15);
+
+        await funding.processPresentedContributions([
+            ...(rows[0]?.data as { contributions: NotificationContribution[] }).contributions,
+            ...aggregatedContributions
+        ]);
+        expect(funding.snapshot.currentUsd).toBe(15);
+    } finally {
+        await queue.stop();
+        await funding.dispose();
+    }
+});
+
+it('declines aggregated summaries on muted, full, and stopped queues without retrying or crediting funding', async () => {
+    const muted = await createRealOwnerHarness();
+    try {
+        expect((await muted.sendGift('test-gift-1')).success).toBe(true);
+        expect((await muted.sendGift('test-gift-2')).suppressed).toBe(true);
+        await muted.drain();
+        expect(muted.funding.snapshot.currentUsd).toBe(5);
+
+        await muted.operatorControlService.setEnabled('giftsEnabled', false);
+        advanceTimersByTime(1000);
+        const [mutedResult] = await Promise.all(muted.summaries);
+        expect(mutedResult).toMatchObject({
+            success: false,
+            disabled: true,
+            reason: 'Display queue declined notification',
+            notificationType: 'platform:gift',
+            platform: 'youtube'
+        });
+        expect(Object.values(muted.detector.donationSpamTracker)[0]?.pending).toEqual([]);
+
+        await muted.operatorControlService.setEnabled('giftsEnabled', true);
+        advanceTimersByTime(2000);
+        await muted.drain();
+        expect(muted.rows).toHaveLength(1);
+        expect(muted.funding.snapshot.currentUsd).toBe(5);
+    } finally {
+        await muted.queue.stop();
+        await muted.funding.dispose();
+    }
+
+    const full = await createRealOwnerHarness({ maxQueueSize: 1 });
+    try {
+        expect((await full.sendGift('test-gift-1')).success).toBe(true);
+        expect((await full.sendGift('test-gift-2')).suppressed).toBe(true);
+        expect(full.queue.getQueueLength()).toBe(1);
+
+        advanceTimersByTime(1000);
+        const [fullResult] = await Promise.all(full.summaries);
+        expect(fullResult).toMatchObject({
+            success: false,
+            error: 'Display queue error'
+        });
+        expect(Object.values(full.detector.donationSpamTracker)[0]?.pending).toEqual([]);
+
+        await full.drain();
+        expect(full.rows).toHaveLength(1);
+        expect(full.funding.snapshot.currentUsd).toBe(5);
+    } finally {
+        await full.queue.stop();
+        await full.funding.dispose();
+    }
+
+    const stopped = await createRealOwnerHarness();
+    try {
+        expect((await stopped.sendGift('test-gift-1')).success).toBe(true);
+        expect((await stopped.sendGift('test-gift-2')).suppressed).toBe(true);
+
+        await stopped.queue.stop();
+        advanceTimersByTime(1000);
+        const [stoppedResult] = await Promise.all(stopped.summaries);
+        expect(stoppedResult).toMatchObject({
+            success: false,
+            error: 'Display queue error'
+        });
+        expect(Object.values(stopped.detector.donationSpamTracker)[0]?.pending).toEqual([]);
+        expect(stopped.funding.snapshot.currentUsd).toBe(0);
+    } finally {
+        await stopped.funding.dispose();
+    }
+});
+
+it('isolates concurrent arrivals while aggregated summary preparation is held and queue mutes, fills, or stops before admission', async () => {
+    for (const mode of ['muted', 'full', 'stopped'] as const) {
+        const vfxEntered = Promise.withResolvers<void>();
+        const vfxRelease = Promise.withResolvers<void>();
+        let holdNextVfx = false;
+        const h = await createRealOwnerHarness({
+            maxQueueSize: mode === 'full' ? 1 : 100,
+            getVFXConfig: async () => {
+                if (holdNextVfx) {
+                    holdNextVfx = false;
+                    vfxEntered.resolve();
+                    await vfxRelease.promise;
+                }
+                return null;
+            }
+        });
+        try {
+            expect((await h.sendGift('test-gift-1')).success).toBe(true);
+            expect((await h.sendGift('test-gift-2')).suppressed).toBe(true);
+            await h.drain();
+            expect(h.funding.snapshot.currentUsd).toBe(5);
+
+            holdNextVfx = true;
+            advanceTimersByTime(1000);
+            await vfxEntered.promise;
+            expect(h.summaries).toHaveLength(1);
+
+            const lateArrival = await h.sendGift('test-gift-late');
+            expect(lateArrival.suppressed).toBe(true);
+
+            if (mode === 'muted') {
+                await h.operatorControlService.setEnabled('giftsEnabled', false);
+            } else if (mode === 'full') {
+                expect((await h.sendGift('test-gift-filler', { amount: 10 })).success).toBe(true);
+            } else {
+                await h.queue.stop();
+            }
+
+            vfxRelease.resolve();
+            const [firstSummary] = await Promise.all(h.summaries);
+            if (mode === 'muted') {
+                expect(firstSummary).toMatchObject({
+                    success: false,
+                    disabled: true,
+                    reason: 'Display queue declined notification',
+                    notificationType: 'platform:gift',
+                    platform: 'youtube'
+                });
+            } else {
+                expect(firstSummary).toMatchObject({
+                    success: false,
+                    error: 'Display queue error'
+                });
+            }
+            expect(h.funding.snapshot.currentUsd).toBe(5);
+
+            const tracker = Object.values(h.detector.donationSpamTracker)[0];
+            expect(tracker?.pending?.map(item => item.contribution?.data.id)).toEqual(['test-gift-late']);
+
+            if (mode === 'muted') {
+                await h.operatorControlService.setEnabled('giftsEnabled', true);
+                advanceTimersByTime(1000);
+                const allSummaries = await Promise.all(h.summaries);
+                expect(allSummaries).toHaveLength(2);
+                expect(allSummaries[1]).toMatchObject({
+                    success: true,
+                    notificationType: 'platform:gift',
+                    platform: 'youtube'
+                });
+
+                await h.drain();
+                expect(h.rows).toHaveLength(2);
+                const secondContributions = (h.rows[1]?.data as Record<string, unknown>)?.contributions as NotificationContribution[];
+                expect(secondContributions.map(c => c.data.id)).toEqual(['test-gift-late']);
+                expect(h.funding.snapshot.currentUsd).toBe(10);
+            } else if (mode === 'full') {
+                await h.drain();
+                expect(h.funding.snapshot.currentUsd).toBe(15);
+                advanceTimersByTime(1000);
+                const allSummaries = await Promise.all(h.summaries);
+                expect(allSummaries).toHaveLength(2);
+                expect(allSummaries[1]).toMatchObject({
+                    success: true,
+                    notificationType: 'platform:gift',
+                    platform: 'youtube'
+                });
+                await h.drain();
+                expect(h.funding.snapshot.currentUsd).toBe(20);
+            }
+        } finally {
+            await h.queue.stop();
+            await h.funding.dispose();
+        }
+    }
+});
+
+it('returns structured failure disposition when aggregated donation transformation throws', async () => {
+    const { manager } = harness();
+    const invalidSummary = {
+        platform: 'tiktok',
+        userId: 'test-donor',
+        username: 'Test Donor',
+        giftTypes: [],
+        totalGifts: 0,
+        totalCoins: 0,
+        message: ''
+    };
+    const result = await manager.handleAggregatedDonation(invalidSummary);
+    expect(result).toMatchObject({
+        success: false,
+        notificationType: 'platform:gift',
+        platform: 'tiktok'
+    });
+    expect(typeof result.error).toBe('string');
 });

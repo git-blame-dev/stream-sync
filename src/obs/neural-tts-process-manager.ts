@@ -25,7 +25,8 @@ export type NeuralTtsSpawn = (
 ) => SpawnedProcessLike | ChildProcess;
 
 export type NeuralTtsObsConfig = {
-    ttsMethod?: string;
+    ttsChatEnabled?: boolean;
+    ttsNotificationsEnabled?: boolean;
     neuralTtsEndpoint?: string;
     neuralTtsCommand?: string;
     [key: string]: unknown;
@@ -47,11 +48,47 @@ export type NeuralTtsProcessManagerOptions = {
     pollIntervalMs?: number;
 };
 
-type LeaseReleasePayload = {
-    active_clients?: unknown;
-    active_jobs?: unknown;
-    should_shutdown?: unknown;
+type ValidatedLeaseAcquirePayload = {
+    active_clients: number;
+    active_jobs: number;
 };
+
+type ValidatedLeaseReleasePayload = {
+    active_clients: number;
+    active_jobs: number;
+    should_shutdown: boolean;
+};
+
+function isValidLeaseAcquirePayload(body: unknown): body is ValidatedLeaseAcquirePayload {
+    if (!body || typeof body !== 'object') {
+        return false;
+    }
+    const candidate = body as Record<string, unknown>;
+    return (
+        typeof candidate.active_clients === 'number' &&
+        Number.isInteger(candidate.active_clients) &&
+        candidate.active_clients >= 1 &&
+        typeof candidate.active_jobs === 'number' &&
+        Number.isInteger(candidate.active_jobs) &&
+        candidate.active_jobs >= 0
+    );
+}
+
+function isValidLeaseReleasePayload(body: unknown): body is ValidatedLeaseReleasePayload {
+    if (!body || typeof body !== 'object') {
+        return false;
+    }
+    const candidate = body as Record<string, unknown>;
+    return (
+        typeof candidate.active_clients === 'number' &&
+        Number.isInteger(candidate.active_clients) &&
+        candidate.active_clients >= 0 &&
+        typeof candidate.active_jobs === 'number' &&
+        Number.isInteger(candidate.active_jobs) &&
+        candidate.active_jobs >= 0 &&
+        typeof candidate.should_shutdown === 'boolean'
+    );
+}
 
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -96,7 +133,7 @@ export class NeuralTtsProcessManager {
 
     spawnedByUs: boolean = false;
     childProcess: SpawnedProcessLike | ChildProcess | null = null;
-    private hasAcquiredLease: boolean = false;
+    hasAcquiredLease: boolean = false;
 
     constructor(options: NeuralTtsProcessManagerOptions) {
         this.config = options.config;
@@ -112,12 +149,12 @@ export class NeuralTtsProcessManager {
     }
 
     async ensureStarted(): Promise<void> {
-        if (this.config?.obs?.ttsMethod !== 'neural-tts') {
+        if (this.config?.obs?.ttsNotificationsEnabled === false && this.config?.obs?.ttsChatEnabled !== true) {
             return;
         }
 
         const root = validateNeuralTtsEndpoint(
-            typeof this.config.obs.neuralTtsEndpoint === 'string'
+            typeof this.config?.obs?.neuralTtsEndpoint === 'string'
                 ? this.config.obs.neuralTtsEndpoint
                 : undefined
         );
@@ -140,7 +177,7 @@ export class NeuralTtsProcessManager {
             return;
         }
 
-        const command = typeof this.config.obs.neuralTtsCommand === 'string'
+        const command = typeof this.config?.obs?.neuralTtsCommand === 'string'
             ? this.config.obs.neuralTtsCommand.trim()
             : '';
 
@@ -181,7 +218,9 @@ export class NeuralTtsProcessManager {
         }
 
         await this.acquireLease(root);
-        this.logger.info('Neural TTS service ready and lease acquired', 'NeuralTtsProcessManager');
+        if (this.hasAcquiredLease) {
+            this.logger.info('Neural TTS service ready and lease acquired', 'NeuralTtsProcessManager');
+        }
     }
 
     async stop(): Promise<void> {
@@ -196,34 +235,43 @@ export class NeuralTtsProcessManager {
                     ? this.config.obs.neuralTtsEndpoint
                     : undefined
             );
-        } catch {
-            if (this.spawnedByUs && this.childProcess) {
-                this.terminateChildProcess();
-            }
+        } catch (error) {
+            this.logger.warn(
+                `Skipping Neural TTS stop due to invalid endpoint: ${getErrorMessage(error)}; keeping process alive`,
+                'NeuralTtsProcessManager'
+            );
             return;
         }
 
-        const releaseInfo = await this.releaseLease(root);
+        if (!this.hasAcquiredLease) {
+            this.logger.warn(
+                'Neural TTS lease ownership was not established; keeping service alive without shutdown',
+                'NeuralTtsProcessManager',
+                {
+                    spawnedByUs: this.spawnedByUs
+                }
+            );
+            return;
+        }
+
         this.hasAcquiredLease = false;
+        const releaseInfo = await this.releaseLease(root);
 
-        const activeClients = typeof releaseInfo?.active_clients === 'number' ? releaseInfo.active_clients : 0;
-        const activeJobs = typeof releaseInfo?.active_jobs === 'number' ? releaseInfo.active_jobs : 0;
-        const shouldShutdown = releaseInfo?.should_shutdown;
-
-        const otherConsumerActive =
-            shouldShutdown === false ||
-            activeClients > 0 ||
-            activeJobs > 0;
-
-        if (!this.spawnedByUs || otherConsumerActive) {
+        if (
+            !this.spawnedByUs ||
+            releaseInfo === null ||
+            releaseInfo.should_shutdown !== true ||
+            releaseInfo.active_clients > 0 ||
+            releaseInfo.active_jobs > 0
+        ) {
             this.logger.info(
                 'Keeping Neural TTS service alive for external session or other active consumers',
                 'NeuralTtsProcessManager',
                 {
                     spawnedByUs: this.spawnedByUs,
-                    activeClients,
-                    activeJobs,
-                    shouldShutdown: shouldShutdown ?? null
+                    activeClients: releaseInfo?.active_clients ?? null,
+                    activeJobs: releaseInfo?.active_jobs ?? null,
+                    shouldShutdown: releaseInfo?.should_shutdown ?? null
                 }
             );
             return;
@@ -231,7 +279,7 @@ export class NeuralTtsProcessManager {
 
         this.logger.info('Shutting down Neural TTS service (no other active consumers)...', 'NeuralTtsProcessManager');
         const shutdownAccepted = await this.requestShutdown(root);
-        if (shutdownAccepted) {
+        if (shutdownAccepted === true) {
             this.terminateChildProcess();
         }
     }
@@ -284,6 +332,7 @@ export class NeuralTtsProcessManager {
     }
 
     private async acquireLease(root: string): Promise<void> {
+        this.hasAcquiredLease = false;
         try {
             const response = await this.fetch(`${root}/v1/lease/acquire`, {
                 method: 'POST',
@@ -292,13 +341,22 @@ export class NeuralTtsProcessManager {
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ client_id: this.clientId })
             });
-            this.hasAcquiredLease = true;
-            if (!response.ok && response.status !== 404) {
+            if (!response.ok) {
                 this.logger.warn(
                     `Neural TTS lease acquire returned HTTP ${response.status}`,
                     'NeuralTtsProcessManager'
                 );
+                return;
             }
+            const body: unknown = await response.json().catch(() => null);
+            if (!isValidLeaseAcquirePayload(body)) {
+                this.logger.warn(
+                    'Neural TTS lease acquire returned an invalid payload',
+                    'NeuralTtsProcessManager'
+                );
+                return;
+            }
+            this.hasAcquiredLease = true;
         } catch (error) {
             this.logger.warn(
                 `Failed to acquire Neural TTS lease: ${getErrorMessage(error)}`,
@@ -307,7 +365,7 @@ export class NeuralTtsProcessManager {
         }
     }
 
-    private async releaseLease(root: string): Promise<LeaseReleasePayload | null> {
+    private async releaseLease(root: string): Promise<ValidatedLeaseReleasePayload | null> {
         try {
             const response = await this.fetch(`${root}/v1/lease/release`, {
                 method: 'POST',
@@ -317,11 +375,30 @@ export class NeuralTtsProcessManager {
                 body: JSON.stringify({ client_id: this.clientId })
             });
             if (!response.ok) {
+                this.logger.warn(
+                    `Neural TTS lease release returned HTTP ${response.status}`,
+                    'NeuralTtsProcessManager'
+                );
                 return null;
             }
-            const body = await response.json().catch(() => null);
-            return body && typeof body === 'object' ? (body as LeaseReleasePayload) : null;
-        } catch {
+            const body: unknown = await response.json().catch(() => null);
+            if (!isValidLeaseReleasePayload(body)) {
+                this.logger.warn(
+                    'Neural TTS lease release returned an invalid payload',
+                    'NeuralTtsProcessManager'
+                );
+                return null;
+            }
+            return {
+                active_clients: body.active_clients,
+                active_jobs: body.active_jobs,
+                should_shutdown: body.should_shutdown
+            };
+        } catch (error) {
+            this.logger.warn(
+                `Failed to release Neural TTS lease: ${getErrorMessage(error)}`,
+                'NeuralTtsProcessManager'
+            );
             return null;
         }
     }
@@ -340,9 +417,32 @@ export class NeuralTtsProcessManager {
                 );
                 return false;
             }
+            if (!response.ok) {
+                this.logger.warn(
+                    `Neural TTS shutdown failed with HTTP ${response.status}; keeping process alive`,
+                    'NeuralTtsProcessManager'
+                );
+                return false;
+            }
+            const body: unknown = await response.json().catch(() => null);
+            if (
+                !body ||
+                typeof body !== 'object' ||
+                (body as { shutting_down?: unknown }).shutting_down !== true
+            ) {
+                this.logger.warn(
+                    'Neural TTS shutdown returned an invalid payload; keeping process alive',
+                    'NeuralTtsProcessManager'
+                );
+                return false;
+            }
             return true;
-        } catch {
-            return true;
+        } catch (error) {
+            this.logger.warn(
+                `Failed to request Neural TTS shutdown: ${getErrorMessage(error)}; keeping process alive`,
+                'NeuralTtsProcessManager'
+            );
+            return false;
         }
     }
 }

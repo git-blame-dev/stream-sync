@@ -246,16 +246,22 @@ class NotificationManager extends EventEmitter {
     }
 
 
-    async handleAggregatedDonation(aggregatedData: AggregatedDonationInput) {
+    async handleAggregatedDonation(aggregatedData: AggregatedDonationInput): Promise<NotificationPreparationResult> {
         try {
             this.logger.info(`[Aggregated] Processing aggregated donation from ${aggregatedData.username} on ${aggregatedData.platform}: ${aggregatedData.message}`, 'notification-manager');
 
             const syntheticGiftData = createSyntheticGiftFromAggregated(aggregatedData);
 
-            await this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
+            return await this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
 
         } catch (error) {
             this._handleNotificationError(`Error handling aggregated donation: ${getErrorMessage(error)}`, error, { aggregatedData }, { eventType: 'aggregated-donation' });
+            return {
+                success: false,
+                error: getErrorMessage(error),
+                notificationType: 'platform:gift',
+                platform: aggregatedData.platform
+            };
         }
     }
 
