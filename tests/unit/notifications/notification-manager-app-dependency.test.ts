@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   createMockFn,
@@ -14,7 +15,7 @@ initializeTestLogging();
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[unknown], void>;
+  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
   getQueueLength: TestMockFn<[], number>;
 };
 
@@ -54,7 +55,7 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn<[unknown], void>(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
 
@@ -108,7 +109,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
 
@@ -122,7 +122,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -144,7 +143,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          obsGoals: { processDonationGoal: createMockFn() },
           config: mockConfig,
         });
       }).toThrow("NotificationManager requires displayQueue dependency");
@@ -156,7 +154,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
 
@@ -171,7 +168,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           displayQueue: mockDisplayQueue,
           logger: noOpLogger,
           constants: require("../../../src/core/constants"),
-          obsGoals: { processDonationGoal: createMockFn() },
           config: mockConfig,
         });
       }).toThrow("NotificationManager requires EventBus dependency");
@@ -189,7 +185,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          obsGoals: { processDonationGoal: createMockFn() },
         });
       }).toThrow("NotificationManager requires config dependency");
     });
@@ -205,7 +200,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
 
@@ -223,7 +217,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
 
@@ -251,7 +244,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -289,7 +281,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -322,7 +313,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          obsGoals: { processDonationGoal: createMockFn() },
         });
       }).toThrow("NotificationManager requires config dependency");
     });
@@ -346,7 +336,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -377,7 +366,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -409,7 +397,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
 
@@ -459,7 +446,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          obsGoals: { processDonationGoal: createMockFn() },
           config: nullConfig,
         });
       }).toThrow("NotificationManager requires config dependency");

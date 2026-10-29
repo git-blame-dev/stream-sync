@@ -126,8 +126,10 @@ export function GuiShell({
 
     scrollDockToBottom()
     if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(scrollDockToBottom)
+      const frame = requestAnimationFrame(scrollDockToBottom)
+      return () => cancelAnimationFrame(frame)
     }
+    return undefined
   }, [mode, rowEntries])
 
   const renderedRows = mode === 'overlay'

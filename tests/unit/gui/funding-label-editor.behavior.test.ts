@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import React from "react";
 import TestRenderer, { act, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 
@@ -9,12 +9,18 @@ function button(renderer: ReactTestRenderer, label: string): ReactTestInstance {
     ?? (() => { throw new Error(`Missing ${label} button`); })();
 }
 
+let renderer: ReactTestRenderer | undefined;
+afterEach(() => {
+  const mounted = renderer;
+  renderer = undefined;
+  act(() => mounted?.unmount());
+});
+
 describe("FundingLabelEditor", () => {
   test("requires an explicit edit and saves a validated label", async () => {
     let focused = 0;
     let selected = 0;
     const saved: string[] = [];
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = TestRenderer.create(React.createElement(FundingLabelEditor, {
         goal: { label: "🎮 New Controller", labelOverridden: false },
@@ -44,7 +50,6 @@ describe("FundingLabelEditor", () => {
 
   test("cancels drafts, rejects invalid labels, and exposes config reset only for overrides", () => {
     let reset = 0;
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = TestRenderer.create(React.createElement(FundingLabelEditor, {
         goal: { label: "🎙️ New Microphone", labelOverridden: true },

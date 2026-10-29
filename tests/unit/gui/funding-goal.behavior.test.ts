@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
@@ -32,9 +32,15 @@ function renderedText(value: unknown): string {
   return "";
 }
 
+let renderer: ReactTestRenderer | undefined;
+afterEach(() => {
+  const mounted = renderer;
+  renderer = undefined;
+  act(() => mounted?.unmount());
+});
+
 describe("FundingGoal", () => {
   test("renders funded standard copy while preserving the over-goal raised amount", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, { goal: goal() }));
     });
@@ -56,7 +62,6 @@ describe("FundingGoal", () => {
   });
 
   test("renders incomplete standard copy with the raised amount above the goal caption", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ currentUsd: 25, completed: false }),
@@ -70,7 +75,6 @@ describe("FundingGoal", () => {
   });
 
   test("renders stable left-to-right particles inside the standard progress rail", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, { goal: goal() }));
     });
@@ -84,7 +88,6 @@ describe("FundingGoal", () => {
   });
 
   test("marks standard copy funded when the amount reaches the target", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ currentUsd: 100, completed: false }),
@@ -96,7 +99,6 @@ describe("FundingGoal", () => {
   });
 
   test("renders the minimal goal badge with compact amount copy", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ currentUsd: 25, completed: false }),
@@ -112,7 +114,6 @@ describe("FundingGoal", () => {
   });
 
   test("marks the minimal goal funded from target-reaching progress", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ currentUsd: 100, completed: false }),
@@ -125,7 +126,6 @@ describe("FundingGoal", () => {
   });
 
   test("renders the left-to-right particle canvas inside the minimal progress rail", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ currentUsd: 25, completed: false }),
@@ -140,7 +140,6 @@ describe("FundingGoal", () => {
   });
 
   test("keeps a joined Unicode emoji together in the visible label", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, {
         goal: goal({ label: "👨‍💻 Build setup", currentUsd: 25, completed: false }),
@@ -152,7 +151,6 @@ describe("FundingGoal", () => {
   });
 
   test("renders nothing when the configured goal is disabled", () => {
-    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(React.createElement(FundingGoal, { goal: goal({ enabled: false }) }));
     });

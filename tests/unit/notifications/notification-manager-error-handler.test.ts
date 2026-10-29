@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   createMockFn,
@@ -19,7 +20,7 @@ type NotificationManagerLike = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>>;
   addToQueue: ReturnType<typeof createMockFn>;
   processQueue: ReturnType<typeof createMockFn>;
   isQueueEmpty: TestMockFn<[], boolean>;
@@ -40,7 +41,7 @@ describe("NotificationManager error handling", () => {
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       addToQueue: createMockFn(),
       processQueue: createMockFn(),
       isQueueEmpty: createMockFn<[], boolean>().mockReturnValue(true),
@@ -59,7 +60,6 @@ describe("NotificationManager error handling", () => {
       displayQueue: mockDisplayQueue,
       eventBus: mockEventBus,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
       config: createConfigFixture(),
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -107,7 +107,7 @@ describe("NotificationManager error handling", () => {
   });
 
   test("handles notification successfully when display queue works", async () => {
-    mockDisplayQueue.addItem.mockReturnValue(undefined);
+    mockDisplayQueue.addItem.mockImplementation(item => [item]);
 
     const result = await manager.handleNotification(
       "platform:follow",

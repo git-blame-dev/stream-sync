@@ -11,6 +11,7 @@ import {
   parseAppearanceState,
   parseOperatorState,
   selectNewestState,
+  selectSessionSnapshot,
   toggleLevel,
   type LogEntry,
   type OperatorState,
@@ -19,7 +20,6 @@ import {
   type AppearanceValue,
   FUNDING_ADJUSTMENTS_USD,
   parseFundingGoalSnapshot,
-  selectNewestFundingGoal,
   type FundingGoalSnapshot,
 } from './model'
 import './operator.css'
@@ -42,11 +42,13 @@ function useEventStream(
   statusRef.current = onStatus
 
   useEffect(() => {
+    let active = true
     const source = new EventSource(url)
-    const receives = Object.entries(handlersRef.current).map(([event, handler]) => {
+    const receives = Object.keys(handlersRef.current).map((event) => {
       const receive = (message: MessageEvent) => {
+        if (!active) return
         try {
-          handler(JSON.parse(message.data) as unknown)
+          handlersRef.current[event]?.(JSON.parse(message.data) as unknown)
         } catch {
           statusRef.current('Invalid data')
         }
@@ -54,9 +56,10 @@ function useEventStream(
       source.addEventListener(event, receive)
       return [event, receive] as const
     })
-    source.onopen = () => statusRef.current('Live')
-    source.onerror = () => statusRef.current('Reconnecting')
+    source.onopen = () => { if (active) statusRef.current('Live') }
+    source.onerror = () => { if (active) statusRef.current('Reconnecting') }
     return () => {
+      active = false
       for (const [event, receive] of receives) source.removeEventListener(event, receive)
       source.close()
     }
@@ -94,7 +97,7 @@ function OperatorApp() {
   const receiveState = (value: unknown) => {
     const next = parseOperatorState(value)
     if (next) {
-      setState((current) => selectNewestState(current, next))
+      setState((current) => selectNewestState(current, next, 'stream'))
     } else {
       setStateStreamStatus('Invalid data')
     }
@@ -109,16 +112,18 @@ function OperatorApp() {
   }
   const receiveAppearance = (value: unknown) => {
     const next = parseAppearanceState(value)
-    if (next) setAppearance((current) => selectNewestAppearance(current, next))
+    if (next) setAppearance((current) => selectNewestAppearance(current, next, 'stream'))
     else setStateStreamStatus('Invalid data')
   }
   const receiveFundingGoal = (value: unknown) => {
     const next = parseFundingGoalSnapshot(value)
-    if (next) setFundingGoal((current) => selectNewestFundingGoal(current, next))
+    if (next) setFundingGoal((current) => selectSessionSnapshot(current, next, 'stream'))
     else setStateStreamStatus('Invalid data')
   }
-  const resetLogs = () => {
+  const resetLogs = (value: unknown) => {
+    if (!value || typeof value !== 'object' || !('truncated' in value) || value.truncated !== true) return
     setLogs([])
+    setPausedLogs(current => current === null ? null : [])
   }
 
   useEventStream('/api/v1/operator/events', { state: receiveState, appearance: receiveAppearance, 'funding-goal': receiveFundingGoal }, setStateStreamStatus)
@@ -140,7 +145,7 @@ function OperatorApp() {
     request('/api/v1/operator/funding-goal').then((value) => {
       const next = parseFundingGoalSnapshot(value)
       if (!next) throw new Error('Invalid funding goal response')
-      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+      setFundingGoal((current) => selectSessionSnapshot(current, next))
     }).catch((requestError: unknown) => setError(requestError instanceof Error ? requestError.message : 'Unable to load funding goal'))
   }, [])
 
@@ -242,7 +247,7 @@ function OperatorApp() {
         body: JSON.stringify({ operation, amountUsd }),
       }))
       if (!next) throw new Error('Invalid funding goal response')
-      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+      setFundingGoal((current) => selectSessionSnapshot(current, next))
       setSetTotalDraft('')
     } catch (mutationError: unknown) {
       setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal')
@@ -260,7 +265,7 @@ function OperatorApp() {
         body: JSON.stringify(operation === 'set-label' ? { operation, label } : { operation }),
       }))
       if (!next) throw new Error('Invalid funding goal response')
-      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+      setFundingGoal((current) => selectSessionSnapshot(current, next))
       return true
     } catch (mutationError: unknown) {
       setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal label')
@@ -553,7 +558,7 @@ function OperatorApp() {
   )
 }
 
-const root = document.getElementById('operator-root')
+const root = typeof document === 'undefined' ? null : document.getElementById('operator-root')
 if (root) {
   createRoot(root).render(<OperatorApp />)
 }

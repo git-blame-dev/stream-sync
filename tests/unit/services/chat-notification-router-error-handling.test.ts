@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -5,7 +6,7 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
 type TestConfig = ReturnType<typeof createConfigFixture>;
-type QueueItem = Record<string, unknown>;
+type QueueItem = DisplayQueueItem;
 type ChatMessage = {
   message: string;
   displayName: string;
@@ -13,13 +14,13 @@ type ChatMessage = {
   userId: string;
   timestamp: string;
 };
-type DisplayQueueAddItem = TestMockFn<[QueueItem], void>;
+type DisplayQueueAddItem = TestMockFn<[QueueItem], readonly QueueItem[]>;
 type RouterRuntime = {
   config: TestConfig;
   platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
   displayQueue: {
     addItem: DisplayQueueAddItem;
-    addSequence: TestMockFn<[QueueItem[]], void>;
+    addSequence: TestMockFn<[QueueItem[]], readonly QueueItem[]>;
   };
   commandCooldownService: {
     checkUserCooldown: TestMockFn<[userId: unknown, perUserCooldown: number, heavyCooldown: number], boolean>;
@@ -61,8 +62,9 @@ describe("ChatNotificationRouter error handling", () => {
     },
     displayQueue: {
       addItem: displayQueueBehavior,
-      addSequence: createMockFn<[QueueItem[]], void>((items) => {
+      addSequence: createMockFn<[QueueItem[]], readonly QueueItem[]>((items) => {
         items.forEach((item) => displayQueueBehavior(item));
+        return items;
       }),
     },
     commandCooldownService: {
@@ -82,7 +84,7 @@ describe("ChatNotificationRouter error handling", () => {
 
   it("handles display queue failures gracefully without crashing", async () => {
     const runtime = createRuntime(
-      createMockFn<[QueueItem], void>().mockImplementation(() => {
+      createMockFn<[QueueItem], readonly QueueItem[]>((item) => [item]).mockImplementation(() => {
         throw new Error("queue failure");
       }),
     );
@@ -100,7 +102,7 @@ describe("ChatNotificationRouter error handling", () => {
 
   it("handles non-Error thrown values without crashing", async () => {
     const runtime = createRuntime(
-      createMockFn<[QueueItem], void>().mockImplementation(() => {
+      createMockFn<[QueueItem], readonly QueueItem[]>((item) => [item]).mockImplementation(() => {
         throw "string failure";
       }),
     );

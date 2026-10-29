@@ -1,224 +1,125 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { createConfigFixture } from "../../helpers/config-fixture";
-import { PRIORITY_LEVELS } from "../../../src/core/constants";
-
+import { VFXCommandService } from "../../../src/services/VFXCommandService";
 import NotificationManager from "../../../src/notifications/NotificationManager";
+import { createMainPresentationFixture } from "../../helpers/main-presentation-fixture";
+let h: Awaited<ReturnType<typeof createMainPresentationFixture>>;
+let manager: NotificationManager;
+let dispose: (() => Promise<void>) | undefined;
+beforeEach(async () => {
+  dispose = undefined;
+  h = await createMainPresentationFixture();
+  dispose = h.dispose;
+  h.config.general.envFileReadEnabled = false;
+  h.config.general.envFileWriteEnabled = false;
+  h.config.general.logChatMessages = false;
+  h.config.logging.file.enabled = false;
+  h.config.logging.chat.enabled = false;
+  h.config.vfx.filePath = "/synthetic-only";
+  await h.start();
+  const owner = h.runtime.notificationManager;
+  if (!(owner instanceof NotificationManager)) throw new Error("Expected the real runtime notification manager");
+  manager = owner;
+});
+afterEach(async () => {
+  const cleanup = dispose;
+  dispose = undefined;
+  await cleanup?.();
+});
 
-describe("NotificationManager input validation", () => {
-  let originalNodeEnv: string | undefined;
+const donor = { userId: "synthetic-user", username: "Synthetic Viewer" };
 
-  beforeEach(() => {
-    originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "test";
+describe("NotificationManager input validation through real runtime owners", () => {
+  for (const platform of [null, undefined, 123]) it(`rejects ${String(platform)} platform with zero output and a healthy following case`, async () => {
+    const result = await manager.handleNotification("platform:follow", platform, donor);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("platform");
+    expect(h.queue.getQueueLength()).toBe(0);
+    await h.drain();
+    expect(h.rows).toHaveLength(0);
+    expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    expect(h.rows[0]).toMatchObject({ type: "platform:follow", platform: "tiktok", data: donor });
   });
 
-  afterEach(() => {
-    if (originalNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
-    } else {
-      process.env.NODE_ENV = originalNodeEnv;
-    }
-    restoreAllMocks();
+  it("normalizes mixed-case processNotification platform into the admitted canonical item", async () => {
+    await manager.processNotification({ type: "platform:follow", platform: "TikTok", data: donor });
+    expect(h.queue.state.queue).toHaveLength(1);
+    const item = h.queue.state.queue[0];
+    if (!item || !("data" in item) || typeof item.eventId !== "string") throw new Error("Expected one admitted notification item with event ID");
+    expect(item).toMatchObject({ type: "platform:follow", platform: "tiktok", data: {
+      ...donor, displayMessage: "Synthetic Viewer just followed!" } });
+    await h.drain();
+    expect(h.rows).toEqual([{ eventId: item.eventId, type: item.type, platform: item.platform,
+      data: item.data, timestamp: item.data.timestamp }]);
   });
 
-  const createDeps = (overrides: Record<string, unknown> = {}) => ({
-    logger: noOpLogger,
-    displayQueue: {
-      enqueue: createMockFn(),
-      addItem: createMockFn(),
-      getQueueLength: createMockFn(() => 0),
-    },
-    eventBus: {
-      on: createMockFn(),
-      emit: createMockFn(),
-      subscribe: createMockFn(),
-    },
-    config: createConfigFixture(),
-    constants: {
-      PRIORITY_LEVELS,
-      NOTIFICATION_CONFIGS: {
-        "platform:follow": {
-          settingKey: "followsEnabled",
-          commandKey: "follows",
-        },
-        "platform:gift": { settingKey: "giftsEnabled", commandKey: "gifts" },
-      },
-    },
-    obsGoals: { processDonationGoal: createMockFn() },
-    vfxCommandService: {
-      getVFXConfig: createMockFn(() => Promise.resolve(null)),
-    },
-    ...overrides,
+  it("rejects invalid processNotification platform without output and still processes the next item", async () => {
+    await manager.processNotification({ type: "platform:follow", platform: 123, data: donor });
+    await h.drain();
+    expect(h.rows).toHaveLength(0);
+    expect(h.queue.getQueueLength()).toBe(0);
+    await manager.processNotification({ type: "platform:follow", platform: "TikTok", data: donor });
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    expect(h.rows[0]?.platform).toBe("tiktok");
   });
 
-  describe("platform validation", () => {
-    it("returns error for non-string platform instead of throwing", async () => {
-      const deps = createDeps();
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification("platform:follow", null, {
-        username: "testUser",
-        userId: "user123",
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("platform");
-    });
-
-    it("returns error for undefined platform instead of throwing", async () => {
-      const deps = createDeps();
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification(
-        "platform:follow",
-        undefined,
-        { username: "testUser", userId: "user123" },
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("platform");
-    });
-
-    it("returns error for numeric platform instead of throwing", async () => {
-      const deps = createDeps();
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification("platform:follow", 123, {
-        username: "testUser",
-        userId: "user123",
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("platform");
-    });
+  it("returns disabled with zero output and resumes when follows are enabled", async () => {
+    h.config.tiktok.followsEnabled = false;
+    expect(await manager.handleNotification("platform:follow", "tiktok", donor)).toMatchObject({ success: false, disabled: true });
+    await h.drain();
+    expect(h.rows).toHaveLength(0);
+    expect(h.queue.getQueueLength()).toBe(0);
+    h.config.tiktok.followsEnabled = true;
+    expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
   });
 
-  describe("processNotification platform normalization", () => {
-    it("normalizes platform case in processNotification", async () => {
-      const deps = createDeps();
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.processNotification({
-        type: "platform:follow",
-        platform: "TikTok",
-        data: { username: "testUser", userId: "user123" },
-      });
-
-      expect(result).not.toBeInstanceOf(Error);
-    });
+  for (const debugEnabled of [false, true]) it(`admits exact follow copy with debug=${debugEnabled}`, async () => {
+    h.config.general.debugEnabled = debugEnabled;
+    expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+    expect(h.queue.state.queue).toHaveLength(1);
+    expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:follow", platform: "tiktok", data: { ...donor, displayMessage: "Synthetic Viewer just followed!" } });
   });
 
-  describe("error handling - graceful degradation", () => {
-    it("returns disabled when notifications disabled in config", async () => {
-      const deps = createDeps();
-      deps.config = createConfigFixture({ general: { followsEnabled: false } });
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification(
-        "platform:follow",
-        "tiktok",
-        { username: "testUser", userId: "user123" },
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.disabled).toBe(true);
-    });
-
-    it("continues processing when debug disabled in config", async () => {
-      const deps = createDeps();
-      deps.config = createConfigFixture({ general: { debugEnabled: false } });
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification(
-        "platform:follow",
-        "tiktok",
-        { username: "testUser", userId: "user123" },
-      );
-
-      expect(result).toBeDefined();
-      expect(
-        result.error === undefined || !result.error.includes("debug"),
-      ).toBe(true);
-    });
+  it("awaits a single-Rose aggregate and observes its admitted output", async () => {
+    await manager.handleAggregatedDonation({ ...donor, platform: "tiktok", message: "test message", giftTypes: ["Rose"], totalGifts: 1, totalCoins: 100 });
+    expect(h.queue.state.queue).toHaveLength(1);
+    expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:gift", platform: "tiktok", data: {
+      ...donor, amount: 100, currency: "coins", giftCount: 1, giftType: "Multiple Gifts (Rose)", isAggregated: true } });
   });
 
-  describe("async handling", () => {
-    it("handleAggregatedDonation is async and can be awaited", async () => {
-      const deps = createDeps();
-      deps.constants.NOTIFICATION_CONFIGS["platform:gift"] = {
-        settingKey: "giftsEnabled",
-        commandKey: "gifts",
-      };
-      const manager = new NotificationManager(deps);
-
-      const result = manager.handleAggregatedDonation({
-        username: "testUser",
-        platform: "tiktok",
-        message: "test message",
-        userId: "user123",
-        giftTypes: ["Rose"],
-        totalGifts: 1,
-        totalCoins: 100,
-      });
-
-      expect(result).toBeInstanceOf(Promise);
-      await result;
-    });
+  for (const config of [null, undefined]) it(`rejects ${String(config)} constructor config`, () => {
+    expect(() => Reflect.construct(NotificationManager, [{ logger: manager.logger, constants: manager.constants,
+      eventBus: h.bus, displayQueue: h.queue, config }])).toThrow("config");
   });
 
-  describe("config loading safety", () => {
-    it("throws meaningful error when config is null", () => {
-      const deps = createDeps({ config: null });
-
-      expect(() => new NotificationManager(deps)).toThrow("config");
-    });
-
-    it("throws meaningful error when config is undefined", () => {
-      const deps = createDeps({ config: undefined });
-
-      expect(() => new NotificationManager(deps)).toThrow("config");
-    });
+  it("continues admission after the actual VFX config owner throws", async () => {
+    const rootVfx = manager.vfxCommandService;
+    const invalidVfx: VFXCommandService = Reflect.construct(VFXCommandService, [
+      { ...h.config, commands: null, follows: { command: "!synthetic" } }, h.bus,
+    ]);
+    await expect(invalidVfx.getVFXConfig("follows", null)).rejects.toThrow("commandParser");
+    Reflect.set(manager, "vfxCommandService", invalidVfx);
+    try {
+      expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+      expect(h.queue.state.queue).toHaveLength(1);
+      expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:follow", platform: "tiktok", vfxConfig: null,
+        data: { ...donor, displayMessage: "Synthetic Viewer just followed!" } });
+      await h.drain();
+      expect(h.rows).toHaveLength(1);
+    } finally { manager.vfxCommandService = rootVfx; }
+    expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+    await h.drain();
+    expect(h.rows).toHaveLength(2);
   });
 
-  describe("try/catch robustness", () => {
-    it("continues when VFX config throws", async () => {
-      const deps = createDeps();
-      deps.vfxCommandService.getVFXConfig = createMockFn<[], Promise<null>>(
-        async () => {
-          throw new Error("VFX service unavailable");
-        },
-      );
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification(
-        "platform:follow",
-        "tiktok",
-        {
-          username: "testUser",
-          userId: "user123",
-        },
-      );
-
-      expect(result.success).toBe(true);
-    });
-
-    it("continues when debug enabled in config", async () => {
-      const deps = createDeps();
-      deps.config = createConfigFixture({ general: { debugEnabled: true } });
-      const manager = new NotificationManager(deps);
-
-      const result = await manager.handleNotification(
-        "platform:follow",
-        "tiktok",
-        {
-          username: "testUser",
-          userId: "user123",
-        },
-      );
-
-      expect(result.success).toBe(true);
-    });
+  it("continues admission with a non-string optional VFX command", async () => {
+    Reflect.set(h.config.follows, "command", 123);
+    expect((await manager.handleNotification("platform:follow", "tiktok", donor)).success).toBe(true);
+    expect(h.queue.state.queue).toHaveLength(1);
+    expect(h.queue.state.queue[0]).toMatchObject({ type: "platform:follow", data: { ...donor, displayMessage: "Synthetic Viewer just followed!" } });
   });
 });

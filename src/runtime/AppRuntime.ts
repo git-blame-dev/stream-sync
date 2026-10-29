@@ -29,7 +29,7 @@ import type { OperatorAppearanceService } from '../services/operator/operator-ap
 import type { FundingGoalService } from '../services/funding-goal-service';
 import type { TwitchAuth } from '../auth/TwitchAuth';
 
-type RuntimeTwitchAuth = Pick<TwitchAuth, 'isReady' | 'startValidationMonitoring' | 'stopValidationMonitoring'>;
+type RuntimeTwitchAuth = Pick<TwitchAuth, 'isReady' | 'startValidationMonitoring' | 'stopValidationMonitoring' | 'dispose'>;
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -210,6 +210,7 @@ type RuntimeDependencies = RuntimeRecord & {
         connectionManager?: RuntimeObsManager;
         goalsManager?: { initializeGoalDisplay: () => Promise<unknown> | unknown };
         sourcesManager?: RuntimeSourcesManager;
+        effectsManager?: { dispose: () => void };
     };
 };
 
@@ -256,7 +257,9 @@ type SystemReadyPayload = RuntimeRecord & {
 
 const createAppRuntimeErrorHandler = (logger: AppLogger) => createPlatformErrorHandler(logger, 'AppRuntime');
 
-const AVATAR_REQUIRED_NOTIFICATION_TYPES = new Set([
+const notificationInputValidator = new NotificationInputValidator();
+
+const AVATAR_REQUIRED_NOTIFICATION_TYPES = new Set<string>([
     PlatformEvents.CHAT_MESSAGE,
     PlatformEvents.FOLLOW,
     PlatformEvents.SHARE,
@@ -332,21 +335,11 @@ class AppRuntime {
 
         try {
             const isError = options.isError === true;
-            const allowAnonymous = options.isAnonymous === true &&
-                (type === 'platform:gift' || type === 'platform:giftpaypiggy');
-            const allowYouTubeJewelsMissingUserId = allowsYouTubeJewelsMissingUserId({
-                type,
-                platform,
-                currency: options.currency,
-                metadata: options.metadata
-            });
-            if (!username || typeof username !== 'string' || !username.trim()) {
-                if (!isError && !allowAnonymous) {
+            if (!type.startsWith('platform:') && !isError) {
+                if (typeof username !== 'string' || !username.trim()) {
                     throw new Error(`Missing username for ${type} notification`);
                 }
-            }
-            if (!isError) {
-                if (!options.userId && !allowAnonymous && !allowYouTubeJewelsMissingUserId) {
+                if (!options.userId) {
                     throw new Error(`Missing userId for ${type} notification`);
                 }
                 if (!options.timestamp) {
@@ -355,15 +348,13 @@ class AppRuntime {
             }
 
             const notificationData = {
-                ...options
+                ...options,
+                username,
+                platform
             };
-            if (username) {
-                notificationData.username = username;
-            }
             if (options.userId !== undefined) {
                 notificationData.userId = options.userId;
             }
-            notificationData.platform = platform;
             if (options.timestamp !== undefined) {
                 notificationData.timestamp = options.timestamp;
             }
@@ -374,12 +365,21 @@ class AppRuntime {
             }
 
             if (type.startsWith('platform:')) {
-                const validation = new NotificationInputValidator().validateNotificationPayload(notificationData, {
+                const validation = notificationInputValidator.validateNotificationPayload(notificationData, {
                     notificationType: type,
                     platform,
                     requireTimestamp: true
                 });
                 if (!validation.success) {
+                    if (validation.errorType === 'missing-username') {
+                        throw new Error(`Missing username for ${type} notification`);
+                    }
+                    if (validation.errorType === 'missing-user-id') {
+                        throw new Error(`Missing userId for ${type} notification`);
+                    }
+                    if (validation.errorType === 'missing-timestamp' && !options.timestamp && !isError) {
+                        throw new Error(`Missing timestamp for ${type} notification`);
+                    }
                     throw new Error(validation.error);
                 }
                 Object.assign(notificationData, validation.payload);
@@ -812,10 +812,9 @@ class AppRuntime {
 
         // Retire admission before the first await, leaving other EventBus owners intact.
         this.displayRetirement = this.runTeardownStep(mode, 'stop display queue', () => this.displayQueue.stop?.());
-        if (this.twitchMonitorOwned) {
-            this.twitchMonitorOwned = false;
-            retirement.push(this.runTeardownStep(mode, 'stop Twitch validation monitoring', () => this.twitchAuth?.stopValidationMonitoring()));
-        }
+        this.twitchMonitorOwned = false;
+        retirement.push(this.runTeardownStep(mode, 'dispose Twitch auth', () => this.twitchAuth?.dispose()));
+        retirement.push(this.runTeardownStep(mode, 'dispose OBS effects', () => this.dependencies.obs?.effectsManager?.dispose()));
         retirement.push(this.runTeardownStep(mode, 'dispose platform event router', () => this.platformEventRouter.dispose()));
         const unsubscribeVfx = this.vfxCommandUnsubscribe;
         this.vfxCommandUnsubscribe = null;
@@ -1303,22 +1302,6 @@ class AppRuntime {
             }
         }
 
-        let giftVFXConfig = null;
-        if (this.vfxCommandService && typeof this.vfxCommandService.getVFXConfig === 'function') {
-            try {
-                giftVFXConfig = await this.vfxCommandService.getVFXConfig('gifts', null);
-            } catch (vfxError) {
-                this._handleAppRuntimeError(
-                    `Error resolving gift VFX config: ${getErrorMessage(vfxError)}`,
-                    vfxError,
-                    null,
-                    { eventType: 'notification', logContext: 'system' }
-                );
-            }
-        } else {
-            throw new Error('VFXCommandService unavailable for gift notification');
-        }
-
         const notificationType = typeof options.type === 'string' && options.type.trim()
             ? options.type
             : 'platform:gift';
@@ -1341,7 +1324,6 @@ class AppRuntime {
             ...(amount !== undefined ? { amount } : {}),
             ...(currency ? { currency } : {}),
             ...(repeatCount !== undefined ? { repeatCount } : {}),
-            vfxConfig: giftVFXConfig,
             ...(giftId ? { id: giftId } : {})
         };
 
@@ -1432,7 +1414,7 @@ class AppRuntime {
 
     async handleEnvelopeNotification(platform: string, data: NotificationOptions) {
         try {
-            this.logger.info(`[Envelope] Treasure chest event on ${platform}`, platform);
+            this.logger.info(`[Envelope] Envelope event on ${platform}`, platform);
             if (!data || typeof data !== 'object') {
                 throw new Error('handleEnvelopeNotification requires data');
             }

@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -27,7 +28,7 @@ describe("NotificationManager behavior", () => {
     logger: noOpLogger,
     displayQueue: {
       enqueue: createMockFn(),
-      addItem: createMockFn(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       getQueueLength: createMockFn(() => 0),
     },
     eventBus: {
@@ -42,7 +43,6 @@ describe("NotificationManager behavior", () => {
         follow: { settingKey: "followsEnabled", commandKey: "follows" },
       },
     },
-    obsGoals: { processDonationGoal: createMockFn() },
     ...overrides,
   });
 
@@ -83,7 +83,7 @@ describe("NotificationManager behavior", () => {
   it("returns canonical result envelope from handleGiftNotification wrapper", async () => {
     const manager = new NotificationManager(createDeps());
     const expectedResult = {
-      success: false,
+      success: false as const,
       error: "Notifications disabled",
       notificationType: "platform:gift",
       platform: "twitch",

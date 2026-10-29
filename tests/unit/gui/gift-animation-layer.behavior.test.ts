@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import React from "react";
+import { advanceTimersByTime, getTimerCount, useFakeTimers, useRealTimers } from "../../helpers/bun-timers";
 import TestRenderer from "react-test-renderer";
 
 import { GiftAnimationLayer } from "../../../gui/src/shared/components/GiftAnimationLayer";
@@ -107,20 +108,20 @@ function installDomRuntime(
   const previousDocument = global.document;
   const previousHtmlMediaElement = global.HTMLMediaElement;
   const previousTimeStamp = console.timeStamp;
-  const rafCallbacks: FrameRequestCallback[] = [];
-  const timeoutCallbacks: Array<() => void> = [];
+  useFakeTimers();
+  const timerBaseline = getTimerCount();
+  const rafCallbacks = new Map<number, FrameRequestCallback>();
+  let nextRaf = 0;
 
   const windowMock = {
     requestAnimationFrame: (callback: FrameRequestCallback) => {
-      rafCallbacks.push(callback);
-      return rafCallbacks.length;
+      const handle = ++nextRaf;
+      rafCallbacks.set(handle, callback);
+      return handle;
     },
-    cancelAnimationFrame: createMockFn(),
-    setTimeout: (callback: () => void) => {
-      timeoutCallbacks.push(callback);
-      return timeoutCallbacks.length;
-    },
-    clearTimeout: createMockFn(),
+    cancelAnimationFrame: createMockFn((handle: number) => rafCallbacks.delete(handle)),
+    setTimeout: global.setTimeout,
+    clearTimeout: createMockFn((handle: ReturnType<typeof setTimeout>) => global.clearTimeout(handle)),
   };
 
   global.window = windowMock as unknown as Window & typeof globalThis;
@@ -142,19 +143,20 @@ function installDomRuntime(
 
   return {
     windowMock,
+    timerBaseline,
+    get pendingRafCount() { return rafCallbacks.size; },
     runNextAnimationFrame() {
-      const callback = rafCallbacks.shift();
-      if (typeof callback === "function") {
-        callback(0);
+      const first = rafCallbacks.entries().next().value;
+      if (first) {
+        rafCallbacks.delete(first[0]);
+        first[1](0);
       }
     },
-    runLatestTimeout() {
-      const callback = timeoutCallbacks[timeoutCallbacks.length - 1];
-      if (typeof callback === "function") {
-        callback();
-      }
+    advanceTime(milliseconds = 3000) {
+      advanceTimersByTime(milliseconds);
     },
     restore() {
+      useRealTimers();
       if (previousWindow !== undefined) {
         global.window = previousWindow;
       } else {
@@ -232,7 +234,7 @@ describe("GiftAnimationLayer behavior", () => {
           retainedLoad?.();
           retainedEnd?.();
           harness.runNextAnimationFrame();
-          harness.runLatestTimeout();
+          harness.advanceTime();
         });
         expect(completions).toEqual(["canvas-unavailable"]);
         expect(video.onloadeddata).toBeNull();
@@ -268,7 +270,7 @@ describe("GiftAnimationLayer behavior", () => {
       const end = video.onended!;
       await TestRenderer.act(async () => load());
       expect(completions).toEqual(["play-rejected"]);
-      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.runLatestTimeout(); });
+      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.advanceTime(); });
       expect(completions).toEqual(["play-rejected"]);
       expect(video.play.mock.calls).toHaveLength(1);
     } finally {
@@ -276,6 +278,80 @@ describe("GiftAnimationLayer behavior", () => {
       harness.restore();
     }
   });
+  for (const [durationMs, deadline] of [[2400, 2900], [100, 1000]] as const) {
+    it(`honors the actual ${deadline}ms deadline for duration ${durationMs}`, async () => {
+      const harness = installDomRuntime();
+      const video = createVideoNode();
+      const completions: string[] = [];
+      let renderer!: TestRenderer.ReactTestRenderer;
+      try {
+        await TestRenderer.act(async () => {
+          renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+            effect: createEffect({ durationMs }), onComplete: (_id, reason) => completions.push(reason),
+          }), { createNodeMock: element => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+        });
+        await TestRenderer.act(async () => video.onloadeddata?.());
+        expect(getTimerCount()).toBe(harness.timerBaseline + 1);
+        expect(harness.pendingRafCount).toBe(1);
+        await TestRenderer.act(async () => harness.advanceTime(deadline - 1));
+        expect(completions).toEqual([]);
+        await TestRenderer.act(async () => harness.advanceTime(1));
+        expect(completions).toEqual(["timeout"]);
+        expect(getTimerCount()).toBe(harness.timerBaseline);
+        expect(harness.pendingRafCount).toBe(0);
+      } finally {
+        await TestRenderer.act(async () => renderer?.unmount());
+        harness.restore();
+      }
+    });
+  }
+
+  for (const retirement of ["ended", "error", "replacement", "unmount"] as const) {
+    it(`cancels scheduled work on ${retirement} before the old deadline`, async () => {
+      const harness = installDomRuntime();
+      const video = createVideoNode();
+      const completions: string[] = [];
+      const onComplete = (id: string, reason: string) => completions.push(`${id}:${reason}`);
+      let renderer!: TestRenderer.ReactTestRenderer;
+      try {
+        await TestRenderer.act(async () => {
+          renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+            effect: createEffect(), onComplete,
+          }), { createNodeMock: element => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+        });
+        const load = video.onloadeddata!;
+        const end = video.onended!;
+        const error = video.onerror!;
+        await TestRenderer.act(async () => load());
+        expect(harness.pendingRafCount).toBe(1);
+        expect(getTimerCount()).toBe(harness.timerBaseline + 1);
+        await TestRenderer.act(async () => {
+          if (retirement === "ended") end();
+          if (retirement === "error") error();
+          if (retirement === "unmount") renderer.unmount();
+          if (retirement === "replacement") renderer.update(React.createElement(GiftAnimationLayer, {
+            effect: createEffect({ playbackId: "synthetic-replacement", durationMs: 6000 }), onComplete,
+          }));
+        });
+        expect(harness.pendingRafCount).toBe(0);
+        expect(getTimerCount()).toBe(harness.timerBaseline + (retirement === "replacement" ? 1 : 0));
+        expect(video.pause.mock.calls).toHaveLength(1);
+        expect(video.removeAttribute.mock.calls).toEqual([["src"]]);
+        const expected = retirement === "ended" ? ["test-playback-id:ended"] : retirement === "error" ? ["test-playback-id:media-error"] : [];
+        expect(completions).toEqual(expected);
+        const playCalls = video.play.mock.calls.length;
+        await TestRenderer.act(async () => { load(); end(); error(); harness.advanceTime(3000); harness.runNextAnimationFrame(); });
+        expect(completions).toEqual(expected);
+        expect(video.play.mock.calls).toHaveLength(playCalls);
+        await TestRenderer.act(async () => renderer.unmount());
+        expect(getTimerCount()).toBe(harness.timerBaseline);
+        expect(harness.pendingRafCount).toBe(0);
+      } finally {
+        await TestRenderer.act(async () => renderer?.unmount());
+        harness.restore();
+      }
+    });
+  }
   beforeEach(() => {
     global.console.timeStamp = global.console.timeStamp || (() => {});
   });
@@ -315,7 +391,7 @@ describe("GiftAnimationLayer behavior", () => {
       await TestRenderer.act(async () => load());
       await TestRenderer.act(async () => renderer.unmount());
       video.paused = true;
-      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.runLatestTimeout(); });
+      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.advanceTime(); });
       expect(completions).toEqual([]);
       expect(video.play.mock.calls).toHaveLength(0);
       expect(video.pause.mock.calls).toHaveLength(1);
@@ -439,7 +515,7 @@ describe("GiftAnimationLayer behavior", () => {
       await TestRenderer.act(async () => {
         videoNode.onended?.();
         videoNode.onerror?.();
-        harness.runLatestTimeout();
+        harness.advanceTime();
       });
 
       expect(onCompleteCalls).toEqual(["test-playback-id"]);
@@ -461,7 +537,7 @@ describe("GiftAnimationLayer behavior", () => {
     });
     const alphaBufferContext = createCanvasContext({
       getImageData: createMockFn(() => ({
-        data: new Uint8ClampedArray([7, 0, 0, 255, 8, 0, 0, 255]),
+        data: new Uint8ClampedArray([2, 97, 98, 99, 3, 101, 102, 103]),
       })),
     });
     let createdCanvasCount = 0;
@@ -527,6 +603,13 @@ describe("GiftAnimationLayer behavior", () => {
         harness.runNextAnimationFrame();
       });
 
+      expect(rgbBufferContext.drawImage.mock.calls[0]).toEqual([videoNode, 0, 0, 2, 1, 0, 0, 2, 1]);
+      expect(alphaBufferContext.drawImage.mock.calls[0]).toEqual([videoNode, 2, 0, 2, 1, 0, 0, 2, 1]);
+      expect(Array.from((rgbBufferContext.putImageData.mock.calls[0]![0] as ImageData).data)).toEqual([
+        0, 0, 0, 0, 4, 5, 6, 3,
+      ]);
+      expect(rgbBufferContext.putImageData.mock.calls[0]!.slice(1)).toEqual([0, 0]);
+      expect(canvasContext.drawImage.mock.calls[0]!.slice(1)).toEqual([0, 0, 2, 1]);
       staleOnEnded = videoNode.onended;
 
       await TestRenderer.act(async () => {
@@ -551,7 +634,7 @@ describe("GiftAnimationLayer behavior", () => {
       );
 
       await TestRenderer.act(async () => {
-        harness.runLatestTimeout();
+        harness.advanceTime();
       });
 
       expect(onCompleteCalls).toEqual(["test-playback-id-2"]);

@@ -73,6 +73,21 @@ describe("NotificationPayloadBuilder", () => {
     expect(result.notificationData.sourceType).toBe("test-source");
   });
 
+  it("preserves amountless jewels provenance in the shared normalization owner", () => {
+    const payloadBuilder = createPayloadBuilder();
+    const result = payloadBuilder.buildPayload({
+      canonicalType: "platform:gift", platform: "youtube", isMonetizationType: true,
+      data: {
+        type: "platform:gift", platform: "youtube", username: "synthetic-viewer",
+        giftType: "Synthetic jewel", giftCount: 1, currency: "jewels",
+        metadata: { missingFields: ["amount", "userId"] },
+      },
+    });
+    expect(result.notificationData.metadata).toEqual({ missingFields: ["amount", "userId"] });
+    expect(result.notificationData.amount).toBeUndefined();
+    expect(result.normalizedData.metadata).toEqual({ missingFields: ["amount", "userId"] });
+  });
+
   it("overwrites notification type with the canonical type", () => {
     const payloadBuilder = createPayloadBuilder();
     const data = {

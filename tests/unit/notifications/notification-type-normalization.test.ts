@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -22,9 +23,9 @@ describe("Notification type normalization", () => {
     items = [];
 
     const displayQueue = {
-      addItem: async (item: QueueItem) => {
+      addItem: (item: DisplayQueueItem) => {
         items.push(item);
-        return true;
+        return [item];
       },
       getQueueLength: () => items.length,
     };
@@ -46,7 +47,6 @@ describe("Notification type normalization", () => {
       displayQueue,
       eventBus,
       constants: require("../../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
       config,
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),

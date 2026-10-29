@@ -15,6 +15,7 @@ const createDisplayQueueStub = () => {
     items,
     addItem: (item: PaypiggyQueueItem) => {
       items.push(item);
+      return [item];
     },
     getQueueLength: () => items.length,
   };
@@ -48,7 +49,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     await manager.handleNotification("platform:paypiggy", "tiktok", {
@@ -79,7 +79,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     await manager.handleNotification("platform:paypiggy", "tiktok", {
@@ -107,7 +106,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("subscription", "twitch", {
@@ -132,7 +130,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("membership", "youtube", {
@@ -157,7 +154,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("subscribe", "twitch", {
@@ -182,7 +178,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("supporter", "twitch", {
@@ -207,7 +202,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("superfan", "tiktok", {
@@ -243,7 +237,6 @@ describe("NotificationManager paypiggy normalization", () => {
           },
           logger: noOpLogger,
           constants,
-          obsGoals: { processDonationGoal: createMockFn() },
         }),
     ).toThrow("config");
     if (originalEnv === undefined) {
@@ -264,7 +257,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("superchat", "youtube", {

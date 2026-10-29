@@ -14,7 +14,7 @@ import { noOpLogger } from "../../helpers/mock-factories";
 type QueuedItem = DisplayQueueItem;
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[QueuedItem], void>;
+  addItem: TestMockFn<[QueuedItem], readonly QueuedItem[]>;
   getQueueLength: TestMockFn<[], number>;
 };
 
@@ -53,8 +53,9 @@ describe("NotificationManager follow/raid/share behavior", () => {
   beforeEach(() => {
     queuedItems = [];
     displayQueue = {
-      addItem: createMockFn<[QueuedItem], void>((item) => {
+      addItem: createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
         queuedItems.push(item);
+        return [item];
       }),
       getQueueLength: createMockFn(() => queuedItems.length),
     };
@@ -92,7 +93,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config,
       eventBus,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
   });
@@ -133,7 +133,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
 
@@ -167,7 +166,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
 
@@ -321,7 +319,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
 

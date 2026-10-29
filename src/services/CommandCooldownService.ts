@@ -5,7 +5,6 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const COOLDOWN_CONFIG_SECTION = 'cooldowns';
 const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
-const GLOBAL_COOLDOWN_EXPIRY_MS = 600000;
 
 interface CooldownsSourceConfig {
     defaultCooldownMs: number;
@@ -239,7 +238,6 @@ class CommandCooldownService {
     }
 
     cleanupExpiredCooldowns(): void {
-        const now = Date.now();
         let cleanedCount = 0;
 
         if (this.userCommandTimestamps.size > this.cooldownConfig.maxEntries) {
@@ -254,12 +252,6 @@ class CommandCooldownService {
             });
 
             this.logger.debug(`Cleaned up ${cleanedCount} old cooldown entries`, 'CommandCooldownService');
-        }
-
-        for (const [commandName, timestamp] of this.globalCommandCooldowns.entries()) {
-            if (now - timestamp > GLOBAL_COOLDOWN_EXPIRY_MS) {
-                this.globalCommandCooldowns.delete(commandName);
-            }
         }
     }
 

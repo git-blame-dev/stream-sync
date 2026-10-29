@@ -254,30 +254,32 @@ class ChatNotificationRouter {
             if (farewellTrigger) {
                 const farewellOutcome = await this.prepareFarewell(platform, safeNormalizedData, farewellTrigger);
                 if (farewellOutcome.status === 'prepared') {
-                    displayCommitted = this.enqueueDisplayItems([
+                    const farewellAllowed = this.checkGlobalCooldown(farewellOutcome.cooldownKey, this.getFarewellCooldownMs());
+                    const admitted = this.enqueueDisplayItems([
                         ...(sourceChatItem ? [sourceChatItem] : []),
-                        farewellOutcome.item
+                        ...(farewellAllowed ? [farewellOutcome.item] : [])
                     ]);
-                    if (displayCommitted) {
+                    displayCommitted = admitted.length > 0;
+                    if (admitted.includes(farewellOutcome.item)) {
                         this.updateGlobalCooldown(farewellOutcome.cooldownKey);
                     }
                     return;
                 }
                 if (farewellOutcome.status === 'handled-without-notification') {
-                    displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
+                    displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []).length > 0;
                     return;
                 }
             }
 
             const commandConfig = await this.detectCommand(sanitizedMessage.message);
             if (commandConfig) {
-                const commandCommitted = await this.processCommand(platform, safeNormalizedData, commandConfig, {
+                const admitted = await this.processCommand(platform, safeNormalizedData, commandConfig, {
                     firstMessageState,
                     greetingsEnabled,
                     greetingProfile,
                     sourceChatItem
                 });
-                displayCommitted = commandCommitted || this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
+                displayCommitted = admitted.length > 0;
                 return;
             }
 
@@ -287,23 +289,24 @@ class ChatNotificationRouter {
                     avatarUrl: safeNormalizedData.avatarUrl,
                     greetingProfile
                 });
-                displayCommitted = this.enqueueDisplayItems([
+                const admitted = this.enqueueDisplayItems([
                     ...(sourceChatItem ? [sourceChatItem] : []),
-                    greetingItem
+                    ...(firstMessageState.isFirstMessage ? [greetingItem] : [])
                 ]);
-                if (displayCommitted) {
+                displayCommitted = admitted.length > 0;
+                if (admitted.includes(greetingItem)) {
                     firstMessageState.consume();
                 }
                 return;
             }
 
-            displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
+            displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []).length > 0;
         } catch (error) {
             const errorDetails = getErrorMessage(error);
             this._handleRouterError(`Error routing chat message: ${errorDetails}`, error, 'chat-routing');
             if (!displayCommitted && sourceChatItem) {
                 try {
-                    displayCommitted = this.enqueueDisplayItems([sourceChatItem]);
+                    displayCommitted = this.enqueueDisplayItems([sourceChatItem]).length > 0;
                 } catch (fallbackError) {
                     this._handleRouterError(
                         `Error queueing chat fallback: ${getErrorMessage(fallbackError)}`,
@@ -559,65 +562,50 @@ class ChatNotificationRouter {
         };
     }
 
-    async processCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig, options: ProcessCommandOptions): Promise<boolean> {
-        const safeOptions = options || {};
+    async processCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig, options: ProcessCommandOptions): Promise<readonly DisplayQueueItem[]> {
+        const { firstMessageState, greetingsEnabled, greetingProfile, sourceChatItem } = options || {};
+        const sourceItems = sourceChatItem ? [sourceChatItem] : [];
         const commandCooldownService = this.runtime.commandCooldownService;
         if (!commandCooldownService) {
             this.logger.warn('CommandCooldownService not available; cannot process command', 'chat-router');
-            return false;
+            return this.enqueueDisplayItems(sourceItems);
         }
+        const commandAllowed = () => {
+            const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
+            if (!commandCooldownService.checkUserCooldown(normalizedData.userId, perUserCooldown, heavyCooldown)) {
+                this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on per-user cooldown`, platform);
+                return false;
+            }
+            if (!this.checkGlobalCooldown(commandConfig.command, globalCooldown)) {
+                this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on global cooldown`, platform);
+                return false;
+            }
+            return true;
+        };
+        if (!commandAllowed()) return this.enqueueDisplayItems(sourceItems);
 
-        const { firstMessageState, greetingsEnabled, greetingProfile, sourceChatItem } = safeOptions;
+        const greetingItem = firstMessageState?.isFirstMessage && greetingsEnabled
+            ? await this.buildGreetingItem(platform, normalizedData.username, {
+                userId: normalizedData.userId, avatarUrl: normalizedData.avatarUrl, greetingProfile
+            }) : null;
+        const commandItem = this.buildCommandItem(platform, normalizedData, commandConfig);
+
+        // Preparation can yield; eligibility, admission and state commits must not.
+        if (!commandAllowed()) return this.enqueueDisplayItems(sourceItems);
         const isFirstMessage = firstMessageState?.isFirstMessage === true;
-        const consumeFirstMessage = typeof firstMessageState?.consume === 'function'
-            ? firstMessageState.consume
-            : () => {};
-        const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
-
-        const userAllowed = commandCooldownService.checkUserCooldown(
-            normalizedData.userId,
-            perUserCooldown,
-            heavyCooldown
-        );
-
-        if (!userAllowed) {
-            this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on per-user cooldown`, platform);
-            return false;
+        const eligibleGreeting = isFirstMessage ? greetingItem : null;
+        const admitted = this.enqueueDisplayItems([
+            ...sourceItems, ...(eligibleGreeting ? [eligibleGreeting] : []), commandItem
+        ]);
+        const commandAdmitted = admitted.includes(commandItem);
+        if (isFirstMessage && (commandAdmitted || (eligibleGreeting && admitted.includes(eligibleGreeting)))) {
+            this.runCommandStateUpdate(() => firstMessageState?.consume(), 'first-message state');
         }
-
-        const globalAllowed = this.checkGlobalCooldown(commandConfig.command, globalCooldown);
-        if (!globalAllowed) {
-            this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on global cooldown`, platform);
-            return false;
+        if (commandAdmitted) {
+            this.runCommandStateUpdate(() => commandCooldownService.updateUserCooldown(normalizedData.userId), 'user cooldown');
+            this.runCommandStateUpdate(() => this.updateGlobalCooldown(commandConfig.command), 'global cooldown');
         }
-
-        const items = sourceChatItem ? [sourceChatItem] : [];
-        if (isFirstMessage && greetingsEnabled) {
-            items.push(await this.buildGreetingItem(platform, normalizedData.username, {
-                userId: normalizedData.userId,
-                avatarUrl: normalizedData.avatarUrl,
-                greetingProfile
-            }));
-        }
-
-        items.push(this.buildCommandItem(platform, normalizedData, commandConfig));
-        const committed = this.enqueueDisplayItems(items);
-        if (!committed) {
-            return false;
-        }
-
-        if (isFirstMessage) {
-            this.runCommandStateUpdate(consumeFirstMessage, 'first-message state');
-        }
-        this.runCommandStateUpdate(
-            () => commandCooldownService.updateUserCooldown(normalizedData.userId),
-            'user cooldown'
-        );
-        this.runCommandStateUpdate(
-            () => this.updateGlobalCooldown(commandConfig.command),
-            'global cooldown'
-        );
-        return true;
+        return admitted;
     }
 
     runCommandStateUpdate(update: () => void, description: string) {
@@ -644,14 +632,9 @@ class ChatNotificationRouter {
             typeof userTrackingService.markMessageSeen === 'function') {
             const hasSeenUser = userTrackingService.hasSeenUser.bind(userTrackingService);
             const markMessageSeen = userTrackingService.markMessageSeen.bind(userTrackingService);
-            const isFirstMessage = !hasSeenUser(trackingUserId, context);
             return {
-                isFirstMessage,
-                consume: () => {
-                    if (isFirstMessage) {
-                        markMessageSeen(trackingUserId, context);
-                    }
-                }
+                get isFirstMessage() { return !hasSeenUser(trackingUserId, context); },
+                consume: () => markMessageSeen(trackingUserId, context)
             };
         }
 
@@ -860,22 +843,11 @@ class ChatNotificationRouter {
         return queueItem;
     }
 
-    enqueueDisplayItems(items: DisplayQueueItem[]): boolean {
-        if (!this.runtime.displayQueue || items.length === 0) {
-            return false;
-        }
-
-        if (items.length === 1) {
-            const item = items[0];
-            if (!item) {
-                return false;
-            }
-            this.runtime.displayQueue.addItem(item);
-            return true;
-        }
-
-        this.runtime.displayQueue.addSequence(items);
-        return true;
+    enqueueDisplayItems(items: DisplayQueueItem[]): readonly DisplayQueueItem[] {
+        if (!this.runtime.displayQueue || items.length === 0) return [];
+        const item = items[0];
+        if (items.length === 1 && item) return this.runtime.displayQueue.addItem(item);
+        return this.runtime.displayQueue.addSequence(items);
     }
 
     async resolveGreetingVFX() {

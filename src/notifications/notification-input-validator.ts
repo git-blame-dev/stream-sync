@@ -34,8 +34,14 @@ type PayloadValidationOptions = {
     requireEventId?: boolean;
 };
 
+type ValidatedNotificationPayload = NotificationRecord & {
+    platform: string;
+    sourceType: string;
+    type: string;
+};
+
 type PayloadValidationResult =
-    | { success: true; payload: NotificationRecord }
+    | { success: true; payload: ValidatedNotificationPayload }
     | { success: false; error: string; errorType: string };
 
 type TypeValidationResult =
@@ -78,7 +84,7 @@ class NotificationInputValidator {
     }
 
     validateData(data: unknown): DataValidationResult {
-        if (!data || typeof data !== 'object') {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
             return { success: false, error: 'Invalid notification data', errorType: 'invalid-data' };
         }
 
@@ -142,12 +148,6 @@ class NotificationInputValidator {
         }
 
         const isErrorPayload = sanitized.isError === true;
-        if (requireTimestamp || sanitized.timestamp !== undefined) {
-            if (!sanitized.timestamp || !isIsoTimestamp(String(sanitized.timestamp))) {
-                return { success: false, error: 'Notification payload requires ISO timestamp', errorType: 'missing-timestamp' };
-            }
-        }
-
         const normalizedUserIdValue = sanitized.userId === undefined || sanitized.userId === null
             ? ''
             : String(sanitized.userId).trim();
@@ -184,6 +184,12 @@ class NotificationInputValidator {
             }
         }
 
+        if (requireTimestamp || sanitized.timestamp !== undefined) {
+            if (!sanitized.timestamp || !isIsoTimestamp(String(sanitized.timestamp))) {
+                return { success: false, error: 'Notification payload requires ISO timestamp', errorType: 'missing-timestamp' };
+            }
+        }
+
         if (!isErrorPayload) {
             if (notificationType === 'platform:gift' || notificationType === 'platform:envelope') {
                 const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
@@ -208,7 +214,7 @@ class NotificationInputValidator {
             }
         }
 
-        const payload: NotificationRecord = {
+        const payload: ValidatedNotificationPayload = {
             ...sanitized,
             platform,
             sourceType: notificationType,
@@ -227,3 +233,5 @@ class NotificationInputValidator {
 export {
     NotificationInputValidator
 };
+
+export type { ValidatedNotificationPayload };

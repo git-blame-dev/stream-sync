@@ -11,7 +11,7 @@ type Runtime = RouterDependencies["runtime"];
 type Logger = RouterDependencies["logger"];
 type DisplayQueueItem = Parameters<NonNullable<Runtime["displayQueue"]>["addItem"]>[0];
 type TestRuntime = Runtime & {
-  displayQueue: { addItem: TestMockFn<[DisplayQueueItem], void> };
+  displayQueue: { addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]> };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,8 +75,8 @@ describe("ChatNotificationRouter platform chat behavior", () => {
         getPlatformConnectionTime: createMockFn().mockReturnValue(null),
       },
       displayQueue: {
-        addItem: createMockFn<[DisplayQueueItem], void>(),
-        addSequence: createMockFn<[DisplayQueueItem[]], void>(),
+        addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
+        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>((items) => items),
       },
       commandCooldownService: {
         checkUserCooldown: createMockFn().mockReturnValue(true),

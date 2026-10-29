@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import * as previewModule from "../../../scripts/local/gui-preview.ts";
 import { DEMO_CHARACTER_CATALOG } from "../../../gui/src/demo/demo-catalog.ts";
-import { waitForDelay } from "../../helpers/time-utils";
+import { safeSetInterval, safeSetTimeout } from "../../../src/utils/timeout-validator";
+import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from "../../helpers/bun-timers";
 
 type UnknownRecord = Record<string, any>;
 
@@ -54,18 +55,6 @@ type ScenarioEvent = {
   rawEvent: UnknownRecord;
 };
 
-type PreviewPipeline = {
-  eventBus: {
-    emit: (eventName: string, payload?: UnknownRecord) => void;
-    subscribe: (
-      eventName: string,
-      handler: (payload: UnknownRecord) => void,
-    ) => () => void;
-  };
-  emitIngestEvent: (event: UnknownRecord) => void;
-  dispose: () => Promise<void>;
-};
-
 type PreviewIngestAdapters = Record<
   PreviewAdapter,
   { ingest: (rawEvent: UnknownRecord) => Promise<void> }
@@ -91,7 +80,6 @@ type PreviewModule = {
   parsePreviewScenario: (
     args: readonly string[],
   ) => "all" | "chat" | "notifications" | "funding";
-  createPreviewPipeline: (options?: UnknownRecord) => PreviewPipeline;
   createPreviewIngestAdapters: (options: {
     config?: UnknownRecord;
     logger?: UnknownRecord;
@@ -124,38 +112,7 @@ type PreviewModule = {
     intervalHandle: number | ReturnType<typeof setInterval>;
     dispatchedEvents: ScenarioEvent[];
   }>;
-  runGuiPreview: (options?: {
-    logger?: UnknownRecord;
-    baseConfig?: UnknownRecord;
-    durationMs?: number;
-    intervalMs?: number;
-    eventBus?: PreviewPipeline["eventBus"];
-    createPreviewPipelineImpl?: (args: UnknownRecord) => PreviewPipeline;
-    createGuiTransportServiceImpl?: (args: UnknownRecord) => {
-      start: () => Promise<void>;
-      stop: () => Promise<void>;
-      getAddress: () => { port: number } | string | null;
-    };
-    safeSetIntervalImpl?: (
-      callback: () => void,
-      durationMs: number,
-    ) => number | ReturnType<typeof setInterval>;
-    safeSetTimeoutImpl?: (resolve: () => void, durationMs: number) => unknown;
-    giftAnimationResolver?: UnknownRecord;
-    delay?: (ms: number) => Promise<unknown>;
-    stdout?: {
-      write: (text: string) => void;
-    };
-    scenario?: "all" | "chat" | "notifications";
-    keepOpen?: boolean;
-    waitForShutdownImpl?: () => Promise<void>;
-    createNotificationExitWaiterImpl?: (
-      eventBus: PreviewPipeline["eventBus"],
-      notificationType: string,
-      timeoutMs: number,
-    ) => { promise: Promise<void>; cancel: () => void };
-    [key: string]: unknown;
-  }) => Promise<void>;
+  runGuiPreview: typeof previewModule.runGuiPreview;
 };
 
 const {
@@ -166,7 +123,6 @@ const {
   buildPreviewConfig,
   buildPreviewScenarioEvents,
   parsePreviewScenario,
-  createPreviewPipeline,
   createPreviewIngestAdapters,
   runPreviewScenario,
   runGuiPreview,
@@ -184,33 +140,6 @@ describe("GUI local preview command behavior", () => {
 
     await delay(25);
     expect(calls).toEqual([[25, 25, "gui-preview delay"]]);
-  });
-
-  it("waits for an injected shutdown signal when keep-open is enabled", async () => {
-    const writes: string[] = [];
-    let shutdownWaited = false;
-    let stopped = false;
-    const eventBus = { subscribe() { return () => {}; }, emit() {} };
-    await runGuiPreview({
-      durationMs: 1,
-      intervalMs: 1,
-      keepOpen: true,
-      waitForShutdownImpl: async () => { shutdownWaited = true; },
-      createPreviewPipelineImpl: () => ({ eventBus, emitIngestEvent() {}, async dispose() {} }),
-      createPreviewIngestAdaptersImpl: () => ({ twitch: { async ingest() {} }, youtube: { async ingest() {} }, tiktok: { async ingest() {} } }),
-      createGuiTransportServiceImpl: () => ({
-        async start() {},
-        async stop() { stopped = true; },
-        getAddress: () => ({ port: 3399 }),
-      }),
-      safeSetIntervalImpl: (callback) => { callback(); return 1; },
-      safeSetTimeoutImpl: (resolve) => resolve(),
-      stdout: { write: (text: string) => writes.push(text) },
-    });
-    expect(shutdownWaited).toBe(true);
-    expect(stopped).toBe(true);
-    expect(writes.some((line) => line.includes("server remains running until Ctrl+C"))).toBe(true);
-    expect(writes.some((line) => line === "GUI preview finished\n")).toBe(false);
   });
 
   it("uses 32s duration and 2s message cadence constants", () => {
@@ -585,226 +514,6 @@ describe("GUI local preview command behavior", () => {
     expect(config.profiles).not.toHaveProperty("previewMonetization");
   });
 
-  it("runs preview via ingest pipeline and stops cleanly", async () => {
-    const writes: string[] = [];
-    const emittedEvents: UnknownRecord[] = [];
-    let started = false;
-    let stopped = false;
-    let disposed = false;
-    let clientCount = 0;
-    let firstIngestSawConnectedClient = false;
-    let intervalTick: null | (() => void) = null;
-    const createdPipelineArgs: UnknownRecord[] = [];
-    const createdTransportArgs: UnknownRecord[] = [];
-
-    const fakeEventBus = {
-      subscribe() {
-        return () => {};
-      },
-      emit(eventName: string, payload?: UnknownRecord) {
-        emittedEvents.push({ eventName, payload });
-      },
-    };
-
-    const fakePipeline = {
-      eventBus: fakeEventBus,
-      emitIngestEvent(event: UnknownRecord) {
-        if (emittedEvents.length === 0) {
-          firstIngestSawConnectedClient = clientCount > 0;
-        }
-        fakeEventBus.emit("platform:event", event);
-      },
-      async dispose() {
-        disposed = true;
-      },
-    };
-
-    const fakeService = {
-      async start() {
-        started = true;
-      },
-      async stop() {
-        stopped = true;
-      },
-      getAddress() {
-        return { port: 43123 };
-      },
-      getSseClientCount() {
-        return clientCount;
-      },
-    };
-
-    await runGuiPreview({
-      baseConfig: {
-        gui: {
-          enableDock: false,
-          enableOverlay: false,
-          host: "127.0.0.1",
-          port: 3399,
-        },
-      },
-      durationMs: 4,
-      intervalMs: 2,
-      eventBus: fakeEventBus,
-      createPreviewPipelineImpl: (args: UnknownRecord) => {
-        createdPipelineArgs.push(args);
-        return fakePipeline;
-      },
-      createGuiTransportServiceImpl: (args: UnknownRecord) => {
-        createdTransportArgs.push(args);
-        return fakeService;
-      },
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = callback;
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
-        expect(duration).toBe(4);
-        intervalTick?.();
-        intervalTick?.();
-        resolve();
-      },
-      delay: async () => {
-        clientCount = 1;
-      },
-      stdout: {
-        write: (text: string) => writes.push(text),
-      },
-    });
-
-    expect(started).toBe(true);
-    expect(stopped).toBe(true);
-    expect(disposed).toBe(true);
-    expect(firstIngestSawConnectedClient).toBe(true);
-    expect(createdPipelineArgs.length).toBe(1);
-    expect(createdTransportArgs.length).toBe(1);
-    const createdPipelineArg = requireValue(
-      createdPipelineArgs[0],
-      "created preview pipeline args",
-    );
-    expect(typeof createdPipelineArg.delay).toBe("function");
-    expect(createdPipelineArg.giftAnimationResolver).toBeDefined();
-    expect(
-      typeof createdPipelineArg.giftAnimationResolver.resolveFromNotificationData,
-    ).toBe("function");
-    expect(
-      await createdPipelineArg.giftAnimationResolver.resolveFromNotificationData({}),
-    ).toBeNull();
-    expect(
-      requireValue(createdTransportArgs[0], "created transport args").eventBus,
-    ).toBe(fakeEventBus);
-    const transportArgs = requireValue(createdTransportArgs[0], "created transport args");
-    expect(transportArgs.fundingGoal).toBeDefined();
-    const fundingGoal = transportArgs.fundingGoal as {
-      adjust(amountUsd: number): Promise<void>;
-      setLabel(label: string): Promise<void>;
-      resetLabel(): Promise<void>;
-      snapshot: { currentUsd: number; label: string; labelOverridden: boolean };
-    };
-    await expect(fundingGoal.adjust(-1)).rejects.toThrow("cannot be negative");
-    expect(fundingGoal.snapshot.currentUsd).toBe(0);
-    await fundingGoal.setLabel("  🎙️ New Microphone  ");
-    expect(fundingGoal.snapshot).toMatchObject({ label: "🎙️ New Microphone", labelOverridden: true });
-    await fundingGoal.resetLabel();
-    expect(fundingGoal.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false });
-    expect(transportArgs.operatorControls).toBeDefined();
-    expect(transportArgs.operatorAppearance).toBeDefined();
-    expect(transportArgs.operatorLogs).toBeDefined();
-    expect(transportArgs.assetsRoot).toContain("gui/dist");
-    expect(emittedEvents.length).toBeGreaterThanOrEqual(1);
-    expect(requireValue(emittedEvents[0], "first emitted event").eventName).toBe(
-      "platform:event",
-    );
-    expect(
-      emittedEvents.some((entry) => entry.eventName === "display:row"),
-    ).toBe(false);
-    expect(writes).toContain("Dock URL: http://127.0.0.1:43123/dock\n");
-    expect(writes.some((line) => line.includes("Goal URL") && !line.includes("Goal minimal URL"))).toBe(true);
-    expect(writes.some((line) => line.includes("Goal minimal URL"))).toBe(true);
-    expect(
-      writes.some((line) =>
-        line.includes("For TikTok gift animation preview, run: bun run gui:preview:gift-animation"),
-      ),
-    ).toBe(true);
-    expect(writes.some((line) => line.includes("tiktok-animations"))).toBe(
-      false,
-    );
-    expect(writes.some((line) => line.includes("GUI preview finished"))).toBe(
-      true,
-    );
-  });
-
-  it("waits for the final production-timed notification lifecycle exit", async () => {
-    const writes: string[] = [];
-    const waitedFor: UnknownRecord[] = [];
-    let intervalTick: null | (() => void) = null;
-    let firstTickObserved = false;
-    let waiterCreatedBeforeFirstTick = false;
-    const eventBus = {
-      subscribe() {
-        return () => {};
-      },
-      emit() {},
-    };
-
-    await runGuiPreview({
-      scenario: "notifications",
-      durationMs: 14000,
-      intervalMs: 2,
-      createPreviewPipelineImpl: () => ({
-        eventBus,
-        emitIngestEvent() {},
-        async dispose() {},
-      }),
-      createPreviewIngestAdaptersImpl: () => ({
-        twitch: { async ingest() {} },
-        youtube: { async ingest() {} },
-        tiktok: { async ingest() {} },
-      }),
-      createGuiTransportServiceImpl: () => ({
-        async start() {},
-        async stop() {},
-        getAddress: () => ({ port: 3399 }),
-      }),
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = () => {
-          firstTickObserved = true;
-          callback();
-        };
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void) => {
-        for (let index = 0; index < 8; index += 1) intervalTick?.();
-        resolve();
-      },
-      createNotificationExitWaiterImpl: (
-        receivedEventBus,
-        notificationType,
-        timeoutMs,
-      ) => {
-        waiterCreatedBeforeFirstTick = !firstTickObserved;
-        waitedFor.push({ receivedEventBus, notificationType, timeoutMs });
-        return { promise: Promise.resolve(), cancel() {} };
-      },
-      stdout: { write: (text: string) => writes.push(text) },
-    });
-
-    expect(waitedFor).toEqual([
-      {
-        receivedEventBus: eventBus,
-        notificationType: "platform:envelope",
-        timeoutMs: 55000,
-      },
-    ]);
-    expect(writes.some((line) => line.includes("Scenario: notifications"))).toBe(
-      true,
-    );
-    expect(waiterCreatedBeforeFirstTick).toBe(true);
-    expect(
-      writes.some((line) => line.includes("Notifications minimal URL")),
-    ).toBe(true);
-  });
-
   it("rejects an explicit scenario duration that cannot dispatch every fixture", async () => {
     await expect(
       runGuiPreview({
@@ -816,368 +525,160 @@ describe("GUI local preview command behavior", () => {
     ).rejects.toThrow("requires at least 14000ms");
   });
 
-  it("ingests all default scenario events and ends on envelope within preview duration", async () => {
-    const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
-    const ingested: UnknownRecord[] = [];
-    let intervalTick: null | (() => void) = null;
-
-    const adapters = {
-      twitch: {
-        async ingest(rawEvent: UnknownRecord) {
-          ingested.push({ adapter: "twitch", rawEvent });
-        },
-      },
-      youtube: {
-        async ingest(rawEvent: UnknownRecord) {
-          ingested.push({ adapter: "youtube", rawEvent });
-        },
-      },
-      tiktok: {
-        async ingest(rawEvent: UnknownRecord) {
-          ingested.push({ adapter: "tiktok", rawEvent });
-        },
-      },
-    };
-
-    const result = await runPreviewScenario({
-      adapters,
-      scenarioEvents,
-      intervalMs: 2000,
-      durationMs: 32000,
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = callback;
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
-        expect(duration).toBe(32000);
-        for (let index = 0; index < 15; index += 1) {
-          intervalTick?.();
-        }
-        resolve();
-      },
-      errorHandler: {
-        handleEventProcessingError() {},
-      },
-    });
-
-    expect(ingested).toHaveLength(16);
-    expect(result.dispatchedEvents).toHaveLength(16);
-    const finalIngestedEvent = requireValue(
-      ingested[15],
-      "final ingested preview event",
-    );
-    expect(finalIngestedEvent.adapter).toBe("tiktok");
-    expect(finalIngestedEvent.rawEvent.eventType).toBe("ENVELOPE");
+  it("rejects a malformed public pipeline factory result before acquiring transport", async () => {
+    await expect(runGuiPreview({
+      logger: { debug() {}, info() {}, warn() {}, error() {}, console() {} },
+      createPreviewPipelineImpl: () => ({ eventBus: {} }) as ReturnType<typeof previewModule.createPreviewPipeline>,
+      stdout: { write() {} },
+    })).rejects.toThrow("Preview pipeline requires eventBus and emitIngestEvent");
   });
 
-  it.each(["duration", "abort", "setup", "timeout-setup"])("owns admitted ingest settlement and timer cleanup after %s stop", async (mode) => {
+  // Scheduler leaves test the public admission/callback contract; composition is
+  // exercised with actual adapters, runtime, queue and HTTP in the integration family.
+  it("dispatches every fixture through native scheduled boundaries and retires timers", async () => {
+    useFakeTimers();
+    const events = buildPreviewScenarioEvents();
+    const seen: UnknownRecord[] = [];
+    try {
+      const run = runPreviewScenario({
+        adapters: Object.fromEntries(["twitch", "youtube", "tiktok"].map(key =>
+          [key, { ingest(rawEvent: UnknownRecord) { seen.push(rawEvent); } }])),
+        scenarioEvents: events, intervalMs: 2000, durationMs: 32000,
+        safeSetIntervalImpl: safeSetInterval, safeSetTimeoutImpl: safeSetTimeout,
+        errorHandler: { handleEventProcessingError() { throw new Error("Unexpected scheduler error"); } },
+      });
+      expect(seen).toEqual([events[0]!.rawEvent]);
+      advanceTimersByTime(1999);
+      expect(seen).toHaveLength(1);
+      advanceTimersByTime(1);
+      expect(seen).toHaveLength(2);
+      advanceTimersByTime(30000);
+      expect((await run).dispatchedEvents).toEqual(events);
+      expect(seen).toEqual(events.map(event => event.rawEvent));
+      expect(seen.at(-1)?.eventType).toBe("ENVELOPE");
+      expect(getTimerCount()).toBe(0);
+      advanceTimersByTime(32000);
+      expect(seen).toHaveLength(16);
+    } finally { useRealTimers(); }
+  });
+
+  it.each(["duration", "abort", "setup", "timeout-setup"])("joins admitted callback and retires native timers after %s", async mode => {
+    useFakeTimers();
     const controller = new AbortController();
-    let tick = () => {};
-    let finish = () => {};
     let release = () => {};
-    const held = new Promise<void>((resolve) => { release = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
     let calls = 0;
     let settled = false;
-    const cleared: unknown[] = [];
     const failure = new Error("synthetic scheduler failure");
-    const run = runPreviewScenario({
-      adapters: { twitch: { ingest() { calls += 1; return held; } } },
-      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
-      intervalMs: 2000,
-      durationMs: 32000,
-      signal: controller.signal,
-      safeSetIntervalImpl(callback) {
-        tick = callback;
-        if (mode === "setup") throw failure;
-        return 41;
-      },
-      safeSetTimeoutImpl(callback) { finish = callback; if (mode === "timeout-setup") throw failure; return 42; },
-      clearIntervalImpl(handle) { cleared.push(handle); },
-      clearTimeoutImpl(handle) { cleared.push(handle); },
-      errorHandler: { handleEventProcessingError() { throw failure; } },
-    });
-    const outcome = run.then(() => { settled = true; return null; }, (error: unknown) => { settled = true; return error; });
-    if (mode === "abort") controller.abort();
-    else finish();
-    tick();
-    await Promise.resolve();
-    expect(calls).toBe(1);
-    expect(settled).toBe(false);
-    release();
-    expect(await outcome).toBe(mode === "setup" || mode === "timeout-setup" ? failure : null);
-    expect(cleared).toEqual(mode === "setup" ? [] : mode === "timeout-setup" ? [41] : [41, 42]);
+    let outcome: Promise<unknown> | undefined;
+    try {
+      const run = runPreviewScenario({
+        adapters: { twitch: { ingest() { calls++; return held; } } },
+        scenarioEvents: buildPreviewScenarioEvents().map(event => ({ ...event, adapter: "twitch" })),
+        intervalMs: 2000, durationMs: 32000, signal: controller.signal,
+        safeSetIntervalImpl: mode === "setup" ? () => { throw failure; } : safeSetInterval,
+        safeSetTimeoutImpl: mode === "timeout-setup" ? () => { throw failure; } : safeSetTimeout,
+        errorHandler: { handleEventProcessingError() {} },
+      });
+      outcome = run.then(() => { settled = true; return null; }, error => { settled = true; return error; });
+      if (mode === "abort") controller.abort();
+      if (mode === "duration") advanceTimersByTime(32000);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(getTimerCount()).toBe(0);
+      const admitted = calls;
+      advanceTimersByTime(64000);
+      expect(calls).toBe(admitted);
+      release();
+      expect(await outcome).toBe(mode === "setup" || mode === "timeout-setup" ? failure : null);
+      expect(calls).toBe(mode === "duration" ? 16 : 1);
+    } finally { controller.abort(); release(); await outcome; useRealTimers(); }
   });
 
-  it.each([false, true])("reports synchronous ingest failures and continues admission (reporter throws: %s)", async (reporterThrows) => {
+  it.each([false, true])("reports synchronous callback failure and continues native admission (reporter throws: %s)", async reporterThrows => {
+    useFakeTimers();
     let calls = 0;
     let reports = 0;
     const failure = new Error("synthetic reporter failure");
-    const run = runPreviewScenario({
-      adapters: { twitch: { ingest() { calls += 1; if (calls === 1) throw new Error("synthetic ingest failure"); } } },
-      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
-      intervalMs: 2000,
-      durationMs: 32000,
-      safeSetIntervalImpl(callback) { callback(); return 41; },
-      safeSetTimeoutImpl(callback) { callback(); return 42; },
-      clearIntervalImpl() {},
-      clearTimeoutImpl() {},
-      errorHandler: { handleEventProcessingError() { reports += 1; if (reporterThrows) throw failure; } },
-    });
-    if (reporterThrows) await expect(run).rejects.toBe(failure);
-    else await run;
-    expect(calls).toBe(2);
-    expect(reports).toBe(1);
+    try {
+      const run = runPreviewScenario({
+        adapters: { twitch: { ingest() { if (++calls === 1) throw new Error("synthetic ingest failure"); } } },
+        scenarioEvents: buildPreviewScenarioEvents().map(event => ({ ...event, adapter: "twitch" })),
+        intervalMs: 2000, durationMs: 5000,
+        safeSetIntervalImpl: safeSetInterval, safeSetTimeoutImpl: safeSetTimeout,
+        errorHandler: { handleEventProcessingError() { reports++; if (reporterThrows) throw failure; } },
+      });
+      const outcome = run.then(() => null, error => error);
+      advanceTimersByTime(5000);
+      expect(await outcome).toBe(reporterThrows ? failure : null);
+      expect(calls).toBe(3);
+      expect(reports).toBe(1);
+      expect(getTimerCount()).toBe(0);
+    } finally { useRealTimers(); }
   });
 
-  it.each(["already", "ingest", "interval", "timeout"])("closes admission and retires timers on synchronous %s abort", async (phase) => {
+  it.each(["already", "ingest", "interval", "timeout"])("retires native registrations on synchronous %s abort", async phase => {
+    useFakeTimers();
     const controller = new AbortController();
     if (phase === "already") controller.abort();
     let calls = 0;
-    let timerRegistrations = 0;
-    const cleared: unknown[] = [];
-    await runPreviewScenario({
-      adapters: { twitch: { ingest() { calls += 1; if (phase === "ingest") controller.abort(); } } },
-      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
-      intervalMs: 2000,
-      durationMs: 32000,
-      signal: controller.signal,
-      safeSetIntervalImpl() { timerRegistrations += 1; if (phase === "interval") controller.abort(); return 41; },
-      safeSetTimeoutImpl() { timerRegistrations += 1; if (phase === "timeout") controller.abort(); return 42; },
-      clearIntervalImpl(handle) { cleared.push(handle); },
-      clearTimeoutImpl(handle) { cleared.push(handle); },
-      errorHandler: { handleEventProcessingError() {} },
-    });
-    expect(calls).toBe(phase === "already" ? 0 : 1);
-    expect(timerRegistrations).toBe(phase === "interval" ? 1 : phase === "timeout" ? 2 : 0);
-    expect(cleared).toEqual(phase === "interval" ? [41] : phase === "timeout" ? [41, 42] : []);
+    let registrations = 0;
+    try {
+      await runPreviewScenario({
+        adapters: { twitch: { ingest() { calls++; if (phase === "ingest") controller.abort(); } } },
+        scenarioEvents: buildPreviewScenarioEvents().map(event => ({ ...event, adapter: "twitch" })),
+        intervalMs: 2000, durationMs: 32000, signal: controller.signal,
+        safeSetIntervalImpl(callback, ms) {
+          const handle = safeSetInterval(callback, ms); registrations++;
+          if (phase === "interval") controller.abort();
+          return handle;
+        },
+        safeSetTimeoutImpl(callback, ms) {
+          const handle = safeSetTimeout(callback, ms); registrations++;
+          if (phase === "timeout") controller.abort();
+          return handle;
+        },
+        errorHandler: { handleEventProcessingError() {} },
+      });
+      expect(calls).toBe(phase === "already" ? 0 : 1);
+      expect(registrations).toBe(phase === "interval" ? 1 : phase === "timeout" ? 2 : 0);
+      expect(getTimerCount()).toBe(0);
+      advanceTimersByTime(64000);
+      expect(calls).toBe(phase === "already" ? 0 : 1);
+    } finally { controller.abort(); useRealTimers(); }
   });
 
-  it("observes asynchronous reporter failures after stopping timers and joining other ingest", async () => {
-    let tick = () => {};
-    let finish = () => {};
-    let rejectIngest = (_error: Error) => {};
+  it("joins other admitted callbacks before surfacing an asynchronous reporter failure", async () => {
+    useFakeTimers();
+    const controller = new AbortController();
+    let reject = (_error: Error) => {};
     let release = () => {};
-    const failing = new Promise<void>((_resolve, reject) => { rejectIngest = reject; });
-    const held = new Promise<void>((resolve) => { release = resolve; });
+    const failed = new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise; });
+    const held = new Promise<void>(resolve => { release = resolve; });
     const failure = new Error("synthetic asynchronous reporter failure");
     let calls = 0;
     let settled = false;
-    const cleared: unknown[] = [];
-    const run = runPreviewScenario({
-      adapters: { twitch: { ingest() { calls += 1; return calls === 1 ? failing : held; } } },
-      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
-      intervalMs: 2000,
-      durationMs: 32000,
-      safeSetIntervalImpl(callback) { tick = callback; return 41; },
-      safeSetTimeoutImpl(callback) { finish = callback; return 42; },
-      clearIntervalImpl(handle) { cleared.push(handle); },
-      clearTimeoutImpl(handle) { cleared.push(handle); },
-      errorHandler: { handleEventProcessingError() { throw failure; } },
-    });
-    const outcome = run.then(() => { settled = true; return null; }, (error: unknown) => { settled = true; return error; });
-    tick();
-    rejectIngest(new Error("synthetic asynchronous ingest failure"));
-    finish();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    expect(cleared).toEqual([41, 42]);
-    tick();
-    expect(calls).toBe(2);
-    release();
-    expect(await outcome).toBe(failure);
-  });
-
-  it("routes ingest events through the preview pipeline boundaries", async () => {
-    const routedNotifications: UnknownRecord[] = [];
-    const routedChats: UnknownRecord[] = [];
-    let disposedCooldown = false;
-    let stoppedDisplayQueue = false;
-
-    const config = buildPreviewConfig();
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
-      displayQueue: {
-        addItem(item: UnknownRecord) {
-          routedChats.push(item);
-        },
-        async stop() {
-          stoppedDisplayQueue = true;
-        },
-      },
-      notificationManager: {
-        async handleNotification(
-          type: string,
-          platform: string,
-          data: UnknownRecord,
-        ) {
-          routedNotifications.push({ type, platform, data });
-          return { success: true };
-        },
-      },
-      commandCooldownService: {
-        dispose() {
-          disposedCooldown = true;
-        },
-        checkUserCooldown() {
-          return true;
-        },
-        checkGlobalCooldown() {
-          return true;
-        },
-        updateUserCooldown() {},
-        updateGlobalCooldown() {},
-      },
-      userTrackingService: {
-        isFirstMessage() {
-          return false;
-        },
-      },
-      vfxCommandService: {
-        async selectVFXCommand() {
-          return null;
-        },
-        matchFarewell() {
-          return null;
-        },
-        async getVFXConfig() {
-          return null;
-        },
-      },
-      platformLifecycleService: {
-        getPlatformConnectionTime() {
-          return null;
-        },
-      },
-    });
-
-    const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString();
-
-    pipeline.emitIngestEvent({
-      type: "platform:chat-message",
-      platform: "twitch",
-      data: {
-        username: "test-user",
-        userId: "test-user-id",
-        avatarUrl: "https://example.com/avatar.png",
-        timestamp,
-        message: { text: "hello" },
-      },
-    });
-
-    pipeline.emitIngestEvent({
-      type: "platform:follow",
-      platform: "youtube",
-      data: {
-        username: "test-follower",
-        userId: "test-follower-id",
-        avatarUrl: "https://example.com/avatar.png",
-        timestamp,
-      },
-    });
-
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (routedChats.length > 0 && routedNotifications.length > 0) {
-        break;
-      }
-      await Promise.resolve();
-    }
-
-    expect(routedChats.length).toBe(1);
-    expect(requireValue(routedChats[0], "routed chat").type).toBe("chat");
-    expect(routedNotifications.length).toBe(1);
-    expect(
-      requireValue(routedNotifications[0], "routed notification").type,
-    ).toBe("platform:follow");
-
-    await pipeline.dispose();
-    expect(disposedCooldown).toBe(true);
-    expect(stoppedDisplayQueue).toBe(true);
-  });
-
-  it("acknowledges preview VFX commands as executed and completed", async () => {
-    const config = buildPreviewConfig();
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
-      displayQueue: {
-        addItem() {},
-        async stop() {},
-      },
-      commandCooldownService: {
-        dispose() {},
-        checkUserCooldown() {
-          return true;
-        },
-        checkGlobalCooldown() {
-          return true;
-        },
-        updateUserCooldown() {},
-        updateGlobalCooldown() {},
-      },
-      userTrackingService: {
-        isFirstMessage() {
-          return false;
-        },
-      },
-      vfxCommandService: {
-        async selectVFXCommand() {
-          return null;
-        },
-        matchFarewell() {
-          return null;
-        },
-        async getVFXConfig() {
-          return null;
-        },
-      },
-      platformLifecycleService: {
-        getPlatformConnectionTime() {
-          return null;
-        },
-      },
-    });
-    const acknowledgements: UnknownRecord[] = [];
-    const unsubscribeExecuted = pipeline.eventBus.subscribe(
-      "vfx:command-executed",
-      (payload: UnknownRecord) => acknowledgements.push(payload),
-    );
-    const unsubscribeCompleted = pipeline.eventBus.subscribe(
-      "vfx:effect-completed",
-      (payload: UnknownRecord) => acknowledgements.push(payload),
-    );
-
-    pipeline.eventBus.emit("vfx:command-received", {
-      correlationId: "test-preview-correlation",
-    });
-    await waitForDelay(1);
-
-    expect(acknowledgements).toEqual([
-      {
-        correlationId: "test-preview-correlation",
-        type: "vfx:command-executed",
-      },
-      {
-        correlationId: "test-preview-correlation",
-        type: "vfx:effect-completed",
-      },
-    ]);
-
-    unsubscribeExecuted();
-    unsubscribeCompleted();
-    await pipeline.dispose();
-    await pipeline.dispose();
+    let outcome: Promise<unknown> | undefined;
+    try {
+      const run = runPreviewScenario({
+        adapters: { twitch: { ingest() { return ++calls === 1 ? failed : held; } } },
+        scenarioEvents: buildPreviewScenarioEvents().map(event => ({ ...event, adapter: "twitch" })),
+        intervalMs: 2000, durationMs: 32000, signal: controller.signal,
+        safeSetIntervalImpl: safeSetInterval, safeSetTimeoutImpl: safeSetTimeout,
+        errorHandler: { handleEventProcessingError() { throw failure; } },
+      });
+      outcome = run.then(() => { settled = true; return null; }, error => { settled = true; return error; });
+      advanceTimersByTime(2000);
+      reject(new Error("synthetic asynchronous ingest failure"));
+      controller.abort();
+      await Promise.resolve(); await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(getTimerCount()).toBe(0);
+      advanceTimersByTime(64000);
+      expect(calls).toBe(2);
+      release();
+      expect(await outcome).toBe(failure);
+    } finally { controller.abort(); release(); await outcome; useRealTimers(); }
   });
 
   it("creates raw ingest adapters that emit canonical platform events", async () => {
@@ -1507,576 +1008,4 @@ describe("GUI local preview command behavior", () => {
     ).toBe(true);
   });
 
-  it("fails fast when injected preview pipeline is invalid", async () => {
-    await expect(
-      runGuiPreview({
-        createPreviewPipelineImpl: (() => ({ eventBus: {} })) as unknown as (
-          args: UnknownRecord,
-        ) => PreviewPipeline,
-        createGuiTransportServiceImpl: () => ({
-          async start() {},
-          async stop() {},
-          getAddress: () => ({ port: 3399 }),
-        }),
-      }),
-    ).rejects.toThrow("Preview pipeline requires eventBus and emitIngestEvent");
-  });
-
-  it("disposes pipeline when transport stop throws", async () => {
-    let disposed = false;
-    let intervalTick: null | (() => void) = null;
-
-    const fakeEventBus = {
-      subscribe() {
-        return () => {};
-      },
-      emit() {},
-    };
-
-    const fakePipeline = {
-      eventBus: fakeEventBus,
-      emitIngestEvent() {},
-      async dispose() {
-        disposed = true;
-      },
-    };
-
-    await runGuiPreview({
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
-      durationMs: 4,
-      intervalMs: 2,
-      createPreviewPipelineImpl: () => fakePipeline,
-      createGuiTransportServiceImpl: () => ({
-        async start() {},
-        async stop() {
-          throw new Error("stop failed");
-        },
-        getAddress: () => ({ port: 3399 }),
-      }),
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = callback;
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void) => {
-        intervalTick?.();
-        resolve();
-      },
-      stdout: {
-        write() {},
-      },
-    });
-
-    expect(disposed).toBe(true);
-  });
-
-  it("disposes pipeline when transport start fails", async () => {
-    let disposed = false;
-
-    const fakePipeline = {
-      eventBus: {
-        subscribe() {
-          return () => {};
-        },
-        emit() {},
-      },
-      emitIngestEvent() {},
-      async dispose() {
-        disposed = true;
-      },
-    };
-
-    await expect(
-      runGuiPreview({
-        logger: {
-          debug: () => {},
-          info: () => {},
-          warn: () => {},
-          error: () => {},
-        },
-        durationMs: 4,
-        intervalMs: 2,
-        createPreviewPipelineImpl: () => fakePipeline,
-        createGuiTransportServiceImpl: () => ({
-          async start() {
-            throw new Error("start failed");
-          },
-          async stop() {},
-          getAddress: () => ({ port: 3399 }),
-        }),
-        stdout: {
-          write() {},
-        },
-      }),
-    ).rejects.toThrow("start failed");
-
-    expect(disposed).toBe(true);
-  });
-
-  it("clears active interval handle during cleanup", async () => {
-    const handles: Array<number | ReturnType<typeof setInterval>> = [];
-    const originalClearInterval = global.clearInterval;
-    global.clearInterval = ((handle: unknown) => {
-      if (typeof handle === "number" || typeof handle === "object") {
-        handles.push(handle as number | ReturnType<typeof setInterval>);
-      }
-    }) as typeof global.clearInterval;
-
-    let intervalTick: null | (() => void) = null;
-
-    try {
-      await runGuiPreview({
-        logger: {
-          debug: () => {},
-          info: () => {},
-          warn: () => {},
-          error: () => {},
-          console: () => {},
-        },
-        durationMs: 4,
-        intervalMs: 2,
-        createPreviewPipelineImpl: () => ({
-          eventBus: {
-            subscribe() {
-              return () => {};
-            },
-            emit() {},
-          },
-          emitIngestEvent() {},
-          async dispose() {},
-        }),
-        createPreviewIngestAdaptersImpl: () => ({
-          twitch: { async ingest() {} },
-          youtube: { async ingest() {} },
-          tiktok: { async ingest() {} },
-        }),
-        createGuiTransportServiceImpl: () => ({
-          async start() {},
-          async stop() {},
-          getAddress: () => ({ port: 3399 }),
-        }),
-        safeSetIntervalImpl: (callback: () => void) => {
-          intervalTick = callback;
-          return 77;
-        },
-        safeSetTimeoutImpl: (resolve: () => void) => {
-          intervalTick?.();
-          resolve();
-        },
-        stdout: {
-          write() {},
-        },
-      });
-    } finally {
-      global.clearInterval = originalClearInterval;
-    }
-
-    expect(handles.includes(77)).toBe(true);
-  });
-
-  it("runs raw ingest adapters end-to-end through scenario schedule", async () => {
-    const routed: UnknownRecord[] = [];
-    let intervalTick: null | (() => void) = null;
-
-    await runGuiPreview({
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      durationMs: 20,
-      intervalMs: 2,
-      createPreviewPipelineImpl: () => ({
-        eventBus: {
-          subscribe() {
-            return () => {};
-          },
-          emit() {},
-        },
-        emitIngestEvent(event: UnknownRecord) {
-          routed.push(event);
-        },
-        async dispose() {},
-      }),
-      createGuiTransportServiceImpl: () => ({
-        async start() {},
-        async stop() {},
-        getAddress: () => ({ port: 3399 }),
-      }),
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = callback;
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void) => {
-        for (let i = 0; i < 10; i += 1) {
-          intervalTick?.();
-        }
-        resolve();
-      },
-      stdout: {
-        write() {},
-      },
-    });
-
-    expect(routed.length).toBeGreaterThan(3);
-    expect(routed.some((event) => event.type === "platform:chat-message")).toBe(
-      true,
-    );
-    expect(routed.some((event) => event.type === "platform:follow")).toBe(true);
-    expect(routed.some((event) => event.type === "platform:gift")).toBe(true);
-  });
-
-  it("continues preview schedule when one ingest step fails", async () => {
-    const routed: UnknownRecord[] = [];
-    let intervalTick: null | (() => void) = null;
-    let failedOnce = false;
-    const errors: UnknownRecord[] = [];
-
-    await runGuiPreview({
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        console: () => {},
-        error: (...args: unknown[]) => errors.push(args),
-      },
-      durationMs: 6,
-      intervalMs: 2,
-      createPreviewPipelineImpl: () => ({
-        eventBus: {
-          subscribe() {
-            return () => {};
-          },
-          emit() {},
-        },
-        emitIngestEvent(event: UnknownRecord) {
-          routed.push(event);
-        },
-        async dispose() {},
-      }),
-      createPreviewIngestAdaptersImpl: () => ({
-        twitch: {
-          async ingest() {
-            routed.push({ type: "platform:follow", platform: "twitch" });
-          },
-        },
-        youtube: {
-          async ingest() {
-            if (!failedOnce) {
-              failedOnce = true;
-              throw new Error("ingest failed");
-            }
-            routed.push({ type: "platform:chat-message", platform: "youtube" });
-          },
-        },
-        tiktok: {
-          async ingest() {
-            routed.push({ type: "platform:gift", platform: "tiktok" });
-          },
-        },
-      }),
-      createGuiTransportServiceImpl: () => ({
-        async start() {},
-        async stop() {},
-        getAddress: () => ({ port: 3399 }),
-      }),
-      safeSetIntervalImpl: (callback: () => void) => {
-        intervalTick = callback;
-        return 1;
-      },
-      safeSetTimeoutImpl: (resolve: () => void) => {
-        intervalTick?.();
-        intervalTick?.();
-        intervalTick?.();
-        resolve();
-      },
-      stdout: {
-        write() {},
-      },
-    });
-
-    expect(routed.length).toBeGreaterThan(0);
-    expect(errors.length).toBeGreaterThan(0);
-  });
-
-  it("emits all required row types through full preview pipeline", async () => {
-    const config = buildPreviewConfig();
-    const rows: UnknownRecord[] = [];
-
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      giftAnimationResolver: {
-        async resolveFromNotificationData() {
-          return null;
-        },
-      },
-    });
-
-    const unsubscribe = pipeline.eventBus.subscribe(
-      "display:row",
-      (row: UnknownRecord) => {
-        rows.push(row);
-      },
-    );
-
-    const adapters = createPreviewIngestAdapters({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      emitPlatformEvent: (event: UnknownRecord) =>
-        pipeline.emitIngestEvent(event),
-    });
-
-    const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
-    for (const event of scenarioEvents) {
-      await adapters[event.adapter].ingest(event.rawEvent);
-    }
-
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const emittedTypes = new Set(rows.map((row) => row.type));
-      if (
-        emittedTypes.has("farewell") &&
-        emittedTypes.has("command") &&
-        emittedTypes.has("platform:envelope")
-      ) {
-        break;
-      }
-      await waitForDelay(1);
-    }
-
-    const emittedTypes = new Set(rows.map((row) => row.type));
-    expect(emittedTypes.has("chat")).toBe(true);
-    expect(emittedTypes.has("command")).toBe(true);
-    expect(emittedTypes.has("greeting")).toBe(true);
-    expect(emittedTypes.has("farewell")).toBe(true);
-    expect(emittedTypes.has("platform:follow")).toBe(true);
-    expect(emittedTypes.has("platform:gift")).toBe(true);
-    expect(emittedTypes.has("platform:raid")).toBe(true);
-    expect(emittedTypes.has("platform:share")).toBe(true);
-    expect(emittedTypes.has("platform:paypiggy")).toBe(true);
-    expect(emittedTypes.has("platform:giftpaypiggy")).toBe(true);
-    expect(emittedTypes.has("platform:envelope")).toBe(true);
-
-    unsubscribe();
-    await pipeline.dispose();
-  });
-
-  it("uses deterministic no-op gift animation resolver by default in preview pipeline", async () => {
-    const config = buildPreviewConfig();
-    const emittedEffects: UnknownRecord[] = [];
-
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-    });
-
-    const unsubscribeEffect = pipeline.eventBus.subscribe(
-      "display:gift-animation",
-      (effectPayload: UnknownRecord) => {
-        emittedEffects.push(effectPayload);
-      },
-    );
-
-    const adapters = createPreviewIngestAdapters({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      emitPlatformEvent: (event: UnknownRecord) =>
-        pipeline.emitIngestEvent(event),
-    });
-
-    const giftEvent = buildPreviewScenarioEvents(32000, 2000).find(
-      (event) =>
-        event.adapter === "tiktok" && event.rawEvent?.eventType === "GIFT",
-    )!;
-
-    expect(giftEvent).toBeDefined();
-
-    await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
-    await waitForDelay(25);
-
-    expect(emittedEffects).toHaveLength(0);
-
-    unsubscribeEffect();
-    await pipeline.dispose();
-  });
-
-  it("emits gift animation effect in preview pipeline when resolver returns Corgi animation", async () => {
-    const config = buildPreviewConfig();
-    const emittedEffects: UnknownRecord[] = [];
-
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      giftAnimationResolver: {
-        async resolveFromNotificationData() {
-          return {
-            mediaFilePath: "/tmp/test-corgi-animation.mp4",
-            mediaContentType: "video/mp4",
-            durationMs: 4200,
-            animationConfig: {
-              profileName: "portrait",
-              sourceWidth: 1440,
-              sourceHeight: 1280,
-              renderWidth: 720,
-              renderHeight: 1280,
-              rgbFrame: [0, 0, 720, 1280],
-              aFrame: [720, 0, 720, 1280],
-            },
-          };
-        },
-      },
-    });
-
-    const unsubscribeEffect = pipeline.eventBus.subscribe(
-      "display:gift-animation",
-      (effectPayload: UnknownRecord) => {
-        emittedEffects.push(effectPayload);
-      },
-    );
-
-    const adapters = createPreviewIngestAdapters({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      emitPlatformEvent: (event: UnknownRecord) =>
-        pipeline.emitIngestEvent(event),
-    });
-
-    const giftEvent = buildPreviewScenarioEvents(32000, 2000).find(
-      (event) =>
-        event.adapter === "tiktok" && event.rawEvent?.eventType === "GIFT",
-    )!;
-
-    expect(giftEvent).toBeDefined();
-
-    await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
-
-    for (
-      let attempt = 0;
-      attempt < 50 && emittedEffects.length === 0;
-      attempt += 1
-    ) {
-      await waitForDelay(1);
-    }
-
-    expect(emittedEffects).toHaveLength(1);
-    expect(requireValue(emittedEffects[0], "gift animation effect").durationMs).toBe(
-      4200,
-    );
-
-    unsubscribeEffect();
-    await pipeline.dispose();
-  });
-
-  it("keeps preview row pacing independent from gift effect duration", async () => {
-    const config = buildPreviewConfig();
-    const delayCalls: number[] = [];
-
-    const pipeline = createPreviewPipeline({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      delay: async (ms: number) => {
-        delayCalls.push(ms);
-      },
-      giftAnimationResolver: {
-        async resolveFromNotificationData() {
-          return {
-            mediaFilePath: "/tmp/test-corgi-animation.mp4",
-            mediaContentType: "video/mp4",
-            durationMs: 4200,
-            animationConfig: {
-              profileName: "portrait",
-              sourceWidth: 1440,
-              sourceHeight: 1280,
-              renderWidth: 720,
-              renderHeight: 1280,
-              rgbFrame: [0, 0, 720, 1280],
-              aFrame: [720, 0, 720, 1280],
-            },
-          };
-        },
-      },
-    });
-
-    const adapters = createPreviewIngestAdapters({
-      config,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        console: () => {},
-      },
-      emitPlatformEvent: (event: UnknownRecord) =>
-        pipeline.emitIngestEvent(event),
-    });
-
-    const giftEvent = buildPreviewScenarioEvents(32000, 2000).find(
-      (event) =>
-        event.adapter === "tiktok" && event.rawEvent?.eventType === "GIFT",
-    )!;
-
-    expect(giftEvent).toBeDefined();
-
-    await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
-
-    for (
-      let attempt = 0;
-      attempt < 50 && !delayCalls.includes(4200);
-      attempt += 1
-    ) {
-      await waitForDelay(1);
-    }
-
-    expect(delayCalls.includes(4200)).toBe(false);
-
-    await pipeline.dispose();
-  });
 });

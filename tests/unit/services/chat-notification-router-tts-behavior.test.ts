@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -37,8 +38,8 @@ describe("ChatNotificationRouter TTS behavior", () => {
         tiktok: { greetingsEnabled: true, messagesEnabled: true },
       },
       displayQueue: {
-        addItem: createMockFn(),
-        addSequence: createMockFn(),
+        addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
+        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>((items) => items),
       },
       platformLifecycleService: {
         getPlatformConnectionTime: createMockFn().mockReturnValue(null),

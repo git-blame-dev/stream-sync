@@ -1,47 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
+import { expectNoTechnicalArtifacts } from '../helpers/assertion-helpers';
+import { createNotificationData } from '../helpers/notification-test-utils';
+import { formatUsername12 } from '../../src/utils/validation';
 
-import { restoreAllMocks } from '../helpers/bun-mock-utils';
-
-const nodeRequire = createRequire(import.meta.url);
-const { expectNoTechnicalArtifacts } = nodeRequire('../helpers/assertion-helpers') as {
-    expectNoTechnicalArtifacts: (value: string) => void;
-};
-
-type NotificationResult = {
-    type: string;
-    displayMessage: string;
-    ttsMessage: string;
-};
-
-type CreateNotificationData = (
-    type: string,
-    platform: string,
-    userData: Record<string, unknown>,
-    eventData: Record<string, unknown>
-) => NotificationResult;
-
-type FormatUsername12 = (username: string, isTts: boolean) => string;
-
-describe('Greeting Display Username Fix', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
-    let createNotificationData: CreateNotificationData;
-    let formatUsername12: FormatUsername12;
-
-    beforeEach(() => {
-        const testUtils = nodeRequire('../helpers/notification-test-utils') as {
-            createNotificationData: CreateNotificationData;
-        };
-        const validation = nodeRequire('../../src/utils/validation') as {
-            formatUsername12: FormatUsername12;
-        };
-        createNotificationData = testUtils.createNotificationData as CreateNotificationData;
-        formatUsername12 = validation.formatUsername12 as FormatUsername12;
-    });
-
+describe('Greeting builder username formatting', () => {
     describe('when greeting notification is generated', () => {
         describe('and username has multiple words', () => {
             it('should NOT truncate username in display message', () => {
@@ -190,8 +152,8 @@ describe('Greeting Display Username Fix', () => {
         });
     });
 
-    describe('integration with notification system', () => {
-        describe('when greeting is processed end-to-end', () => {
+    describe('greeting builder contract', () => {
+        describe('when building a greeting', () => {
             it('should create proper greeting notification with full username details', () => {
                 const userData = { username: 'fake_user_example', displayName: 'Example Display Name' };
                 const eventData = {};
@@ -209,7 +171,7 @@ describe('Greeting Display Username Fix', () => {
                 expect(result.ttsMessage).not.toMatch(/\{.*\}/);
             });
 
-            it('should prioritize displayName over username when both are present', () => {
+            it('uses the canonical username when a displayName is also present', () => {
                 const userData = {
                     username: 'user123',
                     displayName: 'Friendly User Name'

@@ -533,7 +533,23 @@ describe("CommandCooldownService", () => {
       expect(service.userCommandTimestamps.size).toBeLessThanOrEqual(2);
     });
 
-    it("should remove expired cooldowns during cleanup", () => {
+    it.each([60000, 3600000, 7200000])("preserves supplied %s ms cooldown through cleanup and its exact boundary", (duration) => {
+      service.updateGlobalCooldown('farewell:twitch');
+      service.updateGlobalCooldown('!synthetic-command');
+      testClock.advance(duration - 1);
+      expect(service.checkGlobalCooldown('farewell:twitch', duration)).toBe(false);
+      service.cleanupExpiredCooldowns();
+      expect(service.checkGlobalCooldown('farewell:twitch', duration)).toBe(false);
+      expect(service.checkGlobalCooldown('farewell:youtube', duration)).toBe(true);
+      expect(service.checkGlobalCooldown('!synthetic-command', duration)).toBe(false);
+      testClock.advance(1);
+      service.cleanupExpiredCooldowns();
+      expect(service.checkGlobalCooldown('farewell:twitch', duration)).toBe(true);
+      expect(service.checkGlobalCooldown('farewell:twitch', duration + 1)).toBe(false);
+      expect(service.checkGlobalCooldown('farewell:twitch', 1)).toBe(true);
+    });
+
+    it("retains execution history for later longer supplied cooldown durations", () => {
       const expiredCommand = "!slow";
       service.globalCommandCooldowns.set(
         expiredCommand,
@@ -542,7 +558,20 @@ describe("CommandCooldownService", () => {
 
       service.cleanupExpiredCooldowns();
 
-      expect(service.globalCommandCooldowns.has(expiredCommand)).toBe(false);
+      expect(service.checkGlobalCooldown(expiredCommand, 60000)).toBe(true);
+      expect(service.checkGlobalCooldown(expiredCommand, 3600000)).toBe(false);
+      expect(service.checkGlobalCooldown(expiredCommand, 7200000)).toBe(false);
+      expect(service.globalCommandCooldowns.has(expiredCommand)).toBe(true);
+      expect(service.checkGlobalCooldown('farewell:youtube', 7200000)).toBe(true);
+      service.updateGlobalCooldown('farewell:twitch');
+      testClock.advance(7200000);
+      service.cleanupExpiredCooldowns();
+      expect(service.checkGlobalCooldown('farewell:twitch', 7200000)).toBe(true);
+      expect(service.checkGlobalCooldown('farewell:twitch', 7200001)).toBe(false);
+      service.updateGlobalCooldown('farewell:twitch');
+      expect(service.checkGlobalCooldown('farewell:twitch', 1)).toBe(false);
+      service.dispose();
+      expect(service.globalCommandCooldowns.size).toBe(0);
     });
   });
 

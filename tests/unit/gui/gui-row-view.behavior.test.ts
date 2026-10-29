@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,6 +8,13 @@ import type { GuiRowDto } from "../../../gui/src/shared/types";
 import { getPlatformIconUrl } from "../../../gui/src/shared/platform-icon-map";
 import { createGuiFeedStore } from "../../../gui/src/shared/feed-store";
 import { createEventToGuiContractMapper } from "../../../src/services/gui/event-to-gui-contract-mapper";
+
+let renderer: TestRenderer.ReactTestRenderer | undefined;
+afterEach(() => {
+  const mounted = renderer;
+  renderer = undefined;
+  act(() => mounted?.unmount());
+});
 
 describe("GuiRow rendering behavior", () => {
   it("preserves the wire row through mapping, frontend parsing, and member rendering", async () => {
@@ -54,21 +61,19 @@ describe("GuiRow rendering behavior", () => {
   });
 
   it("replaces a failed avatar with the local neutral fallback without retrying the remote URL", () => {
-    let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(React.createElement(GuiRow, {
         mode: "dock",
         row: { type: "chat", kind: "chat", platform: "twitch", username: "user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null },
       }));
     });
-    const avatar = renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
+    const avatar = renderer!.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
 
     act(() => avatar.props.onError());
-    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src).toBe(GUI_AVATAR_FALLBACK_URL);
-    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.onError).toBeDefined();
+    expect(renderer!.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src).toBe(GUI_AVATAR_FALLBACK_URL);
+    expect(renderer!.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.onError).toBeDefined();
   });
   it("uses the next row avatar after a previous avatar has failed", () => {
-    let renderer!: TestRenderer.ReactTestRenderer;
     const row = (avatarUrl: string, username: string) => ({
       type: "chat" as const,
       kind: "chat" as const,
@@ -85,16 +90,16 @@ describe("GuiRow rendering behavior", () => {
         row: row("https://example.invalid/avatar-a.png", "user-a"),
       }));
     });
-    const avatar = renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
+    const avatar = renderer!.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
     act(() => avatar.props.onError());
     expect(avatar.props.src).toBe(GUI_AVATAR_FALLBACK_URL);
 
-    act(() => renderer.update(React.createElement(GuiRow, {
+    act(() => renderer!.update(React.createElement(GuiRow, {
       mode: "dock",
       row: row("https://example.invalid/avatar-b.png", "user-b"),
     })));
 
-    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src)
+    expect(renderer!.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src)
       .toBe("https://example.invalid/avatar-b.png");
   });
   it("renders the avatar and platform icon together before row content", () => {
@@ -906,7 +911,6 @@ describe("GuiRow rendering behavior", () => {
   );
 
   it("removes a failed configured member sprite and renders a later URL", () => {
-    let renderer!: TestRenderer.ReactTestRenderer;
     const row = (spriteUrl: string): GuiRowDto => ({
       type: "chat",
       kind: "chat",
@@ -924,28 +928,27 @@ describe("GuiRow rendering behavior", () => {
         row: row("https://example.invalid/member-a.gif"),
       }));
     });
-    const image = renderer.root.findByProps({ className: "gui-row__member-image" });
+    const image = renderer!.root.findByProps({ className: "gui-row__member-image" });
 
     act(() => image.props.onError());
 
-    expect(renderer.root.findAllByProps({ className: "gui-row__member-image" })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ className: "gui-row__member-image-clip" })).toHaveLength(0);
-    expect(renderer.root.findByProps({ role: "article" }).props.className).toContain("gui-row--member-chat");
-    expect(renderer.root.findByProps({ className: "gui-row__member-tag" })).toBeDefined();
-    expect(renderer.root.findByProps({ className: "gui-row__text gui-row__text--member-chat" })).toBeDefined();
-    expect(renderer.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
+    expect(renderer!.root.findAllByProps({ className: "gui-row__member-image" })).toHaveLength(0);
+    expect(renderer!.root.findAllByProps({ className: "gui-row__member-image-clip" })).toHaveLength(0);
+    expect(renderer!.root.findByProps({ role: "article" }).props.className).toContain("gui-row--member-chat");
+    expect(renderer!.root.findByProps({ className: "gui-row__member-tag" })).toBeDefined();
+    expect(renderer!.root.findByProps({ className: "gui-row__text gui-row__text--member-chat" })).toBeDefined();
+    expect(renderer!.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
     act(() => {
-      renderer.update(React.createElement(GuiRow, {
+      renderer!.update(React.createElement(GuiRow, {
         mode: "dock",
         row: row("https://example.invalid/member-b.gif"),
       }));
     });
-    expect(renderer.root.findByProps({ className: "gui-row__member-image" }).props.src)
+    expect(renderer!.root.findByProps({ className: "gui-row__member-image" }).props.src)
       .toBe("https://example.invalid/member-b.gif");
   });
 
   it("removes a failed monetization sprite while preserving notification content", () => {
-    let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(React.createElement(GuiRow, {
         mode: "dock",
@@ -961,15 +964,15 @@ describe("GuiRow rendering behavior", () => {
         },
       }));
     });
-    const image = renderer.root.findByProps({ className: "gui-row__monetization-image" });
+    const image = renderer!.root.findByProps({ className: "gui-row__monetization-image" });
 
     act(() => image.props.onError());
 
-    expect(renderer.root.findAllByProps({ className: "gui-row__monetization-image" })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ className: "gui-row__monetization-image-clip" })).toHaveLength(0);
-    expect(renderer.root.findByProps({ role: "article" }).props.className).toContain("gui-row--monetization");
-    expect(renderer.root.findByProps({ className: "gui-row__username" })).toBeDefined();
-    expect(renderer.root.findByProps({ className: "gui-row__text gui-row__text--notification" })).toBeDefined();
-    expect(renderer.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
+    expect(renderer!.root.findAllByProps({ className: "gui-row__monetization-image" })).toHaveLength(0);
+    expect(renderer!.root.findAllByProps({ className: "gui-row__monetization-image-clip" })).toHaveLength(0);
+    expect(renderer!.root.findByProps({ role: "article" }).props.className).toContain("gui-row--monetization");
+    expect(renderer!.root.findByProps({ className: "gui-row__username" })).toBeDefined();
+    expect(renderer!.root.findByProps({ className: "gui-row__text gui-row__text--notification" })).toBeDefined();
+    expect(renderer!.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
   });
 });

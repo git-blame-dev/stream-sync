@@ -13,7 +13,7 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import type { DisplayQueueDependency, DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
 type DisplayQueueMock = DisplayQueueDependency & {
-  addItem: TestMockFn<[DisplayQueueItem], void>;
+  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
   getQueueLength: TestMockFn<[], number>;
 };
 
@@ -31,7 +31,6 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     displayQueue,
     eventBus: new EventEmitter(),
     constants: require("../../../src/core/constants"),
-    obsGoals: { processDonationGoal: createMockFn() },
     config,
     vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
     userTrackingService: {
@@ -41,7 +40,7 @@ describe("NotificationManager YouTube monetisation behavior", () => {
 
   beforeEach(() => {
     displayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], void>(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
     config = createConfigFixture({
@@ -231,7 +230,6 @@ describe("NotificationManager YouTube monetisation behavior", () => {
       displayQueue,
       eventBus: new EventEmitter(),
       constants: require("../../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
       config: disabledConfig,
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),

@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -5,12 +6,12 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
 type TestConfig = ReturnType<typeof createConfigFixture>;
-type QueueItem = Record<string, unknown> & { type?: string; priority?: number };
+type QueueItem = DisplayQueueItem;
 type RouterRuntime = {
   config: TestConfig;
   displayQueue: {
-    addItem: TestMockFn<[QueueItem], void>;
-    addSequence: TestMockFn<[QueueItem[]], void>;
+    addItem: TestMockFn<[QueueItem], readonly QueueItem[]>;
+    addSequence: TestMockFn<[QueueItem[]], readonly QueueItem[]>;
   };
   platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
   commandCooldownService: {
@@ -53,7 +54,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
     runtime: runtimeOverrides,
     config = testConfig,
   }: { runtime?: Partial<RouterRuntime>; config?: TestConfig } = {}) => {
-    const addItem = createMockFn<[QueueItem], void>();
+    const addItem = createMockFn<[QueueItem], readonly QueueItem[]>((item) => [item]);
     const baseRuntime: RouterRuntime = {
       config: {
         ...testConfig,
@@ -62,8 +63,9 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
       },
       displayQueue: {
         addItem,
-        addSequence: createMockFn<[QueueItem[]], void>((items) => {
+        addSequence: createMockFn<[QueueItem[]], readonly QueueItem[]>((items) => {
           items.forEach((item) => addItem(item));
+          return items;
         }),
       },
       platformLifecycleService: {

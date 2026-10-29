@@ -9,7 +9,7 @@ function readObsFile(name: string): string {
 
 type HealthResponse = { ok: boolean } | { body: unknown; responseOk?: boolean } | Error;
 
-function createWrapperHarness(healthResponses: HealthResponse[], origin?: string, options: { hash?: string; route?: string | null; statusVisible?: boolean } = {}) {
+function createWrapperHarness(healthResponses: HealthResponse[], origin?: string, options: { hash?: string; search?: string; route?: string | null; statusVisible?: boolean } = {}) {
   let timerId = 0;
   const timers = new Map<number, () => void>();
   const healthUrls: string[] = [];
@@ -54,7 +54,7 @@ function createWrapperHarness(healthResponses: HealthResponse[], origin?: string
       timers.set(id, callback);
       return id;
     },
-    window: { location: { hash: options.hash ?? (origin === undefined ? "" : `#origin=${encodeURIComponent(origin)}`), search: "" } },
+    window: { location: { hash: options.hash ?? (origin === undefined ? "" : `#origin=${encodeURIComponent(origin)}`), search: options.search ?? "" } },
   });
 
   return {
@@ -114,7 +114,7 @@ describe("OBS browser wrappers", () => {
     expect(harness.frame.src).toBe(`${expected}/overlay`);
   });
 
-  test("shares compatibility polling while preserving source query parameters", () => {
+  test("declares shared wrapper assets and status visibility", () => {
     const wrapper = readObsFile("browser-wrapper.html");
 
     expect(wrapper).toContain('src="browser-wrapper.js?v=3"');
@@ -130,14 +130,28 @@ describe("OBS browser wrappers", () => {
     ["notifications.html", "/notifications"],
     ["tiktok-animations.html", "/tiktok-animations"],
     ["demo.html", "/demo"],
-  ])("forwards query parameters from %s", (fileName, route) => {
+  ])("declares wrapper assets and route for %s", (fileName, route) => {
     const launcher = readObsFile(fileName);
 
     expect(launcher).toContain(`data-route="${route}"`);
     expect(launcher).toContain('src="browser-wrapper.js?v=3"');
     expect(launcher).toContain('href="browser-wrapper.css?v=2"');
     expect(launcher).not.toContain("window.location.replace");
-    expect(readObsFile("browser-wrapper.js")).toContain("window.location.search");
+  });
+
+  test.each(["/overlay", "/goal", "/dock", "/notifications", "/tiktok-animations", "/demo"])("forwards encoded and duplicate query values for %s", async (route) => {
+    const search = "?name=hello%20world&tag=%E6%B8%AC&tag=a%3Ab";
+    const harness = createWrapperHarness([{ ok: true }], undefined, { route, search });
+    await harness.flushMicrotasks();
+    expect(harness.frame.src).toBe(`http://localhost:3399${route}${search}`);
+    expect(harness.healthUrls).toEqual([`http://localhost:3399/health?route=${encodeURIComponent(route)}`]);
+  });
+
+  test("generic hash route does not append launcher search", async () => {
+    const harness = createWrapperHarness([{ ok: true }], undefined, { route: null, hash: "#/goal?from=hash", search: "?from=search" });
+    await harness.flushMicrotasks();
+    expect(harness.frame.src).toBe("http://localhost:3399/goal?from=hash");
+    expect(harness.healthUrls).toEqual(["http://localhost:3399/health?route=%2Fgoal"]);
   });
 
   test("keeps dock status visible and stream-facing launchers transparent", () => {

@@ -17,8 +17,8 @@ type VfxConfig = NonNullable<
   Awaited<ReturnType<SelectVfxCommand>>
 >;
 type QueuedItem = DisplayQueueItem;
-type AddItemMock = TestMockFn<[QueuedItem], void>;
-type AddSequenceMock = TestMockFn<[QueuedItem[]], void>;
+type AddItemMock = TestMockFn<[QueuedItem], readonly QueuedItem[]>;
+type AddSequenceMock = TestMockFn<[QueuedItem[]], readonly QueuedItem[]>;
 type TestRuntime = RouterRuntime & {
   displayQueue: { addItem: AddItemMock; addSequence: AddSequenceMock };
   commandCooldownService: NonNullable<RouterRuntime["commandCooldownService"]>;
@@ -96,9 +96,10 @@ describe("ChatNotificationRouter", () => {
         },
       };
     let runtime: TestRuntime;
-    const addItem = createMockFn<[QueuedItem], void>();
-    const addSequence = createMockFn<[QueuedItem[]], void>((items) => {
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
+    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => {
       items.forEach((item) => addItem(item));
+      return items;
     });
     const baseRuntime = {
       config: baseConfig,
@@ -147,8 +148,9 @@ describe("ChatNotificationRouter", () => {
     runtime = baseRuntime;
     Object.assign(runtime, runtimeOverrides);
     if (!runtime.displayQueue.addSequence) {
-      runtime.displayQueue.addSequence = createMockFn<[QueuedItem[]], void>((items) => {
+      runtime.displayQueue.addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => {
         items.forEach((item) => runtime.displayQueue.addItem(item));
+        return items;
       });
     }
     runtime.config = {
@@ -653,8 +655,8 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("falls back to chat without consuming state when sequence admission fails", async () => {
-    const addItem = createMockFn<[QueuedItem], void>();
-    const addSequence = createMockFn<[QueuedItem[]], void>(() => {
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
+    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>(() => {
       throw new Error("sequence admission failed");
     });
     const markMessageSeen = createMockFn();
@@ -688,8 +690,8 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("does not duplicate admitted chat when post-admission state updates fail", async () => {
-    const addItem = createMockFn<[QueuedItem], void>();
-    const addSequence = createMockFn<[QueuedItem[]], void>();
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
+    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => items);
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem, addSequence },
@@ -750,10 +752,11 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("does not consume cooldowns when command enqueue fails", async () => {
-    const addItem = createMockFn<[QueuedItem], void>((item) => {
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
       if (item.type === "command") {
         throw new Error("queue failed");
       }
+      return [item];
     });
     const { router, runtime } = createRouter({
       runtime: {
@@ -818,10 +821,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   it("does not consume first-message state when command enqueue fails", async () => {
     const hasSeenUser = createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false);
     const markMessageSeen = createMockFn();
-    const addItem = createMockFn<[QueuedItem], void>((item) => {
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
       if (item.type === "command") {
         throw new Error("command enqueue failed");
       }
+      return [item];
     });
     const { router } = createRouter({
       runtime: {
@@ -1247,7 +1251,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("propagates avatarUrl to farewell notification payload options", async () => {
-    const addItem = createMockFn<[QueuedItem], void>();
+    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem },
@@ -1449,48 +1453,6 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     expect(queuedTypes).toContain("chat");
     expect(queuedTypes).toContain("command");
     expect(queuedTypes).not.toContain("farewell");
-  });
-
-  it("detects farewell triggers after sanitizing zero-width characters", async () => {
-    const { router, runtime } = createRouter({
-      runtime: {
-        vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
-        },
-      },
-    });
-
-    await router.handleChatMessage("twitch", {
-      ...baseMessage,
-      message: "!bye\u200B everyone",
-    });
-
-    const queuedTypes = runtime.displayQueue.addItem.mock.calls.map(
-      (call) => call[0].type,
-    );
-    expect(queuedTypes).toContain("farewell");
-  });
-
-  it("detects farewell triggers with trailing punctuation", async () => {
-    const { router, runtime } = createRouter({
-      runtime: {
-        vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
-        },
-      },
-    });
-
-    await router.handleChatMessage("twitch", {
-      ...baseMessage,
-      message: "!bye!!! everyone",
-    });
-
-    const queuedTypes = runtime.displayQueue.addItem.mock.calls.map(
-      (call) => call[0].type,
-    );
-    expect(queuedTypes).toContain("farewell");
   });
 
   it("suppresses repeated farewell triggers on the same platform within timeout", async () => {

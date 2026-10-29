@@ -20,7 +20,7 @@ export type Control = {
   overridden: boolean
 }
 
-export type OperatorState = { revision: number; controls: Control[] }
+export type OperatorState = { sessionId?: string; revision: number; controls: Control[] }
 export type AppearanceSettings = {
   compactRows: boolean
   rowBackgroundsEnabled: boolean
@@ -30,7 +30,7 @@ export type AppearanceSettings = {
   memberRowEffects: readonly RowVisualEffectId[]
 }
 export type AppearanceValue = AppearanceSettings[keyof AppearanceSettings]
-export type AppearanceState = { revision: number; settings: AppearanceSettings; overriddenKeys: string[] }
+export type AppearanceState = { sessionId?: string; revision: number; settings: AppearanceSettings; overriddenKeys: string[] }
 export type LogEntry = { id: number; timestamp: string; level: string; message: string; source: string; data?: unknown }
 export const CONTROL_KEYS = [
   'messagesEnabled',
@@ -62,7 +62,8 @@ const appearanceKeys = new Set<string>(APPEARANCE_KEYS)
 
 export function parseOperatorState(value: unknown): OperatorState | null {
   if (!value || typeof value !== 'object') return null
-  const candidate = value as { revision?: unknown; controls?: unknown }
+  const candidate = value as { sessionId?: unknown; revision?: unknown; controls?: unknown }
+  if (candidate.sessionId !== undefined && (typeof candidate.sessionId !== 'string' || !candidate.sessionId.trim())) return null
   if (typeof candidate.revision !== 'number' || !Number.isSafeInteger(candidate.revision) || candidate.revision < 0 || !Array.isArray(candidate.controls)) return null
   const controls = candidate.controls.filter((control): control is Control => {
     if (!control || typeof control !== 'object') return false
@@ -76,13 +77,14 @@ export function parseOperatorState(value: unknown): OperatorState | null {
   return controls.length === CONTROL_KEYS.length
     && controls.length === candidate.controls.length
     && new Set(controls.map((control) => control.key)).size === CONTROL_KEYS.length
-    ? { revision: candidate.revision, controls }
+    ? { ...(candidate.sessionId ? { sessionId: candidate.sessionId as string } : {}), revision: candidate.revision, controls }
     : null
 }
 
 export function parseAppearanceState(value: unknown): AppearanceState | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Record<string, unknown>
+  if (candidate.sessionId !== undefined && (typeof candidate.sessionId !== 'string' || !candidate.sessionId.trim())) return null
   const settings = candidate.settings
   if (
     typeof candidate.revision !== 'number'
@@ -114,6 +116,7 @@ export function parseAppearanceState(value: unknown): AppearanceState | null {
     && new Set(candidate.overriddenKeys).size === candidate.overriddenKeys.length
   if (!isValid || typeof compactRows !== 'boolean' || typeof rowBackgroundsEnabled !== 'boolean' || typeof maxDisplayableBadges !== 'number') return null
   return {
+    ...(candidate.sessionId ? { sessionId: candidate.sessionId as string } : {}),
     revision: candidate.revision,
     settings: {
       compactRows,
@@ -145,12 +148,22 @@ export function appendLogRow(rows: LogEntry[], entry: LogEntry): LogEntry[] {
   return [...rows, entry].slice(-MAX_LOG_ROWS)
 }
 
-export function selectNewestState(current: OperatorState | null, next: OperatorState): OperatorState {
-  return !current || next.revision >= current.revision ? next : current
+// Only ordered snapshots from the active event stream may establish a new owner.
+// HTTP responses can arrive after that owner has already been replaced.
+export function selectSessionSnapshot<T extends { sessionId?: string; revision: number }>(
+  current: T | null, next: T, source: 'http' | 'stream' = 'http',
+): T {
+  if (!current) return next
+  if (current.sessionId !== next.sessionId) return source === 'stream' ? next : current
+  return next.revision >= current.revision ? next : current
 }
 
-export function selectNewestAppearance(current: AppearanceState | null, next: AppearanceState): AppearanceState {
-  return !current || next.revision >= current.revision ? next : current
+export function selectNewestState(current: OperatorState | null, next: OperatorState, source: 'http' | 'stream' = 'http'): OperatorState {
+  return selectSessionSnapshot(current, next, source)
+}
+
+export function selectNewestAppearance(current: AppearanceState | null, next: AppearanceState, source: 'http' | 'stream' = 'http'): AppearanceState {
+  return selectSessionSnapshot(current, next, source)
 }
 
 export function formatLogData(data: unknown): string {

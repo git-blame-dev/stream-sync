@@ -68,6 +68,14 @@ describe("NotificationInputValidator", () => {
     expectValidationFailure(result, "Invalid notification data");
   });
 
+  it("rejects array payloads at direct and canonical validation boundaries", () => {
+    const validator = new NotificationInputValidator(notificationConfigs);
+    expectValidationFailure(validator.validateData([]), "Invalid notification data");
+    expectValidationFailure(validator.validateNotificationPayload([], {
+      notificationType: "platform:follow", platform: "twitch",
+    }), "Invalid notification data");
+  });
+
   it("rejects unsupported paid alias types as unknown", () => {
     const validator = new NotificationInputValidator(notificationConfigs);
 

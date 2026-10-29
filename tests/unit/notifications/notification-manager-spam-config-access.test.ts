@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   type TestMockFn,
@@ -26,7 +27,7 @@ type NotificationConstants = {
 };
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[Record<string, unknown>], void>;
+  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
   processQueue: TestMockFn<[], void>;
   getQueueLength: TestMockFn<[], number>;
 };
@@ -102,7 +103,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn<[Record<string, unknown>], void>(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       processQueue: createMockFn<[], void>(),
       getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
@@ -132,7 +133,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     },
     config,
     constants: mockConstants,
-    obsGoals: { processDonationGoal: createMockFn() },
     donationSpamDetector: mockSpamDetector,
     vfxCommandService: {
       getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -152,7 +152,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -184,7 +183,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -225,7 +223,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
         },
@@ -265,7 +262,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
         },
@@ -319,7 +315,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -360,7 +355,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -403,7 +397,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),

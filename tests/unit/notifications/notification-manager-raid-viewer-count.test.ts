@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -13,7 +14,7 @@ describe("NotificationManager raid viewer count fallback", () => {
 
   const createManager = () => {
     const displayQueue = {
-      addItem: createMockFn(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       addToQueue: createMockFn(),
       processQueue: createMockFn(),
       isQueueEmpty: createMockFn().mockReturnValue(true),
@@ -33,7 +34,6 @@ describe("NotificationManager raid viewer count fallback", () => {
       eventBus: new EventEmitter(),
       config,
       constants: require("../../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         executeCommand: createMockFn().mockResolvedValue({ success: true }),
       },

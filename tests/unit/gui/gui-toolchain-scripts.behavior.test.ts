@@ -21,10 +21,10 @@ describe("GUI toolchain scripts behavior", () => {
       "bun run build && bun scripts/local/gui-gift-animation-preview.ts",
     );
     expect(packageJson.scripts["test:coverage"]).toBe(
-      "NODE_ENV=test bun test --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests",
+      "NODE_ENV=test bun test --no-env-file --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests",
     );
     expect(packageJson.scripts.verify).toBe(
-      "bun run lint && bun run typecheck:all && bun run test:coverage && bun run build",
+      "bun run lint && bun run typecheck:all && bun --no-env-file run test:coverage && bun run build",
     );
     expect(packageJson.scripts["typecheck:gui"]).toBe(
       "tsc --noEmit -p gui/tsconfig.json",

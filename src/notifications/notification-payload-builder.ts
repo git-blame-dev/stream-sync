@@ -1,3 +1,4 @@
+import { allowsYouTubeJewelsMissingAmount } from '../utils/missing-fields';
 import { copyNotificationContributions, type NotificationContribution } from './notification-contribution';
 
 const STRIPPED_FIELDS = [
@@ -92,7 +93,14 @@ class NotificationPayloadBuilder {
             }
         }
 
-        if (isMonetizationType && normalized.metadata !== undefined) {
+        const needsMissingAmountProvenance = isMonetizationType && normalized.metadata !== undefined &&
+            normalized.amount === undefined && allowsYouTubeJewelsMissingAmount({
+            type: data.type ?? data.sourceType,
+            platform: data.platform,
+            currency: data.currency,
+            metadata: data.metadata
+        });
+        if (isMonetizationType && !needsMissingAmountProvenance && normalized.metadata !== undefined) {
             delete normalized.metadata;
         }
 

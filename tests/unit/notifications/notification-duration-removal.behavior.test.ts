@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -7,10 +8,7 @@ import { EventEmitter } from "node:events";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
-type QueueItem = {
-  duration?: unknown;
-  [key: string]: unknown;
-};
+type QueueItem = DisplayQueueItem;
 
 type NotificationManagerLike = {
   handleNotification: (
@@ -55,12 +53,11 @@ describe("Display items avoid hardcoded durations", () => {
       notificationManager = new NotificationManager({
         logger: noOpLogger,
         displayQueue: {
-          addItem: (item: QueueItem) => queuedItems.push(item),
+          addItem: (item: QueueItem) => { queuedItems.push(item); return [item]; },
           getQueueLength: () => queuedItems.length,
         },
         eventBus: new EventEmitter(),
         constants: require("../../../src/core/constants"),
-        obsGoals: { processDonationGoal: createMockFn() },
         config: createConfigFixture(),
         vfxCommandService: {
           executeCommand: createMockFn().mockResolvedValue({ success: true }),
@@ -92,8 +89,8 @@ describe("Display items avoid hardcoded durations", () => {
       queuedItems = [];
       const runtime = {
         displayQueue: {
-          addItem: (item: QueueItem) => queuedItems.push(item),
-          addSequence: (items: QueueItem[]) => queuedItems.push(...items),
+          addItem: (item: QueueItem) => { queuedItems.push(item); return [item]; },
+          addSequence: (items: QueueItem[]) => { queuedItems.push(...items); return items; },
         },
         config: createConfigFixture(),
         commandCooldownService: {

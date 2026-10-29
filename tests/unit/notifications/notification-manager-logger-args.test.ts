@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   createMockFn,
@@ -40,7 +41,7 @@ type NotificationConstants = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>>;
   processQueue: ReturnType<typeof createMockFn>;
   getQueueLength: TestMockFn<[], number>;
 };
@@ -82,7 +83,7 @@ describe("NotificationManager logger argument order", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn(),
+      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
       processQueue: createMockFn(),
       getQueueLength: createMockFn<[], number>(() => 0),
     };
@@ -110,7 +111,6 @@ describe("NotificationManager logger argument order", () => {
       eventBus: mockEventBus,
       config,
       constants: mockConstants,
-      obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       },

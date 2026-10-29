@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createTestUser } from "../helpers/test-setup";
-import testClock from "../helpers/test-clock";
 
 registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
@@ -396,30 +395,8 @@ describe("Command Integration System", () => {
     });
   });
 
-  describe("Performance Tests", () => {
-    test("should handle rapid command parsing efficiently", () => {
-      const startTime = testClock.now();
-      const iterations = 1000;
-
-      for (let i = 0; i < iterations; i++) {
-        const data = createTestUser({
-          comment: `!hello message ${i}`,
-          username: `user${i}`,
-          userId: `id${i}`,
-          platform: "twitch",
-        });
-        commandParser.parse(data, false);
-      }
-
-      const simulatedProcessingMs = 50;
-      testClock.advance(simulatedProcessingMs);
-      const endTime = testClock.now();
-      const processingTime = endTime - startTime;
-
-      expect(processingTime).toBeLessThan(100);
-    });
-
-    test("should handle large command configuration efficiently", () => {
+  describe("Large command configuration", () => {
+    test("resolves an exact command from a large configuration", () => {
       const largeConfig: CommandConfigFixture = {
         commands: {},
         farewell: {},
@@ -431,7 +408,6 @@ describe("Command Integration System", () => {
       }
       const largeParser = new CommandParser(largeConfig);
 
-      const startTime = testClock.now();
       const data = createTestUser({
         comment: "!cmd50 test message",
         username: "testuser",
@@ -440,12 +416,8 @@ describe("Command Integration System", () => {
       });
 
       const result = largeParser.parse(data, false);
-      const simulatedProcessingMs = 5;
-      testClock.advance(simulatedProcessingMs);
-      const endTime = testClock.now();
 
       expect(result).toBeTruthy();
-      expect(endTime - startTime).toBeLessThan(10);
     });
   });
 

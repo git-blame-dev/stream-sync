@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { createGuiTransportService } from "../../src/services/gui/gui-transport-service";
 import { DEFAULT_AVATAR_URL } from "../../src/constants/avatar";
 import { safeSetTimeout } from "../../src/utils/timeout-validator";
-import { TestEventBus } from "../helpers/gui-transport-test-utils";
+import { EventBus } from "../../src/core/EventBus";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
 import { createFundingGoalService } from "../../src/services/funding-goal-service";
@@ -146,13 +146,13 @@ describe("GUI transport routes and SSE integration", () => {
         return () => { detach(); retired.push(name); throw new Error("synthetic owner retirement failure"); };
       }) as typeof owner.subscribe;
     }
-    const bus = new TestEventBus();
+    const bus = new EventBus();
     const subscribe = bus.subscribe.bind(bus);
     bus.subscribe = (event, callback) => {
       const detach = subscribe(event, callback);
       return () => {
         detach();
-        retired.push(event);
+        retired.push(String(event));
         throw new Error("synthetic retirement failure");
       };
     };
@@ -205,7 +205,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("preserves startup failure through throwing rollback and diagnostics", async () => {
     const original = new Error("synthetic listen failure");
-    const bus = new TestEventBus();
+    const bus = new EventBus();
     const subscribe = bus.subscribe.bind(bus);
     let retired = 0;
     bus.subscribe = (event, callback) => {
@@ -234,7 +234,7 @@ describe("GUI transport routes and SSE integration", () => {
     let finishListen: (() => void) | undefined;
     let closes = 0;
     let reentrantStop: Promise<void> | undefined;
-    const bus = new TestEventBus();
+    const bus = new EventBus();
     const subscribe = bus.subscribe.bind(bus);
     bus.subscribe = (event, callback) => {
       const detach = subscribe(event, callback);
@@ -266,7 +266,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("rejects a retained lifecycle callback after restart while delivering the current generation", async () => {
-    const bus = new TestEventBus();
+    const bus = new EventBus();
     const callbacks: Array<(...args: unknown[]) => void> = [];
     const subscribe = bus.subscribe.bind(bus);
     bus.subscribe = (event, callback) => {
@@ -328,7 +328,7 @@ describe("GUI transport routes and SSE integration", () => {
     await fundingGoal.setTotal(25);
     const service = createGuiTransportService({
       config: buildConfig({ enableOverlay: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       fundingGoal,
       logger: null,
     });
@@ -359,52 +359,48 @@ describe("GUI transport routes and SSE integration", () => {
     }
   });
 
-  it("skips an oversized initial funding packet without bypassing client safeguards", async () => {
-    const fundingGoal = {
-      snapshot: {
-        currentUsd: 25,
-        targetUsd: 100,
-        revision: 1,
-        enabled: true,
-        id: "controller",
-        completed: false,
-        sessionId: "test-session",
-        label: "x".repeat(300_000),
-        labelOverridden: false,
-      },
-      subscribe: (listener: (snapshot: any) => void) => {
-        return () => undefined;
-      },
-      adjust: async () => undefined,
-      setTotal: async () => undefined,
-    };
-    const service = createGuiTransportService({
-      config: buildConfig({ enableOverlay: true, port: 0 }),
-      eventBus: new TestEventBus(),
-      fundingGoal,
-      logger: null,
-    });
-    await service.start();
+  it("skips an oversized direct-owner funding snapshot while retaining a healthy ordered SSE client", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "synthetic-oversized-funding-"));
+    const eventBus = new EventBus();
     const controller = new AbortController();
-
+    let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>> | undefined;
+    let service: ReturnType<typeof createGuiTransportService> | undefined;
     try {
+      // The direct service constructor accepts this configuration. This does not
+      // claim that the operator label editor accepts an oversized label.
+      fundingGoal = await createFundingGoalService({
+        config: { enabled: true, id: "synthetic-oversized", label: "x".repeat(300_000), targetUsd: 100 },
+        monetizationValuesConfig: { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005,
+          tiktokMembershipUsd: 2, twitchMembershipUsd: 3, youtubeMembershipUsd: 4 },
+        filePath: path.join(root, "funding.json"),
+      });
+      await fundingGoal.setTotal(25);
+      expect(fundingGoal.snapshot.label.length).toBe(300_000);
+      service = createGuiTransportService({ config: buildConfig({ enableOverlay: true, port: 0 }), eventBus, fundingGoal, logger: null });
+      await service.start();
       const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
+      expect(response.status).toBe(200);
       const reader = createSseReader(response);
       await reader.readAppearance();
-      const noInitialFunding = reader.readEvent().then(() => false).catch(() => true);
-      await new Promise((resolve) => safeSetTimeout(resolve, 100));
-      controller.abort();
-      expect(await noInitialFunding).toBe(true);
+      eventBus.emit("display:row", { type: "chat", platform: "twitch", data: {
+        username: "Synthetic Sentinel", userId: "synthetic-sentinel", message: "synthetic funding sentinel",
+        timestamp: "2026-01-01T00:00:00.000Z",
+      } });
+      expect(await reader.readEvent()).toMatchObject({ type: "chat", text: "synthetic funding sentinel" });
     } finally {
       controller.abort();
-      await service.stop();
+      try { await service?.stop(); }
+      finally {
+        try { await fundingGoal?.dispose(); }
+        finally { fs.rmSync(root, { recursive: true, force: true }); }
+      }
     }
   });
 
   it("sends the current minimal appearance snapshot when a GUI client connects", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableOverlay: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -446,7 +442,7 @@ describe("GUI transport routes and SSE integration", () => {
     });
     const service = createGuiTransportService({
       config: buildConfig({ enableOverlay: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
       operatorAppearance: appearance,
     });
@@ -456,16 +452,18 @@ describe("GUI transport routes and SSE integration", () => {
     try {
       const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
       const reader = createSseReader(response);
-      expect((await reader.readAppearance()).revision).toBe(0);
+      expect(await reader.readAppearance()).toMatchObject({ sessionId: appearance.sessionId, revision: 0 });
 
       await appearance.set("memberRowTheme", "red");
       expect(await reader.readAppearance()).toMatchObject({
+        sessionId: appearance.sessionId,
         revision: 1,
         settings: { memberRowTheme: "red", memberRowEffects: ["sheen"] },
       });
 
       await appearance.set("memberRowEffects", ["particles", "sheen"]);
       expect(await reader.readAppearance()).toMatchObject({
+        sessionId: appearance.sessionId,
         revision: 2,
         settings: { memberRowTheme: "red", memberRowEffects: ["particles", "sheen"] },
       });
@@ -485,7 +483,7 @@ describe("GUI transport routes and SSE integration", () => {
     });
     const service = createGuiTransportService({
       config,
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
 
@@ -495,7 +493,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("remains restartable after stop sees server close errors", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -596,7 +594,7 @@ describe("GUI transport routes and SSE integration", () => {
     };
     const service = createGuiTransportService({
       config: buildConfig({ enableOverlay: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
       createServer: fakeCreateServer,
     });
@@ -645,7 +643,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("does not resurrect runtime-error recovery after an explicit stop", async () => {
-    const bus = new TestEventBus();
+    const bus = new EventBus();
     const servers: EventEmitter[] = [];
     let releaseClose: (() => void) | undefined;
     let closeStarted: (() => void) | undefined;
@@ -702,7 +700,7 @@ describe("GUI transport routes and SSE integration", () => {
       port: 0,
     });
 
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     let runtimeErrorListener: ((error: Error) => void) | null = null;
     const fakeCreateServer = () => {
       return {
@@ -749,7 +747,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers mapped rows over SSE and supports reconnect delivery", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -832,7 +830,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("keeps real avatar resolution when notification rows arrive before chat rows", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const service = createGuiTransportService({
       config: buildConfig({
         enableDock: true,
@@ -896,7 +894,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("always includes avatarUrl and preserves real avatar over fallback payload rows", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const service = createGuiTransportService({
       config: buildConfig({
         enableDock: true,
@@ -992,7 +990,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers gift animation effect envelopes after display rows and serves runtime media", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1095,7 +1093,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("returns 416 for malformed or unsatisfiable runtime asset ranges", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1184,7 +1182,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("serves zero-byte runtime assets with correct headers and rejects ranged reads", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1252,7 +1250,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("rejects runtime assets that resolve outside allowed roots", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const allowedRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "gui-transport-allowed-"),
     );
@@ -1332,7 +1330,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("enforces runtime asset max entries without exceeding cap", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1400,7 +1398,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers chat parts over SSE when canonical message.parts is provided", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1463,7 +1461,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers notification parts over SSE for Twitch gift rows", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1528,7 +1526,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers notification parts over SSE for YouTube Super Sticker rows", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1593,7 +1591,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("delivers canonical badgeImages over SSE for chat rows", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1656,7 +1654,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("returns disabled dock shell and enabled overlay shell", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: false,
       enableOverlay: true,
@@ -1710,7 +1708,7 @@ describe("GUI transport routes and SSE integration", () => {
       config: { enabled: true, id: "controller", label: "Goal", targetUsd: 100 },
       monetizationValuesConfig: { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005, tiktokMembershipUsd: 2.10, twitchMembershipUsd: 3.50, youtubeMembershipUsd: 3.89 }, filePath: path.join(root, "funding-goal.json")
     });
-    const service = createGuiTransportService({ config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: new TestEventBus(), fundingGoal, logger: null });
+    const service = createGuiTransportService({ config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: new EventBus(), fundingGoal, logger: null });
     await service.start();
     try {
       const baseUrl = getBaseUrl(service);
@@ -1735,7 +1733,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("reports goal readiness only for an enabled funding snapshot and keeps disabled route conventions", async () => {
     const fundingGoal = { snapshot: { enabled: false }, subscribe: () => () => {}, adjust: async () => {}, setTotal: async () => {} } as any;
-    const service = createGuiTransportService({ config: buildConfig({ enableDock: true, port: 0 }), eventBus: new TestEventBus(), fundingGoal, logger: null });
+    const service = createGuiTransportService({ config: buildConfig({ enableDock: true, port: 0 }), eventBus: new EventBus(), fundingGoal, logger: null });
     await service.start();
     try {
       const baseUrl = getBaseUrl(service);
@@ -1750,7 +1748,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("serves a CORS-enabled GUI health check for OBS wrapper readiness", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: false,
       enableOverlay: true,
@@ -1791,7 +1789,7 @@ describe("GUI transport routes and SSE integration", () => {
     fs.writeFileSync(path.join(assetsDir, "dock.js"), 'console.log("dock");');
 
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: true,
@@ -1836,7 +1834,7 @@ describe("GUI transport routes and SSE integration", () => {
     fs.writeFileSync(path.join(assetsDir, "dock.js"), 'console.log("dock");');
 
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: true,
@@ -1875,7 +1873,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("reports route-specific GUI readiness for OBS wrappers", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const normalConfig = buildConfig({
       enableDock: true,
       enableOverlay: true,
@@ -1930,7 +1928,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("reports demo-only route readiness for OBS wrappers", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const demoConfig = buildConfig({
       enableDock: false,
       enableOverlay: false,
@@ -1965,7 +1963,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("reports disabled GUI routes as unavailable to OBS wrappers", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -1998,7 +1996,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("returns enabled dock shell and disabled overlay shell", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -2048,7 +2046,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("embeds overlay queue and line-clamp config into enabled overlay page", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: false,
       enableOverlay: true,
@@ -2084,7 +2082,7 @@ describe("GUI transport routes and SSE integration", () => {
         minimalOverlayMaxMessages: 6,
         port: 0,
       }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2111,7 +2109,7 @@ describe("GUI transport routes and SSE integration", () => {
         enableNotifications: true,
         port: 0,
       }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2134,7 +2132,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("emits numeric overlay runtime config defaults instead of numeric strings", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: false,
       enableOverlay: true,
@@ -2172,7 +2170,7 @@ describe("GUI transport routes and SSE integration", () => {
     fs.writeFileSync(path.join(assetsDir, "styles.css"), ".demo{display:block}");
 
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const normalConfig = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -2243,7 +2241,7 @@ describe("GUI transport routes and SSE integration", () => {
 
   it("serves enabled dock, overlay, and tiktok animations pages with built GUI asset entry paths", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: true,
@@ -2316,7 +2314,7 @@ describe("GUI transport routes and SSE integration", () => {
     );
 
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
@@ -2384,33 +2382,17 @@ describe("GUI transport routes and SSE integration", () => {
     }
   });
 
-  it("does not deliver stale queued row dispatches after stop/start", async () => {
+  it("rejects a row queued before stop and delivers a fresh row after restart", async () => {
     const port = 0;
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const config = buildConfig({
       enableDock: true,
       enableOverlay: false,
       port,
     });
-    const mapper = {
-      async mapDisplayRow(row: any) {
-        await new Promise((resolve) => {
-          safeSetTimeout(resolve, 30);
-        });
-        return {
-          type: row.type,
-          text: row.data.message,
-          username: row.data.username,
-          avatarUrl: row.data.avatarUrl,
-          timestamp: row.data.timestamp,
-        };
-      },
-    };
-
     const service = createGuiTransportService({
       config,
       eventBus,
-      mapper,
       logger: null,
     });
 
@@ -2471,7 +2453,7 @@ describe("GUI transport routes and SSE integration", () => {
     });
     const inactiveService = createGuiTransportService({
       config: inactiveConfig,
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await inactiveService.start();
@@ -2489,7 +2471,7 @@ describe("GUI transport routes and SSE integration", () => {
     });
     const dockService = createGuiTransportService({
       config: dockConfig,
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await dockService.start();
@@ -2507,7 +2489,7 @@ describe("GUI transport routes and SSE integration", () => {
     });
     const overlayService = createGuiTransportService({
       config: overlayConfig,
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await overlayService.start();
@@ -2562,7 +2544,7 @@ describe("GUI transport routes and SSE integration", () => {
           ? "platform:share"
           : "platform:follow";
       const port = 0;
-      const eventBus = new TestEventBus();
+      const eventBus = new EventBus();
       const config = buildConfig({
         enableDock: true,
         enableOverlay: false,
@@ -2600,7 +2582,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("serves the opt-in normalized chat feed independently", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableChatFeed: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2656,7 +2638,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("does not expose the chat feed when it is disabled", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableDock: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2672,7 +2654,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("rejects chat feed requests with an Origin header", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableChatFeed: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2690,7 +2672,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("rejects enabled chat feed on non-loopback hosts", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableChatFeed: true, host: "0.0.0.0", port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
 
@@ -2702,7 +2684,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("keeps GUI events separate from raw chat feed events", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const service = createGuiTransportService({
       config: buildConfig({ enableChatFeed: true, port: 0 }),
       eventBus,
@@ -2734,7 +2716,11 @@ describe("GUI transport routes and SSE integration", () => {
 
       const chatEvent = await chatReader.readEvent();
       expect(chatEvent.type).toBe("chat.message");
-      await expect(guiReader.readEvent(300)).rejects.toThrow();
+      eventBus.emit("display:row", { type: "chat", platform: "twitch", data: {
+        username: "Synthetic GUI Sentinel", userId: "synthetic-gui-sentinel", message: "synthetic GUI-only sentinel",
+        timestamp: "2026-01-01T00:00:00.000Z",
+      } });
+      expect(await guiReader.readEvent()).toMatchObject({ type: "chat", text: "synthetic GUI-only sentinel" });
     } finally {
       guiAbort.abort();
       chatAbort.abort();
@@ -2744,7 +2730,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("serves independently gated notification runtime and health route", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableNotifications: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2768,7 +2754,7 @@ describe("GUI transport routes and SSE integration", () => {
   it("returns a disabled notification shell when notifications are off", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableNotifications: false, enableDock: true, port: 0 }),
-      eventBus: new TestEventBus(),
+      eventBus: new EventBus(),
       logger: null,
     });
     await service.start();
@@ -2786,7 +2772,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("delivers validated notification lifecycle envelopes in SSE order", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const service = createGuiTransportService({
       config: buildConfig({ enableNotifications: true, port: 0 }),
       eventBus,
@@ -2817,7 +2803,7 @@ describe("GUI transport routes and SSE integration", () => {
   });
 
   it("accepts the first valid gift animation acknowledgement and rejects invalid requests", async () => {
-    const eventBus = new TestEventBus();
+    const eventBus = new EventBus();
     const playbackId = "550e8400-e29b-41d4-a716-446655440000";
     const settled: unknown[] = [];
     eventBus.on("display:gift-animation-settled", (payload) => settled.push(payload));

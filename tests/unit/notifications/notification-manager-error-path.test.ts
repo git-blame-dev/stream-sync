@@ -13,7 +13,7 @@ const createDisplayQueueStub = () => {
   const items: ErrorQueueItem[] = [];
   return {
     items,
-    addItem: (item: ErrorQueueItem) => items.push(item),
+    addItem: (item: ErrorQueueItem) => { items.push(item); return [item]; },
     getQueueLength: () => items.length,
   };
 };
@@ -34,7 +34,6 @@ describe("NotificationManager monetization error path", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification("platform:gift", "twitch", {
@@ -75,7 +74,6 @@ describe("NotificationManager monetization error path", () => {
       },
       logger: noOpLogger,
       constants,
-      obsGoals: { processDonationGoal: createMockFn() },
     });
 
     const result = await manager.handleNotification(

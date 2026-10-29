@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
 import { GuiShell, resolveGuiRowRenderKey } from "../../../gui/src/shared/components/GuiShell";
+import { useFakeTimers, useRealTimers, advanceTimersByTime } from "../../helpers/bun-timers";
+import { safeSetTimeout } from "../../../src/utils/timeout-validator";
 import type { GuiRowDto } from "../../../gui/src/shared/types";
 
 type ScrollListener = () => void;
@@ -609,6 +611,15 @@ describe("GuiShell behavior", () => {
   it("pins dock shell to bottom again on animation frame when dock is pinned", async () => {
     const previousTimeStamp = console.timeStamp;
     const previousRequestAnimationFrame = global.requestAnimationFrame;
+    const previousCancelAnimationFrame = global.cancelAnimationFrame;
+    useFakeTimers();
+    const frameTimers = new Map<number, ReturnType<typeof setTimeout>>();
+    let nextFrame = 0;
+    global.cancelAnimationFrame = id => {
+      const timer = frameTimers.get(id);
+      if (timer !== undefined) clearTimeout(timer);
+      frameTimers.delete(id);
+    };
     console.timeStamp = previousTimeStamp || (() => {});
 
     const dockShell = createDockShellMock({
@@ -621,8 +632,9 @@ describe("GuiShell behavior", () => {
     global.requestAnimationFrame = (callback) => {
       rafCalls += 1;
       dockShell.scrollHeight = 420;
-      callback(0);
-      return 1;
+      const id = ++nextFrame;
+      frameTimers.set(id, safeSetTimeout(() => { frameTimers.delete(id); callback(0); }, 16));
+      return id;
     };
 
     try {
@@ -656,7 +668,8 @@ describe("GuiShell behavior", () => {
         );
       });
 
-      expect(rafCalls).toBeGreaterThan(0);
+      TestRenderer.act(() => { advanceTimersByTime(16); });
+      expect(rafCalls).toBe(1);
       expect(dockShell.scrollTop).toBe(420);
     } finally {
       if (renderer) {
@@ -665,6 +678,10 @@ describe("GuiShell behavior", () => {
         });
       }
 
+      const pendingFrameCount = frameTimers.size;
+      useRealTimers();
+      if (previousCancelAnimationFrame === undefined) Reflect.deleteProperty(global, "cancelAnimationFrame");
+      else global.cancelAnimationFrame = previousCancelAnimationFrame;
       if (typeof previousRequestAnimationFrame === "function") {
         global.requestAnimationFrame = previousRequestAnimationFrame;
       } else {
@@ -676,12 +693,22 @@ describe("GuiShell behavior", () => {
       } else {
         Reflect.deleteProperty(console, "timeStamp");
       }
+      expect(pendingFrameCount).toBe(0);
     }
   });
 
   it("keeps dock position when unpinned as new rows arrive", async () => {
     const previousTimeStamp = console.timeStamp;
     const previousRequestAnimationFrame = global.requestAnimationFrame;
+    const previousCancelAnimationFrame = global.cancelAnimationFrame;
+    useFakeTimers();
+    const frameTimers = new Map<number, ReturnType<typeof setTimeout>>();
+    let nextFrame = 0;
+    global.cancelAnimationFrame = id => {
+      const timer = frameTimers.get(id);
+      if (timer !== undefined) clearTimeout(timer);
+      frameTimers.delete(id);
+    };
     console.timeStamp = previousTimeStamp || (() => {});
 
     const dockShell = createDockShellMock();
@@ -689,8 +716,9 @@ describe("GuiShell behavior", () => {
 
     global.requestAnimationFrame = (callback) => {
       dockShell.scrollHeight += 100;
-      callback(0);
-      return 1;
+      const id = ++nextFrame;
+      frameTimers.set(id, safeSetTimeout(() => { frameTimers.delete(id); callback(0); }, 16));
+      return id;
     };
 
     try {
@@ -734,6 +762,7 @@ describe("GuiShell behavior", () => {
         );
       });
 
+      TestRenderer.act(() => { advanceTimersByTime(16); });
       dockShell.scrollTop = 80;
       dockShell.scrollHeight = 320;
       dockShell.emitScroll();
@@ -776,6 +805,10 @@ describe("GuiShell behavior", () => {
         });
       }
 
+      const pendingFrameCount = frameTimers.size;
+      useRealTimers();
+      if (previousCancelAnimationFrame === undefined) Reflect.deleteProperty(global, "cancelAnimationFrame");
+      else global.cancelAnimationFrame = previousCancelAnimationFrame;
       if (typeof previousRequestAnimationFrame === "function") {
         global.requestAnimationFrame = previousRequestAnimationFrame;
       } else {
@@ -787,6 +820,7 @@ describe("GuiShell behavior", () => {
       } else {
         Reflect.deleteProperty(console, "timeStamp");
       }
+      expect(pendingFrameCount).toBe(0);
     }
   });
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { createEventFeed } from './create-event-feed'
 import { createGuiFeedStore } from './feed-store'
@@ -179,6 +179,8 @@ export function App({
     }),
     [createEventFeedImpl, effectiveFeedMode, eventsPath, mode, maxRows]
   )
+  const lifetimeRef = useRef(0)
+  const [lifetime, setLifetime] = useState(0)
   const [connectionStatus, setConnectionStatus] = useState<GuiConnectionStatus>('connecting')
   const [rowState, setRowState] = useState<RowState>(() => ({ store, rows: [] }))
   const [effectState, setEffectState] = useState<EffectState>(() => ({ store, queue: [] }))
@@ -200,14 +202,26 @@ export function App({
     || (mode === 'overlay' && appearance.profile === 'minimal')
 
   useEffect(() => {
+    // SSE has no transient presentation replay. A new connection must retire
+    // visuals whose exit/completion may have been missed, including child state.
+    const resetTransientLifetime = () => {
+      lifetimeRef.current += 1
+      setLifetime(lifetimeRef.current)
+      setEffectState({ store, queue: [] })
+      setNotificationState({ store, queue: [], exitingEventIds: new Set() })
+    }
+    resetTransientLifetime()
     const dispose = createEventFeedImpl({
       url: eventsPath,
-      onOpen: () => setConnectionStatus('connected'),
+      onOpen: () => {
+        resetTransientLifetime()
+        setConnectionStatus('connected')
+      },
       onError: () => setConnectionStatus('reconnecting'),
       onEvent: (payload) => {
         const nextAppearance = parseAppearanceEvent(payload)
         if (nextAppearance) {
-          setAppearance((current) => nextAppearance.revision > current.revision
+          setAppearance((current) => nextAppearance.sessionId !== current.sessionId || nextAppearance.revision > current.revision
             ? { ...nextAppearance, profile: current.profile }
             : current)
           return
@@ -258,6 +272,7 @@ export function App({
     })
 
     return () => {
+      lifetimeRef.current += 1
       dispose()
     }
   }, [createEventFeedImpl, eventsPath, mode, showsGiftAnimationEffects, store])
@@ -265,11 +280,13 @@ export function App({
   if (mode === 'notifications') {
     return (
       <ActivityBar
+        key={lifetime}
         row={activeNotification}
         exitRequested={notificationExitRequested}
         transitionMs={notificationTransitionMs}
         appearance={appearance}
         onExitComplete={(eventId) => {
+          if (lifetime !== lifetimeRef.current) return
           setNotificationState((current) => {
             if (current.store !== store) return current
             const first = current.queue[0]
@@ -302,6 +319,7 @@ export function App({
       activeEffect={activeEffect}
       appearance={appearance}
       onEffectComplete={(playbackId, reason) => {
+        if (lifetime !== lifetimeRef.current) return
         setEffectState((current) => {
           const currentQueue = current.store === store ? current.queue : []
           if (currentQueue.length === 0) {

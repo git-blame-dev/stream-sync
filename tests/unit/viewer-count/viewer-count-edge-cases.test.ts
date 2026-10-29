@@ -1,45 +1,46 @@
+import { TwitchViewerCountProvider } from "../../../src/utils/viewer-count-providers";
+import { TwitchApiClient } from "../../../src/utils/api-clients/twitch-api-client";
+import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
+import { secrets } from "../../../src/core/secrets";
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import {
   useFakeTimers,
   useRealTimers,
   setSystemTime,
+  getTimerCount,
 } from "../../helpers/bun-timers";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count.ts";
 import { OBSViewerCountObserver } from "../../../src/observers/obs-viewer-count-observer.ts";
 import { safeSetInterval } from "../../../src/utils/timeout-validator.ts";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import {
-  createMockOBSManager,
   noOpLogger,
 } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
+import { OBSConnectionManager } from "../../../src/obs/connection";
+import { EventEmitter } from "node:events";
 import testClock from "../../helpers/test-clock";
-import { scheduleTimeout, waitForDelay } from "../../helpers/time-utils";
 
 type EdgeCaseViewerCount = unknown;
 
-type EdgeCasePlatformConfig = {
+type HttpSlotConfig = {
   returnValue?: EdgeCaseViewerCount;
   shouldThrow?: boolean;
   errorMessage?: string;
-  delay?: number;
   responseSequence?: EdgeCaseViewerCount[];
 };
 
-type EdgeCasePlatform = {
-  platformName: string;
-  isConnected: boolean;
-  connectionState: string;
-  getViewerCount: () => Promise<EdgeCaseViewerCount>;
+type HttpSlot = {
+  provider: TwitchViewerCountProvider;
+  respond: (next: () => Promise<unknown>) => void;
   getCallCount: () => number;
 };
 
-type EdgeCasePlatforms = Record<string, EdgeCasePlatform>;
+type HttpSlots = Record<string, HttpSlot>;
 
 type EdgeCaseEnvironmentConfig = {
   pollingInterval?: number;
-  platforms?: Record<string, EdgeCasePlatformConfig>;
+  platforms?: Record<string, HttpSlotConfig>;
 };
 
 type ViewerCountUpdate = {
@@ -60,7 +61,6 @@ type StreamStatusUpdate = {
 type EdgeCaseObserverBehavior = {
   shouldThrowOnUpdate?: boolean;
   shouldThrowOnStatusChange?: boolean;
-  processingDelay?: number;
   throwAfterCalls?: number | null;
 };
 
@@ -94,13 +94,13 @@ const requireUpdate = (
 };
 
 const requirePlatform = (
-  platforms: EdgeCasePlatforms,
+  platforms: HttpSlots,
   platformName: string,
-): EdgeCasePlatform => {
+): HttpSlot => {
   const platform = platforms[platformName];
   expect(platform).toBeDefined();
   if (!platform) {
-    throw new Error(`Expected mock platform ${platformName}`);
+    throw new Error(`Expected HTTP slot ${platformName}`);
   }
   return platform;
 };
@@ -117,52 +117,60 @@ const requireStatusHistory = (
   return history;
 };
 
-const getErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
-const createEdgeCasePlatform = (
-  platformName = "tiktok",
-  edgeCaseConfig: EdgeCasePlatformConfig = {},
-): EdgeCasePlatform => {
-  const {
-    returnValue = 0,
-    shouldThrow = false,
-    errorMessage = "Platform API error",
-    delay = 0,
-    responseSequence = [],
-  } = edgeCaseConfig;
-
-  let callCount = 0;
-
-  return {
-    platformName,
-    isConnected: true,
-    connectionState: "connected",
-
-    async getViewerCount() {
-      callCount++;
-
-      if (delay > 0) {
-        await waitForDelay(delay);
-      }
-
-      if (shouldThrow) {
-        throw new Error(errorMessage);
-      }
-
-      if (responseSequence.length > 0) {
-        const index = Math.min(callCount - 1, responseSequence.length - 1);
-        return responseSequence[index];
-      }
-
-      return returnValue;
+// Each store slot uses the real Twitch HTTP provider. These cases exercise the store's
+// common poll contract, not TikTok or YouTube provider-specific ingress.
+const createHttpProvider = (initial: unknown = 100) => {
+  let response: () => Promise<unknown> = async () => initial;
+  const attempts: string[] = [];
+  const http = new EnhancedHttpClient({ logger: noOpLogger, axios: {
+    get: async (url) => {
+      attempts.push(url);
+      const count = await response();
+      return { data: { data: [{ viewer_count: count }] } };
     },
-
-    getCallCount() {
-      return callCount;
-    },
-  };
+    post: async () => ({}), put: async () => ({}), delete: async () => ({}),
+  } });
+  const provider = new TwitchViewerCountProvider(
+    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }),
+    null, { channel: "synthetic-channel" }, null, noOpLogger,
+  );
+  return { provider, attempts, respond: (next: () => Promise<unknown>) => { response = next; } };
 };
+const ownedSystems: ViewerCountSystem[] = [];
+const ownSystem = (system: ViewerCountSystem) => { ownedSystems.push(system); return system; };
+const drain = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
+let savedToken: string | null;
+
+const createHttpSlot = (config: HttpSlotConfig = {}): HttpSlot => {
+  const h = createHttpProvider();
+  h.respond(async () => {
+    if (config.shouldThrow) throw new Error(config.errorMessage ?? "Platform API error");
+    const index = Math.min(h.attempts.length - 1, (config.responseSequence?.length ?? 1) - 1);
+    return config.responseSequence?.length ? config.responseSequence[index] : config.returnValue ?? 0;
+  });
+  return { provider: h.provider,
+    respond: h.respond, getCallCount: () => h.attempts.length };
+};
+const ownedObs: OBSConnectionManager[] = [];
+const createObsBoundary = async (call: (method: string, data: Record<string, unknown>) => Promise<unknown> = async () => ({})) => {
+  class Socket extends EventEmitter {
+    async connect() { this.emit("Identified"); return {}; }
+    async disconnect() {}
+    async call(method: string, data: Record<string, unknown> = {}) { return call(method, data); }
+  }
+  const socket = new Socket();
+  const manager = new OBSConnectionManager({ obs: socket, config: { enabled: true, address: "ws://synthetic.invalid", password: "synthetic", connectionTimeoutMs: 5000 } });
+  ownedObs.push(manager);
+  await manager.connect();
+  return manager;
+};
+const obsConfig = () => createConfigFixture({
+  general: { envFileReadEnabled: false, envFileWriteEnabled: false, logChatMessages: false },
+  logging: { fileLoggingEnabled: false },
+  tiktok: { viewerCountEnabled: true, viewerCountSource: "synthetic-tiktok-viewers" },
+  twitch: { viewerCountEnabled: true, viewerCountSource: "synthetic-twitch-viewers" },
+  youtube: { viewerCountEnabled: true, viewerCountSource: "synthetic-youtube-viewers" },
+});
 
 const createEdgeCaseTestEnvironment = (config: EdgeCaseEnvironmentConfig = {}) => {
   const {
@@ -170,23 +178,21 @@ const createEdgeCaseTestEnvironment = (config: EdgeCaseEnvironmentConfig = {}) =
     platforms = { tiktok: {}, twitch: {}, youtube: {} },
   } = config;
 
-  const mockPlatforms: EdgeCasePlatforms = {};
+  const httpSlots: HttpSlots = {};
   Object.entries(platforms).forEach(([platformName, platformConfig]) => {
-    mockPlatforms[platformName] = createEdgeCasePlatform(
-      platformName,
-      platformConfig,
-    );
+    httpSlots[platformName] = createHttpSlot(platformConfig);
   });
 
-  const system = new ViewerCountSystem({
-    platformProvider: () => mockPlatforms,
+  const system = ownSystem(new ViewerCountSystem({
+    platformProvider: () => Object.fromEntries(Object.entries(httpSlots).map(([name, h]) => [name, h.provider])),
     config: createConfigFixture({
-      general: { viewerCountPollingIntervalMs: pollingInterval },
+      general: { viewerCountPollingIntervalMs: pollingInterval, envFileReadEnabled: false, envFileWriteEnabled: false, logChatMessages: false },
+      logging: { fileLoggingEnabled: false },
     }),
     logger: noOpLogger,
-  });
+  }));
 
-  return { system, mockPlatforms };
+  return { system, httpSlots };
 };
 
 const createEdgeCaseObserver = (
@@ -196,7 +202,6 @@ const createEdgeCaseObserver = (
   const {
     shouldThrowOnUpdate = false,
     shouldThrowOnStatusChange = false,
-    processingDelay = 0,
     throwAfterCalls = null,
   } = edgeCaseBehavior;
 
@@ -215,10 +220,6 @@ const createEdgeCaseObserver = (
 
     async onViewerCountUpdate(update) {
       updateCallCount++;
-
-      if (processingDelay > 0) {
-        await waitForDelay(processingDelay);
-      }
 
       if (
         shouldThrowOnUpdate ||
@@ -256,15 +257,14 @@ const expectSystemStability = (system: ViewerCountSystemUnderTest) => {
 };
 
 describe("Viewer Count & OBS Observer Edge Case Tests", () => {
-  registerMockLifecycleHooks();
-
-  beforeEach(() => {
-    useFakeTimers();
-  });
-
+  beforeEach(() => { savedToken = secrets.twitch.accessToken; secrets.twitch.accessToken = "synthetic-token"; useFakeTimers(); });
   afterEach(async () => {
-    restoreAllMocks();
-    useRealTimers();
+    for (const system of ownedSystems.splice(0)) await system.cleanup();
+    for (const manager of ownedObs.splice(0)) { await manager.disconnect(); manager.dispose(); }
+    await drain();
+    expect(getTimerCount()).toBe(0);
+    secrets.twitch.accessToken = savedToken;
+    restoreAllMocks(); useRealTimers();
   });
 
   describe("Extreme Viewer Count Edge Cases", () => {
@@ -283,7 +283,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expectSystemStability(system);
     });
 
-    test("should handle negative viewer counts by validating and providing fallback behavior", async () => {
+    test("notifyObservers passes through negative values without validating the store", async () => {
       const { system } = createEdgeCaseTestEnvironment({
         platforms: { twitch: { returnValue: -500 } },
       });
@@ -299,27 +299,22 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(typeof update.count === "number" && update.count < 0).toBe(true);
     });
 
-    test("should handle very large viewer counts without performance degradation", async () => {
+    test("delivers the exact large viewer count", async () => {
       const largeCount = 999999999;
       const { system } = createEdgeCaseTestEnvironment({
         platforms: { youtube: { returnValue: largeCount } },
       });
       const observer = createEdgeCaseObserver("large-count-observer");
       system.addObserver(observer);
-      const startTime = testClock.now();
 
       await system.notifyObservers("youtube", largeCount, 1000000);
 
-      const simulatedProcessingMs = 25;
-      testClock.advance(simulatedProcessingMs);
-      const processingTime = testClock.now() - startTime;
       expect(observer.receivedUpdates).toHaveLength(1);
       expect(requireUpdate(observer, 0).count).toBe(largeCount);
-      expect(processingTime).toBeLessThan(100);
       expectSystemStability(system);
     });
 
-    test("should handle infinity viewer counts gracefully without system crash", async () => {
+    test("notifyObservers passes through Infinity", async () => {
       const { system } = createEdgeCaseTestEnvironment();
 
       const observer = createEdgeCaseObserver("infinity-observer");
@@ -332,7 +327,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expectSystemStability(system);
     });
 
-    test("should handle NaN viewer counts with appropriate error recovery", async () => {
+    test("notifyObservers delivers NaN then the next valid notification", async () => {
       const { system } = createEdgeCaseTestEnvironment();
 
       const observer = createEdgeCaseObserver("nan-observer");
@@ -349,7 +344,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(requireUpdate(observer, 1).count).toBe(400);
     });
 
-    test("should handle floating point precision edge cases correctly", async () => {
+    test("notifyObservers preserves fractional values", async () => {
       const floatCount = 1234.5678;
       const { system } = createEdgeCaseTestEnvironment({
         platforms: { tiktok: { returnValue: floatCount } },
@@ -364,155 +359,105 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(requireUpdate(observer, 0).count).toBe(floatCount);
       expectSystemStability(system);
 
-      const displayCount = Math.floor(requireUpdate(observer, 0).count);
-      expect(displayCount).toBe(1234);
     });
   });
 
   describe("Platform API Response Edge Cases", () => {
     test("should continue operation when platform API completely fails", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-        platforms: {
-          tiktok: { shouldThrow: true, errorMessage: "Network timeout" },
-          twitch: { returnValue: 500 },
-        },
-      });
-
-      const observer = createEdgeCaseObserver("api-failure-observer");
-      system.addObserver(observer);
-
-      try {
-        await requirePlatform(mockPlatforms, "tiktok").getViewerCount();
-      } catch (error) {
-        expect(getErrorMessage(error)).toBe("Network timeout");
-      }
-
-      expectSystemStability(system);
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { tiktok: { shouldThrow: true, errorMessage: "Network timeout" }, twitch: { returnValue: 500 } } });
+      await system.updateStreamStatus("tiktok", true);
+      await system.updateViewerCount("tiktok", 42);
+      const observer = createEdgeCaseObserver("failed-and-healthy"); system.addObserver(observer);
+      await system.pollPlatform("tiktok"); await system.pollPlatform("twitch");
+      expect(requirePlatform(httpSlots, "tiktok").getCallCount()).toBe(1);
+      expect(requirePlatform(httpSlots, "twitch").getCallCount()).toBe(1);
+      expect(requirePlatform(httpSlots, "tiktok").provider.getErrorStats()).toMatchObject({ totalErrors: 1, lastError: "Network timeout" });
+      expect(system.getViewerCounts()).toEqual({ tiktok: 42, twitch: 500, youtube: 0 });
+      expect(observer.receivedUpdates.map(u => [u.platform, u.count])).toEqual([["twitch", 500]]);
     });
 
     test("should handle malformed API responses gracefully", async () => {
-      const { system } = createEdgeCaseTestEnvironment({
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({
         platforms: {
           youtube: { returnValue: "not-a-number" },
         },
       });
 
       const observer = createEdgeCaseObserver("malformed-observer");
+      await system.updateViewerCount("youtube", 42);
       system.addObserver(observer);
 
       await system.updateStreamStatus("youtube", true);
       await system.pollPlatform("youtube");
 
+      const boundary = requirePlatform(httpSlots, "youtube");
+      expect(boundary.getCallCount()).toBe(1);
       expect(observer.receivedUpdates).toHaveLength(0);
-      expect(system.getViewerCount("youtube")).toBe(0);
+      expect(system.getViewerCount("youtube")).toBe(42);
+      boundary.respond(async () => 250); await system.pollPlatform("youtube");
+      expect(boundary.getCallCount()).toBe(2);
+      expect(system.getViewerCount("youtube")).toBe(250);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[250, 42]]);
       expectSystemStability(system);
     });
 
     test("should handle partial platform failures without affecting others", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-        platforms: {
-          tiktok: { shouldThrow: true },
-          twitch: { returnValue: 300 },
-          youtube: { returnValue: 150 },
-        },
-      });
-
-      const observer = createEdgeCaseObserver("partial-failure-observer");
-      system.addObserver(observer);
-
-      const tiktokResult = await requirePlatform(mockPlatforms, "tiktok")
-        .getViewerCount()
-        .catch(() => "failed");
-      const twitchResult = await requirePlatform(mockPlatforms, "twitch").getViewerCount();
-      const youtubeResult = await requirePlatform(mockPlatforms, "youtube").getViewerCount();
-
-      expect(tiktokResult).toBe("failed");
-      expect(twitchResult).toBe(300);
-      expect(youtubeResult).toBe(150);
-      expectSystemStability(system);
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { tiktok: { shouldThrow: true }, twitch: { returnValue: 300 }, youtube: { returnValue: 150 } } });
+      await system.updateStreamStatus("tiktok", true); await system.updateStreamStatus("youtube", true);
+      await system.updateViewerCount("tiktok", 42);
+      const observer = createEdgeCaseObserver("partial"); system.addObserver(observer);
+      await Promise.all(["tiktok", "twitch", "youtube"].map(name => system.pollPlatform(name)));
+      expect(Object.values(httpSlots).map(h => h.getCallCount())).toEqual([1, 1, 1]);
+      expect(system.getViewerCounts()).toEqual({ tiktok: 42, twitch: 300, youtube: 150 });
+      expect(observer.receivedUpdates.map(u => [u.platform, u.count])).toEqual([["twitch", 300], ["youtube", 150]]);
     });
 
-    test("should handle API rate limiting with graceful degradation", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-        platforms: {
-          tiktok: {
-            responseSequence: [100, 150, 200],
-            shouldThrow: false,
-          },
-        },
+    test("retains last good on provider rate-limit errors (without claiming retry policy)", async () => {
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { tiktok: {} } });
+      const boundary = requirePlatform(httpSlots, "tiktok");
+      boundary.respond(async () => {
+        if (boundary.getCallCount() > 3) throw new Error("Rate limit exceeded");
+        return [100, 150, 200][boundary.getCallCount() - 1];
       });
-
-      let callCount = 0;
-      const tiktokPlatform = requirePlatform(mockPlatforms, "tiktok");
-      const originalGetViewerCount = tiktokPlatform.getViewerCount;
-      tiktokPlatform.getViewerCount = async function () {
-        callCount++;
-        if (callCount > 3) {
-          throw new Error("Rate limit exceeded");
-        }
-        return originalGetViewerCount.call(this);
-      };
-
-      const observer = createEdgeCaseObserver("rate-limit-observer");
-      system.addObserver(observer);
       await system.updateStreamStatus("tiktok", true);
-
-      for (let i = 0; i < 5; i++) {
-        await system.pollPlatform("tiktok");
-      }
-
-      expect(callCount).toBe(5);
-      expect(observer.receivedUpdates.map((update) => update.count)).toEqual([100, 150, 200]);
-      expectSystemStability(system);
+      const observer = createEdgeCaseObserver("rate-limit"); system.addObserver(observer);
+      for (let i = 0; i < 5; i++) await system.pollPlatform("tiktok");
+      expect(boundary.getCallCount()).toBe(5);
+      expect(boundary.provider.getErrorStats()).toMatchObject({ totalErrors: 2, consecutiveErrors: 2, lastError: "Rate limit exceeded" });
+      expect(observer.receivedUpdates.map(u => u.count)).toEqual([100, 150, 200]);
+      expect(system.getViewerCount("tiktok")).toBe(200);
     });
 
-    test("should handle very slow API responses with appropriate timeouts", async () => {
-      const { system } = createEdgeCaseTestEnvironment({
-        platforms: {
-          youtube: { returnValue: 250 },
-        },
-      });
-
-      const observer = createEdgeCaseObserver("slow-api-observer");
-      system.addObserver(observer);
-
+    test("held external response prevents same-slot overlap and permits the next poll", async () => {
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { youtube: {} } });
+      const boundary = requirePlatform(httpSlots, "youtube");
+      const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<number>();
+      boundary.respond(async () => { entered.resolve(); return release.promise; });
       await system.updateStreamStatus("youtube", true);
-      await system.pollPlatform("youtube");
-
-      expect(observer.receivedUpdates).toHaveLength(1);
-      expect(requireUpdate(observer, 0).count).toBe(250);
-      expectSystemStability(system);
+      await system.updateViewerCount("youtube", 42);
+      const poll = system.pollPlatform("youtube");
+      try {
+        await entered.promise; await system.pollPlatform("youtube");
+        expect(boundary.getCallCount()).toBe(1); expect(system.getViewerCount("youtube")).toBe(42);
+        release.resolve(250); await poll;
+        expect(system.getViewerCount("youtube")).toBe(250);
+        await system.pollPlatform("youtube"); expect(boundary.getCallCount()).toBe(2);
+      } finally { release.resolve(250); await poll; }
     });
 
     test("should recover from temporary API failures automatically", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-        platforms: {
-          twitch: { returnValue: 400 },
-        },
-      });
-
-      let failureCount = 0;
-      const twitchPlatform = requirePlatform(mockPlatforms, "twitch");
-      const originalGetViewerCount = twitchPlatform.getViewerCount;
-      twitchPlatform.getViewerCount = async function () {
-        failureCount++;
-        if (failureCount <= 3) {
-          throw new Error("Temporary failure");
-        }
-        return originalGetViewerCount.call(this);
-      };
-
-      const observer = createEdgeCaseObserver("recovery-observer");
-      system.addObserver(observer);
-      await system.updateStreamStatus("twitch", true);
-
-      for (let i = 0; i < 5; i++) {
-        await system.pollPlatform("twitch");
-      }
-
-      expect(failureCount).toBe(5);
-      expect(observer.receivedUpdates.map((update) => update.count)).toEqual([400, 400]);
-      expectSystemStability(system);
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { twitch: {} } });
+      const boundary = requirePlatform(httpSlots, "twitch");
+      boundary.respond(async () => { if (boundary.getCallCount() <= 3) throw new Error("Temporary failure"); return 400; });
+      await system.updateViewerCount("twitch", 42);
+      const observer = createEdgeCaseObserver("recovery"); system.addObserver(observer);
+      for (let i = 0; i < 3; i++) await system.pollPlatform("twitch");
+      expect(system.getViewerCount("twitch")).toBe(42); expect(observer.receivedUpdates).toEqual([]);
+      expect(boundary.provider.getErrorStats()).toMatchObject({ totalErrors: 3, consecutiveErrors: 3 });
+      for (let i = 0; i < 2; i++) await system.pollPlatform("twitch");
+      expect(boundary.getCallCount()).toBe(5); expect(system.getViewerCount("twitch")).toBe(400);
+      expect(boundary.provider.getErrorStats().consecutiveErrors).toBe(0);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[400, 42], [400, 400]]);
     });
   });
 
@@ -526,7 +471,8 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
 
       expect(startOperation).not.toThrow();
       expectSystemStability(system);
-      expect(typeof system.isPolling).toBe("boolean");
+      expect(system.isPolling).toBe(false);
+      expect(system.pollingHandles).toEqual({});
     });
 
     test("should handle zero polling interval gracefully", () => {
@@ -538,7 +484,8 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
 
       expect(startOperation).not.toThrow();
       expectSystemStability(system);
-      expect(typeof system.isPolling).toBe("boolean");
+      expect(system.isPolling).toBe(false);
+      expect(system.pollingHandles).toEqual({});
     });
 
     test("throws when config is null", () => {
@@ -564,26 +511,28 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
     });
 
     test("handles undefined pollingIntervalMs gracefully", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platformProvider: () => ({}),
         config: createConfigFixture({
-          general: { viewerCountPollingIntervalMs: undefined },
+          general: { viewerCountPollingIntervalMs: undefined, envFileReadEnabled: false, envFileWriteEnabled: false, logChatMessages: false },
+          logging: { fileLoggingEnabled: false },
         }),
         logger: noOpLogger,
-      });
+      }));
 
       expect(system.pollingIntervalMs).toBeUndefined();
       expectSystemStability(system);
     });
 
     test("reads pollingIntervalMs from config", () => {
-      const system = new ViewerCountSystem({
+      const system = ownSystem(new ViewerCountSystem({
         platformProvider: () => ({}),
         config: createConfigFixture({
-          general: { viewerCountPollingIntervalMs: 5000 },
+          general: { viewerCountPollingIntervalMs: 5000, envFileReadEnabled: false, envFileWriteEnabled: false, logChatMessages: false },
+          logging: { fileLoggingEnabled: false },
         }),
         logger: noOpLogger,
-      });
+      }));
 
       expect(system.pollingIntervalMs).toBe(5000);
       expectSystemStability(system);
@@ -608,25 +557,23 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expectSystemStability(system);
     });
 
-    test("should handle observers that take extremely long to process", async () => {
+    test("starts all observer callbacks and awaits the held callback settlement", async () => {
       const { system } = createEdgeCaseTestEnvironment();
-
-      const slowObserver = createEdgeCaseObserver("slow-observer");
-      const fastObserver = createEdgeCaseObserver("fast-observer");
-
-      slowObserver.onViewerCountUpdate = async function (update: ViewerCountUpdate) {
-        this.receivedUpdates.push(update);
-        return Promise.resolve();
-      };
-
-      system.addObserver(slowObserver);
-      system.addObserver(fastObserver);
-
-      await system.notifyObservers("youtube", 150, 100);
-
-      expect(slowObserver.receivedUpdates).toHaveLength(1);
-      expect(fastObserver.receivedUpdates).toHaveLength(1);
-      expectSystemStability(system);
+      const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
+      const order: string[] = [];
+      system.addObserver({ getObserverId: () => "held", onViewerCountUpdate: async update => { order.push(`held:${update.count}`); entered.resolve(); await release.promise; order.push("released"); } });
+      system.addObserver({ getObserverId: () => "following", onViewerCountUpdate: update => { order.push(`following:${update.count}`); } });
+      let completed = false;
+      const update = system.updateViewerCount("youtube", 150).then(() => { completed = true; });
+      try {
+        await entered.promise; await drain();
+        expect(system.getViewerCount("youtube")).toBe(150);
+        expect(completed).toBe(false);
+        expect(order).toEqual(["held:150", "following:150"]);
+        release.resolve(); await update;
+        expect(completed).toBe(true);
+        expect(order).toEqual(["held:150", "following:150", "released"]);
+      } finally { release.resolve(); await update; }
     });
 
     test("should handle observer memory issues without system crash", async () => {
@@ -709,7 +656,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         await system.notifyObservers("tiktok", i * 10, (i - 1) * 10);
       }
 
-      expect(system.observers.size).toBeGreaterThan(0);
+      expect([...system.observers.keys()]).toEqual(Array.from({ length: 20 }, (_, i) => `dynamic-observer-${i}`).filter((_, i) => ![0, 3, 6, 9, 12, 15].includes(i)));
       expectSystemStability(system);
     });
   });
@@ -732,30 +679,29 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         await system.updateStreamStatus(transition.platform, transition.isLive);
       }
 
-      expect(observer.statusChanges.length).toBeGreaterThan(0);
+      expect(observer.statusChanges.map(u => u.isLive)).toEqual([true, false, true]);
       expect(system.isStreamLive("tiktok")).toBe(true);
       expectSystemStability(system);
     });
 
     test("should handle concurrent operations without race conditions", async () => {
-      const { system } = createEdgeCaseTestEnvironment();
-
-      const observer = createEdgeCaseObserver("concurrent-observer");
-      system.addObserver(observer);
-
-      const operations = [
-        system.notifyObservers("tiktok", 100, 50),
-        system.notifyObservers("twitch", 200, 150),
-        system.updateStreamStatus("youtube", true),
-        system.notifyObservers("youtube", 300, 0),
-        system.updateStreamStatus("tiktok", false),
-      ];
-
-      await Promise.all(operations);
-
-      expect(observer.receivedUpdates.length).toBeGreaterThan(0);
-      expect(observer.statusChanges.length).toBeGreaterThan(0);
-      expectSystemStability(system);
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { tiktok: {}, twitch: { returnValue: 200 } } });
+      const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<number>();
+      const boundary = requirePlatform(httpSlots, "tiktok");
+      boundary.respond(async () => { entered.resolve(); return release.promise; });
+      await system.updateStreamStatus("tiktok", true);
+      const observer = createEdgeCaseObserver("concurrent"); system.addObserver(observer);
+      const poll = system.pollPlatform("tiktok");
+      try {
+        await entered.promise; await system.pollPlatform("twitch");
+        await system.updateStreamStatus("youtube", true); await system.updateViewerCount("youtube", 300);
+        await system.updateStreamStatus("tiktok", false);
+        release.resolve(100); await poll;
+        expect(boundary.getCallCount()).toBe(1);
+        expect(system.getViewerCounts()).toEqual({ tiktok: 0, twitch: 200, youtube: 300 });
+        expect(observer.receivedUpdates.map(u => [u.platform, u.count])).toEqual([["twitch", 200], ["youtube", 300], ["tiktok", 0]]);
+        expect(observer.statusChanges.map(u => [u.platform, u.isLive])).toEqual([["youtube", true], ["tiktok", false]]);
+      } finally { release.resolve(100); await poll; }
     });
 
     test("should maintain system stability during shutdown while operations are active", async () => {
@@ -773,7 +719,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expectSystemStability(system);
     });
 
-    test("should handle resource exhaustion scenarios gracefully", async () => {
+    test("delivers to every registered observer at 1000 observers", async () => {
       const { system } = createEdgeCaseTestEnvironment();
 
       for (let i = 0; i < 1000; i++) {
@@ -781,16 +727,12 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         system.addObserver(observer);
       }
 
-      const startTime = testClock.now();
-
       await system.notifyObservers("tiktok", 500, 400);
 
-      const simulatedProcessingMs = 150;
-      testClock.advance(simulatedProcessingMs);
-      const processingTime = testClock.now() - startTime;
-
       expect(system.observers.size).toBe(1000);
-      expect(processingTime).toBeLessThan(5000);
+      for (const observer of system.observers.values()) {
+        expect((observer as EdgeCaseObserver).receivedUpdates).toEqual([expect.objectContaining({ platform: "tiktok", count: 500, previousCount: 400 })]);
+      }
       expectSystemStability(system);
     });
 
@@ -816,130 +758,57 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
   });
 
   describe("OBS Integration Edge Cases", () => {
-    test("should handle missing OBS sources gracefully", async () => {
-      const obsManager = createMockOBSManager("connected", {
-        call: createMockFn().mockRejectedValue(
-          new Error('Source "youtube viewer count" not found'),
-        ),
+    for (const [platform, count, message] of [
+      ["youtube", 1000, 'Source "synthetic-youtube-viewers" not found'],
+      ["twitch", 500, "Source is not a text source"],
+      ["tiktok", 750, "WebSocket protocol error"],
+    ] as const) {
+      test(`OBS external failure then recovery: ${message}`, async () => {
+        const calls: Array<[string, Record<string, unknown>]> = [];
+        let fail = true;
+        const manager = await createObsBoundary(async (method, data) => {
+          calls.push([method, data]); if (fail) throw new Error(message); return {};
+        });
+        const observer = new OBSViewerCountObserver(manager, noOpLogger, { config: obsConfig() });
+        const update = { platform, count, isStreamLive: true };
+        await observer.onViewerCountUpdate(update); fail = false; await observer.onViewerCountUpdate(update);
+        expect(calls).toEqual(Array.from({ length: 2 }, () => ["SetInputSettings", { inputName: `synthetic-${platform}-viewers`, inputSettings: { text: count === 1000 ? "1K" : String(count) }, overlay: true }]));
       });
-
-      const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
-        config: createConfigFixture(),
+    }
+    test("awaits a held external OBS write while another platform count completes", async () => {
+      const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
+      const writes: string[] = [];
+      const manager = await createObsBoundary(async (_method, data) => {
+        writes.push(String(data.inputName));
+        if (data.inputName === "synthetic-youtube-viewers") { entered.resolve(); await release.promise; }
+        return {};
       });
-
-      await obsObserver.onViewerCountUpdate({
-        platform: "youtube",
-        count: 1000,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
+      const observer = new OBSViewerCountObserver(manager, noOpLogger, { config: obsConfig() });
+      let completed = false;
+      const update = observer.onViewerCountUpdate({ platform: "youtube", count: 1200, isStreamLive: true }).then(() => { completed = true; });
+      try {
+        await entered.promise; expect(completed).toBe(false);
+        await observer.onViewerCountUpdate({ platform: "twitch", count: 300, isStreamLive: true });
+        expect(writes).toEqual(["synthetic-youtube-viewers", "synthetic-twitch-viewers"]);
+        expect(completed).toBe(false);
+        release.resolve(); await update; expect(completed).toBe(true);
+      } finally { release.resolve(); await update; await observer.cleanup(); }
     });
-
-    test("should handle OBS source type mismatches appropriately", async () => {
-      const obsManager = createMockOBSManager("connected", {
-        call: createMockFn().mockRejectedValue(
-          new Error("Source is not a text source"),
-        ),
-      });
-
-      const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
-        config: createConfigFixture(),
-      });
-
-      await obsObserver.onViewerCountUpdate({
-        platform: "twitch",
-        count: 500,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
-    });
-
-    test("should handle OBS WebSocket protocol errors without system crash", async () => {
-      const obsManager = createMockOBSManager("connected", {
-        call: createMockFn().mockRejectedValue(
-          new Error("WebSocket protocol error"),
-        ),
-      });
-
-      const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
-        config: createConfigFixture(),
-      });
-
-      await obsObserver.onViewerCountUpdate({
-        platform: "tiktok",
-        count: 750,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
-    });
-
-    test("should handle very slow OBS connections without blocking system", async () => {
-      const obsManager = createMockOBSManager("connected", {
-        call: createMockFn().mockImplementation(
-          () =>
-            new Promise((resolve) =>
-              scheduleTimeout(() => resolve({ status: "success" }), 5000),
-            ),
-        ),
-      });
-
-      const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
-        config: createConfigFixture(),
-      });
-
-      const startTime = testClock.now();
-
-      const updatePromise = obsObserver.onViewerCountUpdate({
-        platform: "youtube",
-        count: 1200,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
-
-      testClock.advance(10);
-      const quickCheck = testClock.now() - startTime;
-
-      expect(quickCheck).toBeLessThan(100);
-
-      updatePromise.catch(() => {});
-    });
-
-    test("should handle OBS scene changes dynamically", async () => {
-      const obsManager = createMockOBSManager("connected");
+    test("OBS scene source disappearance does not prevent a later recovered write", async () => {
+      const calls: Record<string, unknown>[] = [];
       let sourceExists = true;
-
-      obsManager.call = createMockFn<unknown[], Promise<{ status: string }>>().mockImplementation(() => {
-        if (!sourceExists) {
-          throw new Error("Source not found in current scene");
-        }
-        return Promise.resolve({ status: "success" });
-      });
-
-      const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
-        config: createConfigFixture(),
-      });
-
-      await obsObserver.onViewerCountUpdate({
-        platform: "twitch",
-        count: 300,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
-
-      sourceExists = false;
-
-      await obsObserver.onViewerCountUpdate({
-        platform: "twitch",
-        count: 350,
-        isStreamLive: true,
-        timestamp: new Date(testClock.now()),
-      });
+      const manager = await createObsBoundary(async (_method, data) => { calls.push(data); if (!sourceExists) throw new Error("Source not found in current scene"); return {}; });
+      const observer = new OBSViewerCountObserver(manager, noOpLogger, { config: obsConfig() });
+      await observer.onViewerCountUpdate({ platform: "twitch", count: 300, isStreamLive: true });
+      sourceExists = false; await observer.onViewerCountUpdate({ platform: "twitch", count: 350, isStreamLive: true });
+      sourceExists = true; await observer.onViewerCountUpdate({ platform: "twitch", count: 400, isStreamLive: true });
+      expect(calls.map(data => data.inputSettings)).toEqual([{ text: "300" }, { text: "350" }, { text: "400" }]);
     });
   });
 
   describe("Platform Connection Edge Cases", () => {
     test("should handle platform API format changes gracefully", async () => {
-      const { system } = createEdgeCaseTestEnvironment({
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({
         platforms: {
           tiktok: {
             responseSequence: [200, { viewers: 250 }, "300 viewers", [350]],
@@ -957,6 +826,13 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
 
       expect(observer.receivedUpdates).toHaveLength(1);
       expect(requireUpdate(observer, 0).count).toBe(200);
+      const boundary = requirePlatform(httpSlots, "tiktok");
+      expect(boundary.getCallCount()).toBe(4);
+      expect(boundary.provider.getErrorStats()).toMatchObject({ totalErrors: 3, consecutiveErrors: 3 });
+      expect(system.getViewerCount("tiktok")).toBe(200);
+      boundary.respond(async () => 400); await system.pollPlatform("tiktok");
+      expect(boundary.getCallCount()).toBe(5); expect(system.getViewerCount("tiktok")).toBe(400);
+      expect(observer.receivedUpdates.map(u => u.count)).toEqual([200, 400]);
       expectSystemStability(system);
     });
 
@@ -969,12 +845,13 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         Symbol("test"),
         () => {},
       ];
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({
         platforms: {
           youtube: { responseSequence: unexpectedValues },
         },
       });
 
+      await system.updateViewerCount("youtube", 42);
       const observer = createEdgeCaseObserver("unexpected-event-observer");
       system.addObserver(observer);
       await system.updateStreamStatus("youtube", true);
@@ -983,46 +860,31 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         await system.pollPlatform("youtube");
       }
 
-      expect(requirePlatform(mockPlatforms, "youtube").getCallCount()).toBe(unexpectedValues.length);
+      const boundary = requirePlatform(httpSlots, "youtube");
+      expect(boundary.getCallCount()).toBe(unexpectedValues.length);
       expect(observer.receivedUpdates).toHaveLength(0);
+      expect(system.getViewerCount("youtube")).toBe(42);
+      boundary.respond(async () => 350); await system.pollPlatform("youtube");
+      expect(boundary.getCallCount()).toBe(unexpectedValues.length + 1);
+      expect(system.getViewerCount("youtube")).toBe(350);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[350, 42]]);
       expectSystemStability(system);
     });
 
     test("should handle platform authentication issues during operation", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-        platforms: {
-          twitch: {
-            responseSequence: [100, 150, 200],
-          },
-        },
-      });
-
-      let authCallCount = 0;
-      const twitchPlatform = requirePlatform(mockPlatforms, "twitch");
-      const originalGetViewerCount = twitchPlatform.getViewerCount;
-      twitchPlatform.getViewerCount = async function () {
-        authCallCount++;
-        if (authCallCount > 2) {
-          throw new Error("Authentication expired");
-        }
-        return originalGetViewerCount.call(this);
-      };
-
-      const observer = createEdgeCaseObserver("auth-failure-observer");
-      system.addObserver(observer);
-      await system.updateStreamStatus("twitch", true);
-
-      for (let i = 0; i < 4; i++) {
-        await system.pollPlatform("twitch");
-      }
-
-      expect(authCallCount).toBe(4);
-      expect(observer.receivedUpdates.map((update) => update.count)).toEqual([100, 150]);
-      expectSystemStability(system);
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({ platforms: { twitch: {} } });
+      const boundary = requirePlatform(httpSlots, "twitch");
+      boundary.respond(async () => { if (boundary.getCallCount() > 2) throw Object.assign(new Error("Authentication expired"), { response: { status: 401 } }); return boundary.getCallCount() === 1 ? 100 : 150; });
+      const observer = createEdgeCaseObserver("auth"); system.addObserver(observer);
+      for (let i = 0; i < 4; i++) await system.pollPlatform("twitch");
+      expect(boundary.getCallCount()).toBe(4);
+      expect(boundary.provider.getErrorStats()).toMatchObject({ totalErrors: 2, consecutiveErrors: 2, errorTypes: { authentication: 2 } });
+      expect(observer.receivedUpdates.map(u => u.count)).toEqual([100, 150]);
+      expect(system.getViewerCount("twitch")).toBe(150);
     });
 
     test("should handle complete platform service outages", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({
         platforms: {
           tiktok: { shouldThrow: true, errorMessage: "Service unavailable" },
           twitch: { shouldThrow: true, errorMessage: "DNS resolution failed" },
@@ -1033,18 +895,21 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       const observer = createEdgeCaseObserver("outage-observer");
       system.addObserver(observer);
 
-      for (const platform of Object.keys(mockPlatforms)) {
+      for (const platform of Object.keys(httpSlots)) {
         await system.updateStreamStatus(platform, true);
-        await system.pollPlatform(platform);
+        await system.updateViewerCount(platform, 42);
       }
-
+      observer.receivedUpdates.length = 0;
+      for (const platform of Object.keys(httpSlots)) await system.pollPlatform(platform);
       expect(observer.receivedUpdates).toHaveLength(0);
-      expect(Object.values(mockPlatforms).every((platform) => platform.getCallCount() === 1)).toBe(true);
+      expect(Object.values(httpSlots).map(h => h.getCallCount())).toEqual([1, 1, 1]);
+      expect(system.getViewerCounts()).toEqual({ tiktok: 42, twitch: 42, youtube: 42 });
+      expect(Object.values(httpSlots).map(h => h.provider.getErrorStats().lastError)).toEqual(["Service unavailable", "DNS resolution failed", "Connection timeout"]);
       expectSystemStability(system);
     });
 
     test("should handle mixed platform states efficiently", async () => {
-      const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
+      const { system, httpSlots } = createEdgeCaseTestEnvironment({
         platforms: {
           tiktok: { returnValue: 500 },
           twitch: { shouldThrow: true },
@@ -1055,7 +920,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       const observer = createEdgeCaseObserver("mixed-state-observer");
       system.addObserver(observer);
 
-      for (const platform of Object.keys(mockPlatforms)) {
+      for (const platform of Object.keys(httpSlots)) {
         await system.updateStreamStatus(platform, true);
         await system.pollPlatform(platform);
       }

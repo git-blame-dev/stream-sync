@@ -21,7 +21,7 @@ describe("chat notification router JS interop", () => {
       runtime: {
         config: routerConfig,
         userTrackingService: { isFirstMessage: () => false },
-        displayQueue: { addItem() {}, addSequence() {} },
+        displayQueue: { addItem: item => [item], addSequence: items => items },
       },
       logger: { debug() {}, warn() {}, error() {} },
       config: routerConfig,

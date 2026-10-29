@@ -51,7 +51,7 @@ process.stdout.write('IMPORT_OK');
 `);
                 for (const command of [
                     ['node', '--import', path.join(root, 'node_modules/tsx/dist/loader.mjs'), entry],
-                    [process.execPath, entry]
+                    [process.execPath, '--no-env-file', entry]
                 ]) {
                     const child = Bun.spawn(command, {
                         cwd: directory,

@@ -42,6 +42,23 @@ function getEffectShellProps(renderer: AppRenderer): EffectShellProps {
   };
 }
 
+function appearanceSettings(overrides: Partial<{ compactRows: boolean; rowBackgroundsEnabled: boolean; maxDisplayableBadges: number; streamSupporterChatEffectsEnabled: boolean }> = {}) {
+  return { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true, memberRowTheme: "green" as const, memberRowEffects: [], ...overrides };
+}
+
+function externalAppearanceFeed() {
+  const sources: Array<{ onmessage: ((event: MessageEvent<string>) => void) | null; onopen: ((event: Event) => void) | null; onerror: ((event: Event) => void) | null; close: () => void }> = [];
+  let closed = 0;
+  const createEventFeedImpl: typeof createEventFeed = options => createEventFeed({ ...options, eventSourceFactory: () => {
+    const source = { onmessage: null, onopen: null, onerror: null, close: () => { closed += 1; } };
+    sources.push(source);
+    return source;
+  } });
+  return { sources, createEventFeedImpl, get closed() { return closed; }, emit(payload: unknown) {
+    sources[0]!.onmessage!(new MessageEvent("message", { data: JSON.stringify(payload) }));
+  } };
+}
+
 let originalConsoleTimeStamp: typeof console.timeStamp | undefined;
 
 beforeAll(() => {
@@ -60,6 +77,110 @@ afterAll(() => {
 });
 
 describe("GUI app behavior", () => {
+  for (const recovery of ["reconnect", "replacement"] as const) {
+    it(`retires the actual active notification on ${recovery} after a missed exit`, async () => {
+      const sources: Array<{ onmessage: ((event: MessageEvent<string>) => void) | null; onopen: ((event: Event) => void) | null; onerror: ((event: Event) => void) | null; close: () => void }> = [];
+      const createEventFeedImpl: typeof createEventFeed = (options) => createEventFeed({
+        ...options,
+        eventSourceFactory: () => {
+          const source = { onmessage: null, onopen: null, onerror: null, close() {} };
+          sources.push(source);
+          return source;
+        },
+      });
+      let renderer: AppRenderer | null = null;
+      const emit = (eventId: string) => sources.at(-1)!.onmessage!(new MessageEvent("message", { data: JSON.stringify({
+        eventId, type: "platform:follow", kind: "notification", platform: "twitch",
+        username: eventId, text: eventId, avatarUrl: "https://example.invalid/test-avatar.png",
+      }) }));
+      try {
+        await TestRenderer.act(async () => {
+          renderer = TestRenderer.create(React.createElement(App, { mode: "notifications", createEventFeedImpl }));
+        });
+        await TestRenderer.act(async () => sources[0]!.onopen!(new Event("open")));
+        await TestRenderer.act(async () => emit("test-before-disconnect"));
+        expect(JSON.stringify(renderer!.toJSON())).toContain("test-before-disconnect");
+        if (recovery === "reconnect") {
+          await TestRenderer.act(async () => sources[0]!.onerror!(new Event("error")));
+          // The server's exit event is lost while disconnected.
+          await TestRenderer.act(async () => sources[0]!.onopen!(new Event("open")));
+        } else {
+          await TestRenderer.act(async () => renderer!.update(React.createElement(App, {
+            mode: "notifications", eventsPath: "/test/replacement", createEventFeedImpl,
+          })));
+        }
+        await TestRenderer.act(async () => emit("test-after-recovery"));
+        expect(JSON.stringify(renderer!.toJSON())).not.toContain("test-before-disconnect");
+        expect(JSON.stringify(renderer!.toJSON())).toContain("test-after-recovery");
+      } finally {
+        await TestRenderer.act(async () => renderer?.unmount());
+      }
+    });
+  }
+
+  it("accepts a restarted appearance owner at revision zero and preserves chat on reconnect", async () => {
+    const feed = externalAppearanceFeed();
+    let renderer: AppRenderer | null = null;
+    const settings = { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: false, memberRowTheme: "green", memberRowEffects: [] };
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(React.createElement(App, { mode: "dock", createEventFeedImpl: feed.createEventFeedImpl }));
+      });
+      await TestRenderer.act(async () => {
+        feed.sources[0]!.onopen!(new Event("open"));
+        feed.emit({ type: "chat", kind: "chat", text: "test-chat-survives", avatarUrl: "https://example.invalid/test-avatar.png" });
+        feed.emit({ __guiEvent: "appearance", sessionId: "test-old-owner", profile: "minimal", revision: 8, settings });
+      });
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ sessionId: "test-old-owner", profile: "standard", revision: 8, settings });
+      await TestRenderer.act(async () => {
+        feed.sources[0]!.onerror!(new Event("error"));
+        feed.sources[0]!.onopen!(new Event("open"));
+        feed.emit({ __guiEvent: "appearance", sessionId: "test-new-owner", profile: "minimal", revision: 0, settings: { ...settings, compactRows: false } });
+      });
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ sessionId: "test-new-owner", profile: "standard", revision: 0, settings: { ...settings, compactRows: false } });
+      expect(renderer!.root.findByType(GuiShell).props.appearance.profile).toBe("standard");
+      expect(JSON.stringify(renderer!.toJSON())).toContain("test-chat-survives");
+      await TestRenderer.act(async () => {
+        feed.emit({ __guiEvent: "appearance", sessionId: "test-new-owner", profile: "minimal", revision: 1, settings });
+        feed.emit({ __guiEvent: "appearance", sessionId: "test-new-owner", profile: "minimal", revision: 0, settings: { ...settings, compactRows: false } });
+      });
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ sessionId: "test-new-owner", profile: "standard", revision: 1, settings });
+      expect(feed.sources).toHaveLength(1);
+      expect(feed.closed).toBe(0);
+    } finally { await TestRenderer.act(async () => renderer?.unmount()); }
+    expect(feed.closed).toBe(1);
+  });
+
+  it("retires queued effects on reconnect and fences their late completion acknowledgement", async () => {
+    let feed: EventFeedArgs | undefined;
+    const acknowledgements: string[] = [];
+    const createEventFeedImpl = (options: EventFeedArgs) => { feed = options; return () => {}; };
+    let renderer: AppRenderer | null = null;
+    const effect = (playbackId: string) => ({
+      __guiEvent: "effect", effectType: "tiktok-gift-animation", playbackId, durationMs: 2500,
+      assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
+      config: { profileName: "portrait", sourceWidth: 960, sourceHeight: 864, renderWidth: 480, renderHeight: 854, rgbFrame: [0, 0, 480, 854], aFrame: [480, 0, 480, 854] },
+    });
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(React.createElement(App, {
+          mode: "dock", createEventFeedImpl,
+          sendGiftAnimationAckImpl: async (id) => { acknowledgements.push(id); },
+        }));
+      });
+      await TestRenderer.act(async () => { feed!.onOpen!(); feed!.onEvent(effect("test-old-effect")); });
+      const retired = getEffectShellProps(renderer!);
+      await TestRenderer.act(async () => { feed!.onError!(); feed!.onOpen!(); });
+      expect(renderer!.root.findByType(GuiShell).props.activeEffect).toBeNull();
+      await TestRenderer.act(async () => feed!.onEvent(effect("test-new-effect")));
+      await TestRenderer.act(async () => retired.onEffectComplete("test-old-effect", "ended"));
+      expect(acknowledgements).toEqual([]);
+      expect(getEffectShellProps(renderer!).activeEffect.playbackId).toBe("test-new-effect");
+      await TestRenderer.act(async () => getEffectShellProps(renderer!).onEffectComplete("test-new-effect", "ended"));
+      expect(acknowledgements).toEqual(["test-new-effect"]);
+    } finally { await TestRenderer.act(async () => renderer?.unmount()); }
+  });
+
   it("ignores captured transport callbacks after replacing a feed", async () => {
     const sources: Array<{
       onmessage: ((event: MessageEvent<string>) => void) | null;
@@ -715,44 +836,25 @@ describe("GUI app behavior", () => {
   });
 
   it("keeps the minimal overlay feed connected across appearance revisions", async () => {
-    let onEventHandler: EventHandler | null = null;
-    let connectionCount = 0;
-    let disposalCount = 0;
-    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
-      connectionCount += 1;
-      onEventHandler = onEvent;
-      return () => {
-        disposalCount += 1;
-      };
-    };
-
+    const feed = externalAppearanceFeed();
     let renderer: AppRenderer | null = null;
-    await TestRenderer.act(async () => {
-      renderer = TestRenderer.create(React.createElement(App, {
-        mode: "overlay",
-        createEventFeedImpl,
-        overlayMaxMessages: 3,
-        overlayMaxLinesPerMessage: 3,
-        initialAppearance: {
-          profile: "minimal",
-          revision: 0,
-          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true },
-        },
-      }));
-    });
-    await TestRenderer.act(async () => {
-      onEventHandler!({
-        __guiEvent: "appearance",
-        profile: "minimal",
-        revision: 1,
-        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: true },
+    const initial = appearanceSettings();
+    const updated = appearanceSettings({ rowBackgroundsEnabled: false, maxDisplayableBadges: 0 });
+    try {
+      await TestRenderer.act(async () => { renderer = TestRenderer.create(React.createElement(App, {
+        mode: "overlay", createEventFeedImpl: feed.createEventFeedImpl, overlayMaxMessages: 3, overlayMaxLinesPerMessage: 3,
+        initialAppearance: { profile: "minimal", revision: 0, settings: initial },
+      })); });
+      await TestRenderer.act(async () => {
+        feed.emit({ type: "chat", kind: "chat", platform: "twitch", username: "test-minimal-user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null });
+        feed.emit({ __guiEvent: "appearance", profile: "minimal", revision: 1, settings: updated });
       });
-    });
-
-    expect(connectionCount).toBe(1);
-    expect(disposalCount).toBe(0);
-    await TestRenderer.act(async () => renderer!.unmount());
-    expect(disposalCount).toBe(1);
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ profile: "minimal", revision: 1, settings: updated });
+      expect(JSON.stringify(renderer!.toJSON())).toContain("gui-row--background-off");
+      expect(feed.sources).toHaveLength(1);
+      expect(feed.closed).toBe(0);
+    } finally { await TestRenderer.act(async () => renderer?.unmount()); }
+    expect(feed.closed).toBe(1);
   });
 
   it("renders only gift animation effects in tiktok-animations mode", async () => {
@@ -997,70 +1099,55 @@ describe("GUI app behavior", () => {
   });
 
   it("applies newer appearance snapshots while preserving the client profile", async () => {
-    let onEventHandler: EventHandler | null = null;
-    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
-      onEventHandler = onEvent;
-      return () => {};
-    };
+    const feed = externalAppearanceFeed();
     let renderer: AppRenderer | null = null;
-    await TestRenderer.act(async () => {
-      renderer = TestRenderer.create(React.createElement(App, {
-        mode: "dock",
-        createEventFeedImpl,
-        initialAppearance: {
-          profile: "standard",
-          revision: 0,
-          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true },
-        },
-      }));
-    });
-    await TestRenderer.act(async () => {
-      onEventHandler!({ type: "chat", kind: "chat", platform: "twitch", username: "test-minimal-user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null });
-      onEventHandler!({
-        __guiEvent: "appearance",
-        profile: "minimal",
-        revision: 1,
-        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: false },
+    const updated = appearanceSettings({ rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: false });
+    try {
+      await TestRenderer.act(async () => { renderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock", createEventFeedImpl: feed.createEventFeedImpl,
+        initialAppearance: { profile: "standard", revision: 0, settings: appearanceSettings() },
+      })); });
+      await TestRenderer.act(async () => {
+        feed.emit({ type: "chat", kind: "chat", platform: "twitch", username: "test-minimal-user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null });
+        feed.emit({ __guiEvent: "appearance", profile: "minimal", revision: 1, settings: updated });
       });
-    });
-
-    const text = JSON.stringify(renderer!.toJSON());
-    expect(text).not.toContain("gui-shell--minimal");
-    expect(text).not.toContain("gui-row--background-off");
-    expect(text).toContain("test-minimal-user");
-    await TestRenderer.act(async () => renderer!.unmount());
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ profile: "standard", revision: 1, settings: updated });
+      const text = JSON.stringify(renderer!.toJSON());
+      expect(text).not.toContain("gui-shell--minimal");
+      expect(text).not.toContain("gui-row--background-off");
+      expect(text).toContain("test-minimal-user");
+      expect(feed.sources).toHaveLength(1);
+    } finally { await TestRenderer.act(async () => renderer?.unmount()); }
+    expect(feed.closed).toBe(1);
   });
 
-  it("ignores malformed live appearance snapshots", async () => {
-    let onEventHandler: EventHandler | null = null;
-    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
-      onEventHandler = onEvent;
-      return () => {};
-    };
+  it("ignores malformed live appearance snapshots and accepts a later valid revision", async () => {
+    const feed = externalAppearanceFeed();
     let renderer: AppRenderer | null = null;
-    await TestRenderer.act(async () => {
-      renderer = TestRenderer.create(React.createElement(App, {
-        mode: "dock",
-        createEventFeedImpl,
-        initialAppearance: {
-          profile: "minimal",
-          revision: 1,
-          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
-        },
-      }));
-    });
-    await TestRenderer.act(async () => {
-      onEventHandler!({
-        __guiEvent: "appearance",
-        profile: "minimal",
-        revision: 2,
-        settings: { compactRows: true, rowBackgroundsEnabled: "no", maxDisplayableBadges: 0 },
+    const valid = appearanceSettings({ rowBackgroundsEnabled: false, maxDisplayableBadges: 0 });
+    const recovered = appearanceSettings();
+    try {
+      await TestRenderer.act(async () => { renderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock", createEventFeedImpl: feed.createEventFeedImpl,
+        initialAppearance: { profile: "minimal", revision: 0, settings: recovered },
+      })); });
+      await TestRenderer.act(async () => {
+        feed.emit({ type: "chat", kind: "chat", platform: "twitch", username: "test-malformed-user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null });
+        feed.emit({ __guiEvent: "appearance", profile: "minimal", revision: 1, settings: valid });
       });
-    });
-
-    const text = JSON.stringify(renderer!.toJSON());
-    expect(text).not.toContain("gui-row--background-off");
-    await TestRenderer.act(async () => renderer!.unmount());
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ profile: "minimal", revision: 1, settings: valid });
+      const before = JSON.stringify(renderer!.toJSON());
+      expect(before).toContain("test-malformed-user");
+      expect(before).toContain("gui-row--background-off");
+      await TestRenderer.act(async () => feed.emit({ __guiEvent: "appearance", profile: "minimal", revision: 2, settings: { ...valid, rowBackgroundsEnabled: "no" } }));
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ profile: "minimal", revision: 1, settings: valid });
+      expect(JSON.stringify(renderer!.toJSON())).toBe(before);
+      await TestRenderer.act(async () => feed.emit({ __guiEvent: "appearance", profile: "minimal", revision: 3, settings: recovered }));
+      expect(renderer!.root.findByType(GuiShell).props.appearance).toEqual({ profile: "minimal", revision: 3, settings: recovered });
+      expect(JSON.stringify(renderer!.toJSON())).not.toContain("gui-row--background-off");
+      expect(feed.sources).toHaveLength(1);
+    } finally { await TestRenderer.act(async () => renderer?.unmount()); }
+    expect(feed.closed).toBe(1);
   });
 
   it("keeps ordinary chat out of the notifications activity bar", async () => {

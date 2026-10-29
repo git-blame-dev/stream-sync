@@ -19,6 +19,7 @@ export interface GuiAppearanceSettings {
 }
 
 export interface GuiAppearance {
+  sessionId?: string
   profile: GuiAppearanceProfile
   revision: number
   settings: GuiAppearanceSettings
@@ -47,12 +48,13 @@ function parseEffects(value: unknown, fallback: readonly RowVisualEffectId[]): R
 
 export function parseGuiAppearanceSnapshot(value: unknown): GuiAppearance {
   if (!value || typeof value !== 'object') return DEFAULT_GUI_APPEARANCE
-  const candidate = value as { profile?: unknown; revision?: unknown; settings?: unknown }
+  const candidate = value as { sessionId?: unknown; profile?: unknown; revision?: unknown; settings?: unknown }
   const settings = candidate.settings && typeof candidate.settings === 'object'
     ? candidate.settings as Record<string, unknown>
     : {}
   const max = settings.maxDisplayableBadges
   return {
+    ...(typeof candidate.sessionId === 'string' && candidate.sessionId.trim() ? { sessionId: candidate.sessionId } : {}),
     profile: candidate.profile === 'minimal' ? 'minimal' : 'standard',
     revision: typeof candidate.revision === 'number' && Number.isSafeInteger(candidate.revision) && candidate.revision >= 0
       ? candidate.revision
@@ -75,7 +77,8 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
   const candidate = value as Record<string, unknown>
   const settings = candidate.settings
   if (
-    candidate.__guiEvent !== 'appearance'
+    (candidate.sessionId !== undefined && (typeof candidate.sessionId !== 'string' || !candidate.sessionId.trim()))
+    || candidate.__guiEvent !== 'appearance'
     || (candidate.profile !== 'minimal' && candidate.profile !== 'standard')
     || typeof candidate.revision !== 'number'
     || !Number.isSafeInteger(candidate.revision)
@@ -98,6 +101,7 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
     || appearanceSettings.memberRowEffects.some((effect) => !isRowVisualEffectId(effect))
   ) return null
   return {
+    ...(typeof candidate.sessionId === 'string' && candidate.sessionId.trim() ? { sessionId: candidate.sessionId } : {}),
     profile: candidate.profile as GuiAppearanceProfile,
     revision: candidate.revision,
     settings: {

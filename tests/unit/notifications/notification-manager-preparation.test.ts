@@ -1,10 +1,11 @@
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { describe, expect, it } from "bun:test";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 const makeManager = (config = createConfigFixture()) => {
-  const addItem = () => undefined;
+  const addItem = (item: DisplayQueueItem) => [item];
   const manager = new NotificationManager({
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     constants: {
@@ -18,7 +19,6 @@ const makeManager = (config = createConfigFixture()) => {
     config,
     displayQueue: { addItem, getQueueLength: () => 0 },
     eventBus: {},
-    obsGoals: { processDonationGoal() {} },
     vfxCommandService: { getVFXConfig: () => ({ command: "!bye", filename: "bye.mp4" }) },
   });
   return { manager, addItem };
@@ -31,7 +31,7 @@ describe("NotificationManager preparation", () => {
   it("prepares without enqueueing, while handleNotification enqueues once", async () => {
     let count = 0;
     const { manager } = makeManager();
-    manager.displayQueue.addItem = () => { count += 1; };
+    manager.displayQueue.addItem = (item) => { count += 1; return [item]; };
     const prepared = await manager.prepareNotification("platform:follow", "twitch", followData);
     expect(prepared.success).toBe(true);
     expect(count).toBe(0);
