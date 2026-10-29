@@ -10,6 +10,38 @@ test('v3 emote-only chat preserves identities, privileges, avatar and badge imag
     expect(result.message.parts).toEqual([expect.objectContaining({type:'emote',emoteId:'synthetic-emote'})]);
     expect(result.metadata.profilePicture).toBe('https://example.invalid/avatar.png');expect(result.badgeImages).toHaveLength(2);
 });
+test('v3 live user payload with avatarThumb and undefined avatarLarge preserves avatar across chat and gift normalization',()=>{
+    const thumbOnlyUser={id:'9000000000000000004',displayId:'synthetic-thumb-user',nickname:'Synthetic Thumb User',avatarThumb:{urlList:['https://example.invalid/avatar-thumb.webp']},avatarMedium:undefined,avatarLarge:undefined};
+    const chatResult=normalizeTikTokChatEvent(adaptTikTokEvent('chat',{common,user:thumbOnlyUser,content:'hello'}));
+    expect(chatResult.metadata.profilePicture).toBe('https://example.invalid/avatar-thumb.webp');
+    const giftResult=normalizeTikTokGiftEvent(adaptTikTokEvent('gift',{common,user:thumbOnlyUser,gift:{name:'Synthetic Rose',type:1,diamondCount:5,image:{urlList:['https://example.invalid/gift.png']}},repeatCount:1,repeatEnd:1}));
+    expect(giftResult.avatarUrl).toBe('https://example.invalid/avatar-thumb.webp');
+});
+test('v3 image badges, combine badge labels and canonical user key ordering survive 100-key v3 user objects',()=>{
+    const rawUserWithManyKeys: Record<string, unknown> = {};
+    for (let i = 0; i < 110; i += 1) {
+        rawUserWithManyKeys[`syntheticField${i}`] = i;
+    }
+    Object.assign(rawUserWithManyKeys, {
+        id: '9000000000000000005',
+        displayId: 'synthetic-badge-user',
+        nickname: 'Synthetic Badge User',
+        avatarThumb: { urlList: ['https://example.invalid/badge-user-avatar.webp'] },
+        badgeList: [
+            { displayType: 1, image: { displayType: 0, image: { urlList: ['https://example.invalid/moderator-badge.png'] } } },
+            { displayType: 4, combine: { icon: { urlList: ['https://example.invalid/level-badge.png'] }, text: { defaultPattern: 'Level 25' }, str: '25' } },
+        ],
+    });
+    const adapted = adaptTikTokEvent('chat', { common, user: rawUserWithManyKeys, content: 'badge check' });
+    const adaptedUserKeys = Object.keys(adapted.user as Record<string, unknown>);
+    expect(adaptedUserKeys.slice(0, 8)).toEqual(['userId', 'uniqueId', 'nickname', 'profilePicture', 'followRole', 'userBadges', 'badgeImageList', 'badges']);
+    const normalized = normalizeTikTokChatEvent(adapted);
+    expect(normalized.metadata.profilePicture).toBe('https://example.invalid/badge-user-avatar.webp');
+    expect(normalized.badgeImages).toEqual([
+        { imageUrl: 'https://example.invalid/moderator-badge.png', source: 'tiktok', label: '' },
+        { imageUrl: 'https://example.invalid/level-badge.png', source: 'tiktok', label: 'Level 25' },
+    ]);
+});
 test('gift streak accounting and image survive v3 translation',()=>{
     const result=normalizeTikTokGiftEvent(adaptTikTokEvent('gift',{common,user,gift:{name:'Synthetic Rose',type:1,diamondCount:5,image:{urlList:['https://example.invalid/gift.png']}},repeatCount:3,repeatEnd:1,groupId:'synthetic-group'}));
     expect(result.amount).toBe(15);expect(result.repeatEnd).toBe(true);expect(result.groupId).toBe('synthetic-group');expect(result.giftImageUrl).toBe('https://example.invalid/gift.png');

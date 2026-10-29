@@ -646,7 +646,37 @@ describe("TikTok event factory behavior", () => {
     );
   });
 
-  it("creates superfan paypiggy event with superfan tier", () => {
+  it("prefers normalizedData and nested avatars when data.avatarUrl is DEFAULT_AVATAR_URL", () => {
+    const {
+      createTikTokEventFactory,
+    } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+
+    const eventFactory = createTikTokEventFactory({
+      platformName: "tiktok",
+      generateCorrelationId: () => "corr-chat-default-avatar",
+    });
+
+    const chatEvent = eventFactory.createChatMessage(
+      { avatarUrl: DEFAULT_AVATAR_URL },
+      {
+        normalizedData: {
+          userId: "test-user-id",
+          username: "test-username",
+          message: "hello",
+          timestamp: "2026-01-30T12:00:00.000Z",
+          metadata: {
+            profilePicture: "https://example.invalid/tiktok-metadata-avatar.webp",
+          },
+        },
+      },
+    );
+
+    expect(chatEvent.avatarUrl).toBe(
+      "https://example.invalid/tiktok-metadata-avatar.webp",
+    );
+  });
+
+    it("creates superfan paypiggy event with superfan tier", () => {
     const {
       createTikTokEventFactory,
     } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");

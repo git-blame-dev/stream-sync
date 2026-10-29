@@ -1527,7 +1527,7 @@ class TikTokPlatform extends EventEmitter {
         const common = asRecord(dataRecord.common);
         const displayText = asRecord(dataRecord.displayText || common.displayText);
         const defaultPattern = String(displayText.defaultPattern || dataRecord.label || '').toLowerCase();
-        const displayType = String(displayText.displayType || dataRecord.displayType || '').toLowerCase();
+        const displayType = String(displayText.displayType || displayText.key || dataRecord.displayType || '').toLowerCase();
 
         if (
             defaultPattern.includes('repost')
@@ -1658,7 +1658,7 @@ class TikTokPlatform extends EventEmitter {
     _resolveAvatarUrl(data: unknown = {}): string {
         const dataRecord = asRecord(data);
         const payloadAvatarUrl = typeof dataRecord.avatarUrl === 'string' ? dataRecord.avatarUrl.trim() : '';
-        if (payloadAvatarUrl) {
+        if (payloadAvatarUrl && payloadAvatarUrl !== this.fallbackAvatarUrl) {
             return payloadAvatarUrl;
         }
 
@@ -1667,7 +1667,7 @@ class TikTokPlatform extends EventEmitter {
             return extractedAvatarUrl;
         }
 
-        return this.fallbackAvatarUrl;
+        return payloadAvatarUrl || this.fallbackAvatarUrl;
     }
 
     _buildGiftErrorOverrides(data: unknown): GiftErrorOverrides {

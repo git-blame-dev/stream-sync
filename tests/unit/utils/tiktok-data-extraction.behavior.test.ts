@@ -153,6 +153,50 @@ describe("extractTikTokAvatarUrl", () => {
     expect(avatarUrl).toBe("https://example.invalid/tiktok-avatar-array.jpg");
   });
 
+  it("extracts valid HTTP(S) URL from v3 avatarThumb/avatarMedium/avatarLarge urlList", () => {
+    expect(
+      extractTikTokAvatarUrl({
+        user: {
+          avatarLarge: { urlList: [] },
+          avatarMedium: undefined,
+          avatarThumb: {
+            urlList: ["invalid", "https://example.invalid/tiktok-avatar-thumb.webp"],
+          },
+        },
+      }),
+    ).toBe("https://example.invalid/tiktok-avatar-thumb.webp");
+  });
+
+  it("extracts avatar URL from nested rawData and enhancedGiftData.originalData user wrappers", () => {
+    expect(
+      extractTikTokAvatarUrl({
+        rawData: {
+          data: {
+            user: {
+              avatarThumb: {
+                urlList: ["https://example.invalid/tiktok-degraded-chat-avatar.webp"],
+              },
+            },
+          },
+        },
+      }),
+    ).toBe("https://example.invalid/tiktok-degraded-chat-avatar.webp");
+
+    expect(
+      extractTikTokAvatarUrl({
+        enhancedGiftData: {
+          originalData: {
+            user: {
+              avatarThumb: {
+                urlList: ["https://example.invalid/tiktok-gift-original-avatar.webp"],
+              },
+            },
+          },
+        },
+      }),
+    ).toBe("https://example.invalid/tiktok-gift-original-avatar.webp");
+  });
+
   it("returns empty string when user avatar data is missing", () => {
     expect(extractTikTokAvatarUrl({ user: { uniqueId: "test-id" } })).toBe("");
   });

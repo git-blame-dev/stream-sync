@@ -4,6 +4,7 @@ import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/
 import { getValidMessageParts } from '../../../utils/message-parts';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
 import { parseNotificationCount } from '../../../utils/notification-count';
+import { extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -174,7 +175,8 @@ function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, da
     const resolvedCreateTimeMs = typeof resolveEventTimestampMs === 'function'
         ? resolveEventTimestampMs(data)
         : null;
-    const profilePicture = userData.profilePictureUrl
+    const profilePicture = extractTikTokAvatarUrl(data)
+        || userData.profilePictureUrl
         || (Array.isArray(userData.profilePicture?.url) ? userData.profilePicture.url[0] : null)
         || null;
 

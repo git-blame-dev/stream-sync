@@ -5,6 +5,7 @@ import { getValidMessageParts, normalizeBadgeImages } from './message-parts';
 import { CheermoteProcessor } from './cheermote-processor';
 import { getMissingFields } from './missing-fields';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+import { extractTikTokAvatarUrl } from './tiktok-data-extraction';
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 
@@ -336,6 +337,21 @@ function extractYouTubeBadgeImages(author: MessageRecord = {}) {
     );
 }
 
+function extractFirstBadgeImageUrl(imageRecord: MessageRecord | null): string {
+    if (!imageRecord) {
+        return '';
+    }
+    const candidates = Array.isArray(imageRecord.url)
+        ? imageRecord.url
+        : (Array.isArray(imageRecord.urlList) ? imageRecord.urlList : []);
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim().length > 0) {
+            return candidate.trim();
+        }
+    }
+    return '';
+}
+
 function extractTikTokBadgeImages(data: MessageRecord = {}) {
     const userData = isRecord(data.user) ? data.user : {};
     const entries: Array<Record<string, string>> = [];
@@ -345,30 +361,35 @@ function extractTikTokBadgeImages(data: MessageRecord = {}) {
         if (!isRecord(badgeImage)) {
             continue;
         }
-        const firstUrl = Array.isArray(badgeImage.url) && typeof badgeImage.url[0] === 'string'
-            ? badgeImage.url[0].trim()
-            : '';
+        const firstUrl = extractFirstBadgeImageUrl(badgeImage);
         if (!firstUrl) {
             continue;
         }
         entries.push({ imageUrl: firstUrl, source: 'tiktok', label: '' });
     }
 
-    const badges = Array.isArray(userData.badges) ? userData.badges : [];
-    for (const badge of badges) {
+    const rawBadges = Array.isArray(userData.badges)
+        ? userData.badges
+        : (Array.isArray(userData.badgeList) ? userData.badgeList : []);
+    for (const badge of rawBadges) {
         if (!isRecord(badge)) {
             continue;
         }
         const combine = getRecord(badge, 'combine');
-        const icon = combine ? getRecord(combine, 'icon') : null;
-        const text = getRecord(badge, 'text');
-        const firstUrl = Array.isArray(icon?.url) && typeof icon.url[0] === 'string'
-            ? icon.url[0].trim()
-            : '';
+        const combineIcon = combine ? getRecord(combine, 'icon') : null;
+        const imageBadge = getRecord(badge, 'image');
+        const nestedImage = imageBadge ? getRecord(imageBadge, 'image') : null;
+        const firstUrl = extractFirstBadgeImageUrl(combineIcon) || extractFirstBadgeImageUrl(nestedImage);
         if (!firstUrl) {
             continue;
         }
-        const label = typeof text?.defaultPattern === 'string' ? text.defaultPattern : '';
+        const text = getRecord(badge, 'text');
+        const combineText = combine ? getRecord(combine, 'text') : null;
+        const label = typeof text?.defaultPattern === 'string' && text.defaultPattern
+            ? text.defaultPattern
+            : (typeof combineText?.defaultPattern === 'string' && combineText.defaultPattern
+                ? combineText.defaultPattern
+                : (typeof combine?.str === 'string' ? combine.str : ''));
         entries.push({ imageUrl: firstUrl, source: 'tiktok', label });
     }
 
@@ -546,7 +567,8 @@ function normalizeTikTokMessage(data: unknown, platformName = 'tiktok') {
         }
 
         const resolvedCreateTimeMs = resolveTikTokTimestampMs(data);
-        const profilePicture = userData.profilePictureUrl
+        const profilePicture = extractTikTokAvatarUrl(data)
+            || userData.profilePictureUrl
             || (isRecord(userData.profilePicture) && Array.isArray(userData.profilePicture.url) ? userData.profilePicture.url[0] : null)
             || null;
 

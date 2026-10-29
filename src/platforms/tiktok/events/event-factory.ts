@@ -138,7 +138,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
     };
     const resolveAvatarUrl = (data: Record<string, unknown> = {}, fallbackData: Record<string, unknown> = {}) => {
         const avatarFromData = normalizeTikTokHttpUrl(data.avatarUrl);
-        if (avatarFromData) {
+        if (avatarFromData && avatarFromData !== DEFAULT_AVATAR_URL) {
             return avatarFromData;
         }
 
@@ -148,7 +148,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
         }
 
         const avatarFromFallback = normalizeTikTokHttpUrl(fallbackData.avatarUrl);
-        if (avatarFromFallback) {
+        if (avatarFromFallback && avatarFromFallback !== DEFAULT_AVATAR_URL) {
             return avatarFromFallback;
         }
 
@@ -164,7 +164,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
             return metadataAvatar;
         }
 
-        return DEFAULT_AVATAR_URL;
+        return avatarFromData || avatarFromFallback || DEFAULT_AVATAR_URL;
     };
 
     const resolveMessageParts = (normalized: Record<string, unknown> = {}) => {

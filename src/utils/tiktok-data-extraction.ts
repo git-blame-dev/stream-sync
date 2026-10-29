@@ -18,6 +18,30 @@ type TikTokGiftData = {
     giftImageUrl?: string;
 };
 
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null;
+}
+
+function resolveTikTokUserRecord(data: unknown): Record<string, unknown> | null {
+    const record = asObjectRecord(data);
+    if (!record) {
+        return null;
+    }
+    const directUser = asObjectRecord(record.user);
+    if (directUser) {
+        return directUser;
+    }
+    const rawData = asObjectRecord(record.rawData);
+    const rawUser = asObjectRecord(rawData?.user) ?? asObjectRecord(asObjectRecord(rawData?.data)?.user);
+    if (rawUser) {
+        return rawUser;
+    }
+    const enhancedGiftData = asObjectRecord(record.enhancedGiftData);
+    return asObjectRecord(asObjectRecord(enhancedGiftData?.originalData)?.user);
+}
+
 function normalizeTikTokHttpUrl(value: unknown): string {
     if (typeof value !== 'string' || !value.trim()) return '';
     const trimmed = value.trim();
@@ -116,13 +140,7 @@ function extractTikTokGiftData(data: unknown): TikTokGiftData {
 }
 
 function extractTikTokAvatarUrl(data: unknown): string {
-    if (!data || typeof data !== 'object') {
-        return '';
-    }
-
-    const userData = ('user' in data && typeof (data as { user?: unknown }).user === 'object')
-        ? (data as { user: Record<string, unknown> }).user
-        : null;
+    const userData = resolveTikTokUserRecord(data);
     if (!userData) {
         return '';
     }
@@ -132,16 +150,20 @@ function extractTikTokAvatarUrl(data: unknown): string {
         return profilePictureUrl;
     }
 
-    const profilePicture = userData.profilePicture;
-    const profilePictureRecord = profilePicture && typeof profilePicture === 'object'
-        ? profilePicture as Record<string, unknown>
-        : null;
-    const profilePictureArray = Array.isArray(profilePictureRecord?.url)
-        ? profilePictureRecord.url
-        : [];
-    const firstProfilePictureUrl = normalizeTikTokHttpUrl(profilePictureArray[0]);
+    for (const candidate of [userData.profilePicture, userData.avatarLarge, userData.avatarMedium, userData.avatarThumb, userData.avatarJpg]) {
+        const candidateRecord = asObjectRecord(candidate);
+        const urls = Array.isArray(candidateRecord?.url)
+            ? candidateRecord.url
+            : (Array.isArray(candidateRecord?.urlList) ? candidateRecord.urlList : []);
+        for (const entry of urls) {
+            const normalizedUrl = normalizeTikTokHttpUrl(entry);
+            if (normalizedUrl) {
+                return normalizedUrl;
+            }
+        }
+    }
 
-    return firstProfilePictureUrl || '';
+    return '';
 }
 
 function formatCoinAmount(amount: unknown, currency: unknown = 'coins'): string {
