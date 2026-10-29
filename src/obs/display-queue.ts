@@ -356,13 +356,17 @@ class DisplayQueue {
                                     await this.effects.handleChatTTSEffects(item, resolveChatMessageText(item.data.message));
                                 }
                             } else {
+                                const prepare = () => this.effects.prepareNotificationEffects(item);
                                 const start = () => this.emitDisplayRow(item);
                                 const effect = () => this.runPresentation(item);
                                 if (this.isNotificationCoordinationEnabled()) {
-                                    await this.notificationCoordinator.register(item).run(start, effect, () => this.effects.cancelActive());
+                                    await this.notificationCoordinator.register(item).run(start, effect, () => this.effects.cancelActive(), prepare);
                                 } else {
-                                    start();
-                                    await effect();
+                                    await prepare();
+                                    if (!this.stopped && this.isViewerOutputEnabled(item)) {
+                                        start();
+                                        await effect();
+                                    }
                                 }
                             }
                         } catch (error) {

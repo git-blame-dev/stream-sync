@@ -11,7 +11,7 @@ export type NotificationDisplayCoordinatorOptions = {
 };
 
 export type NotificationDisplayRegistration = {
-    run: (onStart: () => void, effect: () => Promise<unknown> | unknown, cancelEffect?: () => void) => Promise<void>;
+    run: (onStart: () => void, effect: () => Promise<unknown> | unknown, cancelEffect?: () => void, onPrepare?: () => Promise<unknown> | unknown) => Promise<void>;
 };
 
 type CancellableDelay = {
@@ -48,7 +48,7 @@ export class NotificationDisplayCoordinator {
 
         let claimed = false;
         return {
-            run: async (onStart, effect, cancelEffect) => {
+            run: async (onStart, effect, cancelEffect = () => {}, onPrepare) => {
                 if (claimed) {
                     throw new Error('Notification display registration can only run once');
                 }
@@ -67,21 +67,48 @@ export class NotificationDisplayCoordinator {
                     ...(item.platform ? { platform: item.platform } : {})
                 });
 
-                onStart();
                 let effectError: unknown = null;
+                let hold: CancellableDelay | null = null;
+                let cancelled = false;
+                const cancel = () => {
+                    if (cancelled) return;
+                    cancelled = true;
+                    clearTimeout(timeout);
+                    cancelEffect();
+                };
+                const timeout = safeSetTimeout(cancel, this.options.effectFallbackMs);
+                this.stopWaiters.add(cancel);
+                if (this.stopped) cancel();
                 try {
-                    if (!this.stopped) this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('started'));
-                } catch (error) {
-                    effectError = error;
+                    if (onPrepare) {
+                        try {
+                            await onPrepare();
+                        } catch (error) {
+                            effectError ??= error;
+                        }
+                    }
+                    if (this.stopped) return;
+
+                    onStart();
+                    try {
+                        if (!this.stopped) this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('started'));
+                    } catch (error) {
+                        effectError ??= error;
+                    }
+
+                    hold = this.createDelay(holdMs);
+                    this.stopWaiters.add(hold.cancel);
+                    try {
+                        await effect();
+                    } catch (error) {
+                        effectError ??= error;
+                    }
+                } finally {
+                    clearTimeout(timeout);
+                    this.stopWaiters.delete(cancel);
                 }
 
-                const hold = this.createDelay(holdMs);
-                this.stopWaiters.add(hold.cancel);
-                try {
-                    await this.runEffectWithFallback(effect, cancelEffect);
-                } catch (error) {
-                    effectError ??= error;
-                }
+                if (!hold) return;
 
                 let holdFinished = false;
                 void hold.promise.then(() => { holdFinished = true; });
@@ -144,24 +171,6 @@ export class NotificationDisplayCoordinator {
                 handle = null;
             }
         };
-    }
-
-    private async runEffectWithFallback(effect: () => Promise<unknown> | unknown, cancelEffect = () => {}) {
-        let cancelled = false;
-        const cancel = () => {
-            if (cancelled) return;
-            cancelled = true;
-            clearTimeout(timeout);
-            cancelEffect();
-        };
-        const timeout = safeSetTimeout(cancel, this.options.effectFallbackMs);
-        this.stopWaiters.add(cancel);
-        if (this.stopped) cancel();
-        try { await effect(); }
-        finally {
-            clearTimeout(timeout);
-            this.stopWaiters.delete(cancel);
-        }
     }
 
     private withStop(operation: Promise<unknown>): Promise<void> {

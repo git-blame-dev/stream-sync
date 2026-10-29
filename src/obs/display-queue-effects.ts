@@ -130,6 +130,8 @@ class DisplayQueueEffects {
     private readonly cancellations = new Set<() => void>();
     private readonly goalAttempts = new WeakSet<QueueItem>();
     private healthVerified = false;
+    private notificationPrepared = false;
+    private notificationPrepareFailed = false;
     private preparedStageCounts = new Map<string, number>();
     private outputFetch: SpeechFetch;
     private readonly guardedFetch: SpeechFetch;
@@ -140,12 +142,16 @@ class DisplayQueueEffects {
         if (this.disposalPromise) throw new Error('Display effects disposed');
         this.controller = new AbortController();
         this.healthVerified = false;
+        this.notificationPrepared = false;
+        this.notificationPrepareFailed = false;
         this.preparedStageCounts.clear();
     }
 
     cancelActive() {
         this.controller.abort();
         this.healthVerified = false;
+        this.notificationPrepared = false;
+        this.notificationPrepareFailed = false;
         this.preparedStageCounts.clear();
         for (const cancel of [...this.cancellations]) {
             try { cancel(); }
@@ -448,11 +454,29 @@ class DisplayQueueEffects {
     }
 
     async prepareNotificationTTS(ttsStages: TtsStage[]) {
-        if (!this.isNotificationTTSEnabled() || ttsStages.length === 0) {
+        if (!this.isNotificationTTSEnabled() || ttsStages.length === 0 || this.notificationPrepared) {
             return;
         }
+        this.notificationPrepared = true;
         for (const stage of ttsStages) {
             await this.prepareTTSText(stage.text);
+        }
+    }
+
+    async prepareNotificationEffects(item: QueueItem) {
+        if (!this.isNotificationTTSEnabled()) {
+            return;
+        }
+        try {
+            const ttsStages = MessageTTSHandler.createTTSStages(item.data);
+            if (ttsStages.length === 0) {
+                return;
+            }
+            await this.prepareNotificationTTS(ttsStages);
+        } catch (error) {
+            if (error === this.controller.signal.reason && this.controller.signal.aborted) return;
+            this.notificationPrepareFailed = true;
+            this.handleDisplayQueueError(`[Display Queue] Error handling notification effects for ${item?.type}`, error, { itemType: item?.type });
         }
     }
 
@@ -593,7 +617,7 @@ class DisplayQueueEffects {
             logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
         } else if (currencyValue === 'coins') {
             const perGift = giftCount > 0 ? (totalGiftValue / giftCount) : totalGiftValue;
-            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} × ${giftCount})`, 'display-queue');
+            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} \u00d7 ${giftCount})`, 'display-queue');
         } else {
             logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
         }
@@ -603,7 +627,7 @@ class DisplayQueueEffects {
     async handleGiftEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
-        if (this.isNotificationTTSEnabled() && ttsStages.length > 0) {
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepared && !this.notificationPrepareFailed) {
             await this.prepareNotificationTTS(ttsStages);
         }
         const allPromises: Array<Promise<unknown>> = [];
@@ -627,7 +651,7 @@ class DisplayQueueEffects {
             }));
         }
 
-        if (this.isNotificationTTSEnabled()) {
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepareFailed) {
             const ttsPromise = (async () => {
                 for (const stage of ttsStages) {
                     if (stage.delay > 0) {
@@ -657,7 +681,7 @@ class DisplayQueueEffects {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Sequential notification - VFX-first execution for ${username}`, 'display-queue');
 
-        if (this.isNotificationTTSEnabled() && ttsStages.length > 0) {
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepared && !this.notificationPrepareFailed) {
             await this.prepareNotificationTTS(ttsStages);
         }
 
@@ -710,7 +734,7 @@ class DisplayQueueEffects {
             }
         }
 
-        if (this.isNotificationTTSEnabled()) {
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepareFailed) {
             for (const stage of ttsStages) {
                 if (stage.delay > 0) {
                     await this.delay(stage.delay);

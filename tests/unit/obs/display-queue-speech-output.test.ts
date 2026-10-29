@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'bun:test';
+import { PRIORITY_LEVELS } from '../../../src/core/constants';
+import { DisplayQueue } from '../../../src/obs/display-queue.ts';
 import { DisplayQueueEffects } from '../../../src/obs/display-queue-effects.ts';
 
 function createEffects(options: {
@@ -432,6 +434,143 @@ describe('display queue speech output', () => {
             'vfx:complete-signal',
             'speak:stage one',
             'speak:stage two'
+        ]);
+    });
+
+    it('completes GET /health and POST /v1/prepare before emitting display:row, lifecycle started, goal updates, or VFX in DisplayQueue', async () => {
+        const events: string[] = [];
+        const bus = new EventEmitter();
+        let markPrepareInFlight!: () => void;
+        const prepareInFlight = new Promise<void>((resolve) => { markPrepareInFlight = resolve; });
+        let releasePrepare!: () => void;
+        const prepareGate = new Promise<void>((resolve) => { releasePrepare = resolve; });
+        let capturedCorrelationId: string | null = null;
+        let markVfxEmitted!: () => void;
+        const vfxEmitted = new Promise<void>((resolve) => { markVfxEmitted = resolve; });
+
+        const queue = new DisplayQueue(
+            { call: async () => ({}) },
+            {
+                autoProcess: false,
+                rowIntervalMs: 0,
+                ttsNotificationsEnabled: true,
+                gui: { enableNotifications: true },
+                obs: { neuralTtsEndpoint: 'http://127.0.0.1:8765' }
+            },
+            { PRIORITY_LEVELS },
+            {
+                emit: (eventName: string, payload: Record<string, unknown>) => {
+                    if (eventName === 'display:row') {
+                        events.push(`row:${String((payload.data as { username?: string })?.username ?? '')}`);
+                    } else if (eventName === 'display:notification-lifecycle') {
+                        events.push(`lifecycle:${String(payload.phase)}`);
+                    } else if (eventName === 'vfx:command-received') {
+                        events.push('vfx:command-received');
+                        capturedCorrelationId = String(payload.correlationId);
+                        markVfxEmitted();
+                    }
+                    bus.emit(eventName, payload);
+                },
+                subscribe: (eventName: string, handler: (payload: Record<string, unknown>) => void) => {
+                    bus.on(eventName, handler);
+                    return () => bus.off(eventName, handler);
+                }
+            } as unknown as ConstructorParameters<typeof DisplayQueue>[3],
+            {
+                sourcesManager: {
+                    clearTextSource: async () => {},
+                    updateTextSource: async () => {}
+                },
+                goalsManager: {
+                    processDonationGoal: async () => {
+                        events.push('goal:donation');
+                        return { success: true };
+                    },
+                    processPaypiggyGoal: async () => {
+                        events.push('goal:paypiggy');
+                        return { success: true };
+                    }
+                } as unknown as NonNullable<NonNullable<ConstructorParameters<typeof DisplayQueue>[4]>['goalsManager']>,
+                delay: async () => {},
+                notificationDelay: async () => {},
+                fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                    const url = String(input);
+                    if (url.endsWith('/health')) {
+                        events.push('health');
+                        return new Response(null, { status: 200 });
+                    }
+                    if (url.endsWith('/v1/prepare')) {
+                        const payload = JSON.parse(String(init?.body)) as { text: string };
+                        events.push(`prepare:${payload.text}`);
+                        markPrepareInFlight();
+                        await prepareGate;
+                        events.push(`prepare-done:${payload.text}`);
+                        return new Response(null, { status: 200 });
+                    }
+                    if (url.endsWith('/v1/speak')) {
+                        const payload = JSON.parse(String(init?.body)) as { text: string };
+                        events.push(`speak:${payload.text}`);
+                        return new Response(null, { status: 200 });
+                    }
+                    return new Response(null, { status: 404 });
+                }
+            }
+        );
+
+        queue.addItem({
+            type: 'platform:paypiggy',
+            platform: 'twitch',
+            vfxConfig: {
+                commandKey: 'paypiggy-vfx',
+                command: '!sub',
+                filename: 'sub.mp4',
+                mediaSource: 'synthetic-vfx-source',
+                vfxFilePath: '/synthetic/vfx'
+            },
+            data: {
+                username: 'synthetic-subscriber',
+                ttsMessage: 'synthetic-subscriber subscribed'
+            }
+        });
+
+        const running = queue.processQueue();
+        await prepareInFlight;
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(events).toEqual([
+            'health',
+            'prepare:synthetic-subscriber subscribed'
+        ]);
+
+        releasePrepare();
+        await vfxEmitted;
+        await Promise.resolve();
+
+        expect(events).toEqual([
+            'health',
+            'prepare:synthetic-subscriber subscribed',
+            'prepare-done:synthetic-subscriber subscribed',
+            'row:synthetic-subscriber',
+            'lifecycle:started',
+            'goal:paypiggy',
+            'vfx:command-received'
+        ]);
+
+        bus.emit('vfx:effect-completed', { correlationId: capturedCorrelationId });
+        await running;
+        await queue.stop();
+
+        expect(events).toEqual([
+            'health',
+            'prepare:synthetic-subscriber subscribed',
+            'prepare-done:synthetic-subscriber subscribed',
+            'row:synthetic-subscriber',
+            'lifecycle:started',
+            'goal:paypiggy',
+            'vfx:command-received',
+            'speak:synthetic-subscriber subscribed',
+            'lifecycle:exit-started'
         ]);
     });
 

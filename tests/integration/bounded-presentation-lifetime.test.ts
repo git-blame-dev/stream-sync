@@ -322,13 +322,14 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             await entered.promise;
             advanceTimersByTime(25);
             expect(queue.getQueueLength()).toBe(2);
-            expect(order).toEqual(['row:synthetic-timeout', 'health']);
-            expect(tracker.getGoalState('twitch')?.current).toBe(7);
+            expect(order).toEqual(['health']);
+            expect(tracker.getGoalState('twitch')?.current).toBe(0);
             response.resolve();
             await running;
             expect(order).toEqual([
-                'row:synthetic-timeout', 'health',
-                'row:synthetic-successor', 'health', 'speak:synthetic-successor'
+                'health',
+                'row:synthetic-timeout',
+                'health', 'row:synthetic-successor', 'speak:synthetic-successor'
             ]);
             expect(rows).toEqual(['synthetic-timeout', 'synthetic-successor']);
             expect(lifecycle).toEqual(['started', 'exit-started', 'started', 'exit-started']);
@@ -429,8 +430,8 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             config: { maxQueueSize: 3, ttsNotificationsEnabled: true, obs: {} },
             emit: (event, payload) => { if (event === 'display:row' && (payload.data as { username: string }).username === 'synthetic-chat') chatShown.resolve(); },
             dependencies: {
-                fetch: async (_url, init) => {
-                    if (init?.method === 'POST') { speechStarted.resolve(); await speech.promise; }
+                fetch: async (url, init) => {
+                    if (String(url).endsWith('/v1/speak') && init?.method === 'POST') { speechStarted.resolve(); await speech.promise; }
                     return new Response(null, { status: 200 });
                 },
                 onPresentationStarted: async () => { accountingStarted.resolve(); await accounting.promise; }
@@ -540,7 +541,7 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         response.resolve();
         await Promise.all([running, stopping]);
         expect(requests).toHaveLength(1);
-        expect(rows).toEqual(['synthetic-active']);
+        expect(rows).toEqual([]);
         expect(queue.getQueueLength()).toBe(0);
     });
 
@@ -590,13 +591,13 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             await requested.promise;
             advanceTimersByTime(25);
             expect(signal?.aborted).toBe(true);
-            expect(rows).toEqual(['synthetic-timeout']);
+            expect(rows).toEqual([]);
             expect(queue.getQueueLength()).toBe(2);
             const stopping = queue.stop();
             response.resolve();
             await Promise.all([running, stopping]);
             expect(requests).toHaveLength(1);
-            expect(rows).toEqual(['synthetic-timeout']);
+            expect(rows).toEqual([]);
         } finally {
             response.resolve();
             await queue.stop();
