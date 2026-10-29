@@ -129,6 +129,8 @@ class DisplayQueueEffects {
     private controller = new AbortController();
     private readonly cancellations = new Set<() => void>();
     private readonly goalAttempts = new WeakSet<QueueItem>();
+    private healthVerified = false;
+    private preparedStageCounts = new Map<string, number>();
     private outputFetch: SpeechFetch;
     private readonly guardedFetch: SpeechFetch;
     get fetch() { return this.guardedFetch; }
@@ -137,10 +139,14 @@ class DisplayQueueEffects {
     beginPresentation() {
         if (this.disposalPromise) throw new Error('Display effects disposed');
         this.controller = new AbortController();
+        this.healthVerified = false;
+        this.preparedStageCounts.clear();
     }
 
     cancelActive() {
         this.controller.abort();
+        this.healthVerified = false;
+        this.preparedStageCounts.clear();
         for (const cancel of [...this.cancellations]) {
             try { cancel(); }
             catch (error) { this.handleDisplayQueueError('[Display Queue] Error cancelling an effect wait', error); }
@@ -378,11 +384,7 @@ class DisplayQueueEffects {
         return true;
     }
 
-    async setTTSText(text: string) {
-        await this.speakWithNeuralTts(text);
-    }
-
-    async speakWithNeuralTts(text: string) {
+    private resolveNeuralTtsTarget(): { root: string; voice: string | undefined } {
         const endpoint = this.config.obs?.neuralTtsEndpoint || 'http://127.0.0.1:8765';
         let baseUrl: URL;
         try {
@@ -397,6 +399,15 @@ class DisplayQueueEffects {
         }
 
         const root = baseUrl.toString().replace(/\/$/, '');
+        const voice = this.config.obs?.neuralTtsVoice?.trim() || undefined;
+        return { root, voice };
+    }
+
+    private getPreparedStageKey(voice: string | undefined, text: string) {
+        return `${voice ?? ''}\u0000${text}`;
+    }
+
+    private async verifyNeuralTtsHealth(root: string) {
         const health = await this.fetch(`${root}/health`, {
             method: 'GET',
             redirect: 'error',
@@ -405,8 +416,64 @@ class DisplayQueueEffects {
         if (!health.ok) {
             throw new Error(`Neural TTS service is not ready (HTTP ${health.status})`);
         }
+    }
 
-        const voice = this.config.obs?.neuralTtsVoice?.trim();
+    async prepareTTSText(text: string) {
+        await this.prepareWithNeuralTts(text);
+    }
+
+    async prepareWithNeuralTts(text: string) {
+        const { root, voice } = this.resolveNeuralTtsTarget();
+        if (!this.healthVerified) {
+            await this.verifyNeuralTtsHealth(root);
+            this.healthVerified = true;
+        }
+
+        const response = await this.fetch(`${root}/v1/prepare`, {
+            method: 'POST',
+            redirect: 'error',
+            signal: AbortSignal.timeout(NEURAL_TTS_SPEAK_TIMEOUT_MS),
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text, ...(voice ? { voice } : {}) })
+        });
+        if (response.status === 404) {
+            return;
+        }
+        if (!response.ok) {
+            throw new Error(`Neural TTS request failed (HTTP ${response.status})`);
+        }
+
+        const stageKey = this.getPreparedStageKey(voice, text);
+        this.preparedStageCounts.set(stageKey, (this.preparedStageCounts.get(stageKey) ?? 0) + 1);
+    }
+
+    async prepareNotificationTTS(ttsStages: TtsStage[]) {
+        if (!this.isNotificationTTSEnabled() || ttsStages.length === 0) {
+            return;
+        }
+        for (const stage of ttsStages) {
+            await this.prepareTTSText(stage.text);
+        }
+    }
+
+    async setTTSText(text: string) {
+        await this.speakWithNeuralTts(text);
+    }
+
+    async speakWithNeuralTts(text: string) {
+        const { root, voice } = this.resolveNeuralTtsTarget();
+        const stageKey = this.getPreparedStageKey(voice, text);
+        const preparedCount = this.preparedStageCounts.get(stageKey) ?? 0;
+        if (preparedCount > 0) {
+            if (preparedCount === 1) {
+                this.preparedStageCounts.delete(stageKey);
+            } else {
+                this.preparedStageCounts.set(stageKey, preparedCount - 1);
+            }
+        } else if (!this.healthVerified) {
+            await this.verifyNeuralTtsHealth(root);
+        }
+
         const response = await this.fetch(`${root}/v1/speak`, {
             method: 'POST',
             redirect: 'error',
@@ -536,6 +603,9 @@ class DisplayQueueEffects {
     async handleGiftEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0) {
+            await this.prepareNotificationTTS(ttsStages);
+        }
         const allPromises: Array<Promise<unknown>> = [];
         const animationPromise = this.resolveAndEmitGiftAnimation(item)
             .catch((error) => {
@@ -586,6 +656,10 @@ class DisplayQueueEffects {
     async handleSequentialEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Sequential notification - VFX-first execution for ${username}`, 'display-queue');
+
+        if (this.isNotificationTTSEnabled() && ttsStages.length > 0) {
+            await this.prepareNotificationTTS(ttsStages);
+        }
 
         let completionResult: { reason: string; payload?: Record<string, unknown> } | null = null;
         const vfxConfig = item.vfxConfig;

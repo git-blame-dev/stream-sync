@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { NeuralTtsProcessManager } from '../../../src/obs/neural-tts-process-manager';
+import { AppRuntime } from '../../../src/runtime/AppRuntime';
 import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
 import { noOpLogger } from '../../helpers/mock-factories';
 
@@ -622,7 +623,13 @@ describe('NeuralTtsProcessManager', () => {
         const requests: string[] = [];
         const leaseBodies: unknown[] = [];
         const lifecycle: string[] = [];
+        let requestsBeforePlatformInit: string[] | undefined;
         let restoreObservers = () => {};
+        const originalInitializePlatforms = AppRuntime.prototype.initializePlatforms;
+        const initPlatformsObserver = spyOn(AppRuntime.prototype, 'initializePlatforms').mockImplementation(async function (this: AppRuntime) {
+            requestsBeforePlatformInit = [...requests];
+            return await originalInitializePlatforms.call(this);
+        });
         const syntheticFetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
             const path = new URL(String(input)).pathname;
             requests.push(path);
@@ -646,6 +653,7 @@ describe('NeuralTtsProcessManager', () => {
                     const platformObserver = spyOn(platforms, 'disconnectAll').mockImplementation(async () => { await disconnect(); lifecycle.push('platforms disconnected'); });
                     restoreObservers = () => { queueObserver.mockRestore(); platformObserver.mockRestore(); };
                     expect(h.runtime.isStarted).toBe(true);
+                    expect(requestsBeforePlatformInit).toEqual(['/health', '/v1/lease/acquire']);
                     expect(requests).toEqual(['/health', '/v1/lease/acquire']);
                     throw early;
                 } finally { await h.dispose(); }
@@ -656,7 +664,7 @@ describe('NeuralTtsProcessManager', () => {
             expect(leaseBodies[1]).toEqual(leaseBodies[0]);
             expect(lifecycle).toEqual(['queue stopped', 'lease released', 'platforms disconnected']);
             expect(h.runtime.isStarted).toBe(false);
-        } finally { restoreObservers(); fetch.mockRestore(); }
+        } finally { initPlatformsObserver.mockRestore(); restoreObservers(); fetch.mockRestore(); }
     });
 
     it('retires the real runtime after degraded neural endpoint startup', async () => {

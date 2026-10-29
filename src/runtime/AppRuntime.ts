@@ -945,6 +945,23 @@ class AppRuntime {
                 throw error;
             }
 
+            if (this._isTtsEnabled()) {
+                this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
+                try {
+                    const neuralTtsProcessManager = this._getNeuralTtsProcessManager();
+                    await neuralTtsProcessManager?.ensureStarted();
+                } catch (neuralTtsError) {
+                    this._handleAppRuntimeError(
+                        `Neural TTS initialization failed: ${getErrorMessage(neuralTtsError)}`,
+                        neuralTtsError,
+                        null,
+                        { eventType: 'startup', logContext: 'AppRuntime' }
+                    );
+                    this.logger.warn('Neural TTS unavailable; continuing in degraded mode', 'AppRuntime');
+                }
+            }
+            this.assertActiveLifetime();
+
             this.logger.debug('Initializing platforms...', 'AppRuntime');
             try {
                 await this.initializePlatforms();
@@ -993,23 +1010,6 @@ class AppRuntime {
                     { eventType: 'startup', logContext: 'AppRuntime' }
                 );
                 this.logger.info('Continuing without OBS connection; VFX system remains available.', 'AppRuntime');
-            }
-
-            this.assertActiveLifetime();
-            if (this._isTtsEnabled()) {
-                this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
-                try {
-                    const neuralTtsProcessManager = this._getNeuralTtsProcessManager();
-                    await neuralTtsProcessManager?.ensureStarted();
-                } catch (neuralTtsError) {
-                    this._handleAppRuntimeError(
-                        `Neural TTS initialization failed: ${getErrorMessage(neuralTtsError)}`,
-                        neuralTtsError,
-                        null,
-                        { eventType: 'startup', logContext: 'AppRuntime' }
-                    );
-                    this.logger.warn('Neural TTS unavailable; continuing in degraded mode', 'AppRuntime');
-                }
             }
 
             this.assertActiveLifetime();

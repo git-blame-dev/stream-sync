@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'bun:test';
 import { DisplayQueueEffects } from '../../../src/obs/display-queue-effects.ts';
 
@@ -115,10 +116,14 @@ describe('display queue speech output', () => {
     });
 
     it('speaks sequential notification stages in their existing queue order', async () => {
+        const prepared: string[] = [];
         const spoken: string[] = [];
         let responseCount = 0;
-        const fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.method === 'POST') {
+        const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith('/v1/prepare') && init?.method === 'POST') {
+                prepared.push(JSON.parse(String(init.body)).text);
+            } else if (url.endsWith('/v1/speak') && init?.method === 'POST') {
                 spoken.push(JSON.parse(String(init.body)).text);
             }
             responseCount += 1;
@@ -134,14 +139,15 @@ describe('display queue speech output', () => {
             ]
         );
 
+        expect(prepared).toEqual(['stage one', 'stage two']);
         expect(spoken).toEqual(['stage one', 'stage two']);
-        expect(responseCount).toBe(4);
+        expect(responseCount).toBe(5);
     });
 
     it('does not advance to another neural stage if a speak request fails', async () => {
         const spoken: string[] = [];
-        const fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.method === 'POST') {
+        const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).endsWith('/v1/speak') && init?.method === 'POST') {
                 spoken.push(JSON.parse(String(init.body)).text);
                 return new Response(null, { status: 500 });
             }
@@ -158,6 +164,275 @@ describe('display queue speech output', () => {
         )).rejects.toThrow('Neural TTS request failed (HTTP 500)');
 
         expect(spoken).toEqual(['stage one']);
+    });
+
+    it('fails before starting playback when /v1/prepare returns a non-404 error', async () => {
+        const requests: string[] = [];
+        const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            requests.push(`${init?.method || 'GET'}:${new URL(url).pathname}`);
+            if (url.endsWith('/v1/prepare')) {
+                return new Response(null, { status: 502 });
+            }
+            return new Response(null, { status: 200 });
+        };
+        const { effects } = createEffects({ fetch });
+
+        await expect(effects.handleSequentialEffects(
+            { type: 'platform:follow', platform: 'test-platform', data: { username: 'test-user' } },
+            [
+                { type: 'primary', text: 'stage one', delay: 0 },
+                { type: 'message', text: 'stage two', delay: 0 }
+            ]
+        )).rejects.toThrow('Neural TTS request failed (HTTP 502)');
+
+        expect(requests).toEqual(['GET:/health', 'POST:/v1/prepare']);
+    });
+
+    it('prepares all gift TTS stages via /v1/prepare before starting gift media, animation, or /v1/speak and skips duplicate /health calls', async () => {
+        const events: string[] = [];
+        let markPrepareInFlight!: () => void;
+        const prepareInFlight = new Promise<void>((resolve) => { markPrepareInFlight = resolve; });
+        let releaseSecondPrepare!: () => void;
+        const secondPrepareGate = new Promise<void>((resolve) => { releaseSecondPrepare = resolve; });
+
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsNotificationsEnabled: true,
+                obs: {
+                    neuralTtsEndpoint: 'http://127.0.0.1:8765',
+                    neuralTtsVoice: 'synthetic-voice'
+                },
+                gifts: {
+                    giftVideoSource: 'synthetic-gift-video',
+                    giftAudioSource: 'synthetic-gift-audio'
+                },
+                gui: {
+                    enableOverlay: true,
+                    enableDock: false,
+                    showGifts: true
+                }
+            },
+            sourcesManager: {
+                clearTextSource: async () => {},
+                updateTextSource: async () => {}
+            },
+            obsManager: {
+                call: async (requestType, payload) => {
+                    events.push(`obs:${requestType}:${String(payload.inputName)}`);
+                    return {};
+                }
+            },
+            goalsManager: {
+                processDonationGoal: async () => {},
+                processPaypiggyGoal: async () => {}
+            },
+            eventBus: {
+                emit: (eventName) => {
+                    events.push(`event:${eventName}`);
+                }
+            },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => (typeof data?.username === 'string' ? data.username : null),
+            giftAnimationResolver: {
+                resolveFromNotificationData: async () => {
+                    events.push('animation:resolve');
+                    return null;
+                }
+            },
+            fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                if (url.endsWith('/health')) {
+                    events.push('health');
+                    return new Response(null, { status: 200 });
+                }
+                if (url.endsWith('/v1/prepare')) {
+                    const payload = JSON.parse(String(init?.body)) as { text: string; voice?: string };
+                    events.push(`prepare:${payload.text}:${payload.voice ?? ''}`);
+                    if (payload.text === 'second gift stage') {
+                        markPrepareInFlight();
+                        await secondPrepareGate;
+                        events.push('prepare-done:second gift stage');
+                    }
+                    return new Response(null, { status: 200 });
+                }
+                if (url.endsWith('/v1/speak')) {
+                    const payload = JSON.parse(String(init?.body)) as { text: string; voice?: string };
+                    events.push(`speak:${payload.text}:${payload.voice ?? ''}`);
+                    return new Response(null, { status: 200 });
+                }
+                return new Response(null, { status: 404 });
+            }
+        });
+
+        effects.beginPresentation();
+        const handling = effects.handleGiftEffects(
+            {
+                type: 'platform:gift',
+                platform: 'tiktok',
+                data: { username: 'synthetic-user' }
+            },
+            [
+                { type: 'primary', text: 'first gift stage', delay: 0 },
+                { type: 'message', text: 'second gift stage', delay: 0 }
+            ]
+        );
+
+        await prepareInFlight;
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(events).toEqual([
+            'health',
+            'prepare:first gift stage:synthetic-voice',
+            'prepare:second gift stage:synthetic-voice'
+        ]);
+
+        releaseSecondPrepare();
+        await handling;
+
+        expect(events.slice(0, 4)).toEqual([
+            'health',
+            'prepare:first gift stage:synthetic-voice',
+            'prepare:second gift stage:synthetic-voice',
+            'prepare-done:second gift stage'
+        ]);
+        expect(events.filter((entry) => entry === 'health')).toHaveLength(1);
+        expect(events).toContain('animation:resolve');
+        expect(events).toContain('obs:TriggerMediaInputAction:synthetic-gift-video');
+        expect(events).toContain('obs:TriggerMediaInputAction:synthetic-gift-audio');
+        expect(events).toContain('speak:first gift stage:synthetic-voice');
+        expect(events).toContain('speak:second gift stage:synthetic-voice');
+        const prepareDoneIndex = events.indexOf('prepare-done:second gift stage');
+        expect(events.indexOf('animation:resolve')).toBeGreaterThan(prepareDoneIndex);
+        expect(events.indexOf('obs:TriggerMediaInputAction:synthetic-gift-video')).toBeGreaterThan(prepareDoneIndex);
+        expect(events.indexOf('speak:first gift stage:synthetic-voice')).toBeGreaterThan(prepareDoneIndex);
+    });
+
+    it('prepares all sequential TTS stages via /v1/prepare before VFX playback and calls /v1/speak only after VFX finishes', async () => {
+        const events: string[] = [];
+        const bus = new EventEmitter();
+        let markPrepareInFlight!: () => void;
+        const prepareInFlight = new Promise<void>((resolve) => { markPrepareInFlight = resolve; });
+        let releasePrepare!: () => void;
+        const prepareGate = new Promise<void>((resolve) => { releasePrepare = resolve; });
+        let capturedCorrelationId: string | null = null;
+        let markVfxEmitted!: () => void;
+        const vfxEmitted = new Promise<void>((resolve) => { markVfxEmitted = resolve; });
+
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsNotificationsEnabled: true,
+                obs: {
+                    neuralTtsEndpoint: 'http://127.0.0.1:8765'
+                }
+            },
+            sourcesManager: {
+                clearTextSource: async () => {},
+                updateTextSource: async () => {}
+            },
+            obsManager: { call: async () => ({}) },
+            goalsManager: {
+                processDonationGoal: async () => {},
+                processPaypiggyGoal: async () => {}
+            },
+            eventBus: {
+                emit: (eventName, payload) => {
+                    events.push(`event:${eventName}`);
+                    if (eventName === 'vfx:command-received') {
+                        capturedCorrelationId = String(payload.correlationId);
+                        markVfxEmitted();
+                    }
+                    bus.emit(eventName, payload);
+                },
+                subscribe: (eventName, handler) => {
+                    bus.on(eventName, handler);
+                    return () => bus.off(eventName, handler);
+                }
+            },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => (typeof data?.username === 'string' ? data.username : null),
+            fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                if (url.endsWith('/health')) {
+                    events.push('health');
+                    return new Response(null, { status: 200 });
+                }
+                if (url.endsWith('/v1/prepare')) {
+                    const payload = JSON.parse(String(init?.body)) as { text: string };
+                    events.push(`prepare:${payload.text}`);
+                    if (payload.text === 'stage two') {
+                        markPrepareInFlight();
+                        await prepareGate;
+                        events.push('prepare-done:stage two');
+                    }
+                    return new Response(null, { status: 200 });
+                }
+                if (url.endsWith('/v1/speak')) {
+                    const payload = JSON.parse(String(init?.body)) as { text: string };
+                    events.push(`speak:${payload.text}`);
+                    return new Response(null, { status: 200 });
+                }
+                return new Response(null, { status: 404 });
+            }
+        });
+
+        effects.beginPresentation();
+        const handling = effects.handleSequentialEffects(
+            {
+                type: 'platform:follow',
+                platform: 'twitch',
+                vfxConfig: {
+                    commandKey: 'follow-vfx',
+                    command: '!follow',
+                    filename: 'follow.mp4',
+                    mediaSource: 'synthetic-vfx-source',
+                    vfxFilePath: '/synthetic/vfx'
+                },
+                data: { username: 'synthetic-follower' }
+            },
+            [
+                { type: 'primary', text: 'stage one', delay: 0 },
+                { type: 'message', text: 'stage two', delay: 0 }
+            ]
+        );
+
+        await prepareInFlight;
+        await Promise.resolve();
+        expect(events).toEqual([
+            'health',
+            'prepare:stage one',
+            'prepare:stage two'
+        ]);
+
+        releasePrepare();
+        await vfxEmitted;
+        await Promise.resolve();
+
+        expect(events).toEqual([
+            'health',
+            'prepare:stage one',
+            'prepare:stage two',
+            'prepare-done:stage two',
+            'event:vfx:command-received'
+        ]);
+
+        events.push('vfx:complete-signal');
+        bus.emit('vfx:effect-completed', { correlationId: capturedCorrelationId });
+        await handling;
+
+        expect(events).toEqual([
+            'health',
+            'prepare:stage one',
+            'prepare:stage two',
+            'prepare-done:stage two',
+            'event:vfx:command-received',
+            'vfx:complete-signal',
+            'speak:stage one',
+            'speak:stage two'
+        ]);
     });
 
     it('serializes gift TTS stages in neural-tts mode so stage two waits for stage one /v1/speak to resolve', async () => {
@@ -220,7 +495,6 @@ describe('display queue speech output', () => {
             'health:1',
             'speak-start:first gift stage',
             'speak-done:first gift stage',
-            'health:2',
             'speak-start:second gift stage',
             'speak-done:second gift stage'
         ]);
