@@ -68,7 +68,7 @@ stderrCapture.restore();
         }
     });
 
-    test("writes runtime file logs using the approved human-readable contract", () => {
+    test("writes dated runtime file logs with run context", async () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-runtime-logs-"));
 
         try {
@@ -76,9 +76,10 @@ stderrCapture.restore();
             logging.logger.info("test-file-info", "test-source", { event: "test-event" });
             logging.logger.error("test-file-error", "test-source");
 
+            await logging.getUnifiedLogger().flush();
             const runtimeLog = fs.readFileSync(path.join(tempDir, "runtime.log"), "utf8");
-            expect(runtimeLog).toMatch(/\[\d{2}:\d{2}:\d{2}\] \[INFO\] \[test-source\] test-file-info \| Data: \{"event":"test-event"\}/);
-            expect(runtimeLog).toMatch(/\[\d{2}:\d{2}:\d{2}\] \[ERROR\] \[test-source\] test-file-error/);
+            expect(runtimeLog).toMatch(/\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[INFO\] \[test-source\] \[run:[^\]]+\] test-file-info \| Data: \{"event":"test-event"\}/);
+            expect(runtimeLog).toMatch(/\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[ERROR\] \[test-source\] \[run:[^\]]+\] test-file-error/);
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }

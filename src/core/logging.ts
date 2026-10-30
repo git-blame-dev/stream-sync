@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { DEFAULT_LOGGING_CONFIG } from './config-builders';
 import { shouldLogAtThreshold } from './logger/levels';
 import type { AppLogger, LogLevel, LogThreshold } from './logger/types';
 import { safeObjectStringify, sanitizeLogData, sanitizeLogText } from './logger/safe-log-serializer';
 import { LineFileAppender } from '../utils/line-file-appender';
-import { formatTimestampCompact } from '../utils/timestamp';
+import { formatTimestampCompact, getSystemTimestampISO } from '../utils/timestamp';
 import {
     createOperatorLogSource,
     type JsonLogValue,
@@ -11,9 +12,9 @@ import {
 } from '../services/operator/operator-log-source';
 
 type LogData = unknown;
-type LogEntry = { timestamp: string; level: LogLevel; message: string; source: string; data: LogData };
+type LogEntry = { runId: string; timestamp: string; level: LogLevel; message: string; source: string; data: LogData };
 type Destination = 'console' | 'file';
-type OutputConfig = { enabled?: boolean; level?: LogThreshold; directory?: string; filename?: string };
+type OutputConfig = { enabled?: boolean; level?: LogThreshold; directory?: string; filename?: string; maxBytes?: number; maxQueueBytes?: number };
 type LoggingConfig = { console?: OutputConfig; file?: OutputConfig; [key: string]: unknown };
 type LoggingOptions = { operatorCaptureEnabled?: boolean };
 type LoggerOutputter = { write(logEntry: LogEntry): void };
@@ -47,7 +48,9 @@ function initializeLoggingConfig(appConfig: { logging?: LoggingConfig }, options
 
 function getLoggingConfig(): LoggingConfig {
     if (!globalLoggingConfig) {
-        return DEFAULT_LOGGING_CONFIG as LoggingConfig;
+        return process.env.NODE_ENV === 'test'
+            ? { ...DEFAULT_LOGGING_CONFIG, file: { ...DEFAULT_LOGGING_CONFIG.file, enabled: false } }
+            : DEFAULT_LOGGING_CONFIG as LoggingConfig;
     }
     return globalLoggingConfig;
 }
@@ -87,6 +90,7 @@ function setDebugMode(enabled: unknown) {
 class UnifiedLogger implements AppLogger {
     config: LoggingConfig;
     outputs: { console: ConsoleOutputter; file: FileOutputter };
+    private readonly runId = randomUUID();
     private captureOperatorLogs: boolean;
     private operatorLogs: OperatorLogSource;
 
@@ -102,11 +106,10 @@ class UnifiedLogger implements AppLogger {
 
     reconfigure(config: LoggingConfig): void {
         this.config = config;
-        this.outputs = {
-            console: new ConsoleOutputter(),
-            file: new FileOutputter(config.file)
-        };
+        this.outputs.file.reconfigure(config.file);
     }
+
+    async flush(): Promise<void> { await this.outputs.file.fileAppender?.flush(); }
 
     setOperatorCaptureEnabled(enabled: boolean): void {
         this.captureOperatorLogs = enabled;
@@ -121,16 +124,16 @@ class UnifiedLogger implements AppLogger {
         const shouldWriteFile = this.shouldOutput(level, 'file');
         if (!shouldWriteConsole && !shouldWriteFile) return;
 
-        const timestamp = formatTimestampCompact(new Date());
+        const timestamp = getSystemTimestampISO();
         const safeMessage = typeof message === 'string' ? sanitizeLogText(message) : safeObjectStringify(message);
         const safeSource = typeof source === 'string' ? sanitizeLogText(source) : safeObjectStringify(source);
-        const logEntry = { timestamp, level, message: safeMessage, source: safeSource, data };
+        const logEntry = { runId: this.runId, timestamp, level, message: safeMessage, source: safeSource, data };
 
         if (shouldWriteConsole) this.outputs.console.write(logEntry);
         if (shouldWriteFile) this.outputs.file.write(logEntry);
         if (shouldWriteConsole && this.captureOperatorLogs) {
             this.operatorLogs.append({
-                timestamp,
+                timestamp: formatTimestampCompact(timestamp),
                 level,
                 message: safeMessage,
                 source: safeSource,
@@ -158,7 +161,8 @@ class UnifiedLogger implements AppLogger {
 
 class ConsoleOutputter {
     write(logEntry: LogEntry) {
-        const { timestamp, level, message, source, data } = logEntry;
+        const { level, message, source, data } = logEntry;
+        const timestamp = formatTimestampCompact(logEntry.timestamp);
         let output: string;
         if (level === 'console') output = `[${timestamp}] ${message}`;
         else if (level === 'emergency') output = `[EMERGENCY] ${message}`;
@@ -175,24 +179,36 @@ class FileOutputter {
 
     constructor(config: OutputConfig = {}) {
         this.config = config;
-        const logDir = this.config.directory;
-        this.fileAppender = this.config.enabled && logDir
-            ? new LineFileAppender({ logDir, filename: this.config.filename || 'runtime.log' })
-            : null;
+        this.fileAppender = null;
+        this.reconfigure(config);
+    }
+
+    reconfigure(config: OutputConfig = {}) {
+        this.config = config;
+        if (!config.enabled || !config.directory) return;
+        const destination = { logDir: config.directory,
+            ...(config.filename !== undefined ? { filename: config.filename } : {}),
+            ...(config.maxBytes !== undefined ? { maxBytes: config.maxBytes } : {}),
+            ...(config.maxQueueBytes !== undefined ? { maxQueueBytes: config.maxQueueBytes } : {}) };
+        if (this.fileAppender) this.fileAppender.reconfigure(destination);
+        else this.fileAppender = new LineFileAppender(destination);
     }
 
     write(logEntry: LogEntry) {
-        if (!this.fileAppender) return;
+        if (!this.fileAppender || !this.config.enabled || !this.config.directory) return;
         const { timestamp, level, message, source, data } = logEntry;
-        let logLine = `[${timestamp}] [${level.toUpperCase()}] [${source}] ${message}`;
+        let logLine = `[${timestamp}] [${level.toUpperCase()}] [${source}] [run:${logEntry.runId}] ${message}`;
         if (data) logLine += ` | Data: ${safeObjectStringify(data)}`;
-        this.fileAppender.log(logLine);
+        const accepted = this.fileAppender.log(logLine);
+        if (!accepted && (level === 'warn' || level === 'error' || level === 'emergency')) {
+            process.stderr.write(logLine.slice(0, 8192) + '\n');
+        }
     }
 }
 
 let globalLogger: UnifiedLogger | null = null;
 
-function getUnifiedLogger(): UnifiedLoggerFacade {
+function getUnifiedLogger(): UnifiedLoggerFacade & { flush(): Promise<void> } {
     if (!globalLogger) globalLogger = new UnifiedLogger(getLoggingConfig(), operatorCaptureEnabled);
     return globalLogger;
 }

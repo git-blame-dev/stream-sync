@@ -148,6 +148,7 @@ const RAW_TEST_CONFIG = {
         cmdCooldown: '60',
         globalCmdCooldown: '60'
     },
+    logging: { fileLoggingEnabled: 'false' },
     commands: {},
     tiktok: { enabled: 'false', viewerCountSource: 'test-tiktok-viewer-count' },
     twitch: { enabled: 'false', viewerCountSource: 'test-twitch-viewer-count' },

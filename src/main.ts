@@ -110,6 +110,8 @@ type MainLoggingOutputCandidate = {
     level?: string;
     directory?: string;
     filename?: string;
+    maxBytes?: number;
+    maxQueueBytes?: number;
 };
 type MainConfigChangePayload = {
     section?: string;
@@ -289,6 +291,8 @@ function normalizeLogOutputConfig(output: MainLoggingOutputCandidate | undefined
         normalized.filename = output.filename;
     }
 
+    if (typeof output.maxBytes === 'number') normalized.maxBytes = output.maxBytes;
+    if (typeof output.maxQueueBytes === 'number') normalized.maxQueueBytes = output.maxQueueBytes;
     return normalized;
 }
 

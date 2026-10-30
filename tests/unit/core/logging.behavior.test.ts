@@ -182,7 +182,7 @@ describe('core/logging behavior', () => {
         expect(logging.getDebugMode()).toBe(true);
     });
 
-    it('writes console and file outputs through unified logger', () => {
+    it('writes console and file outputs through unified logger', async () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-logs-'));
         const stdoutCapture = captureStdout();
         const stderrCapture = captureStderr();
@@ -202,6 +202,7 @@ describe('core/logging behavior', () => {
             logger.error('test-error', 'test-source');
 
             const logPath = path.join(tempDir, 'runtime.log');
+            await logging.getUnifiedLogger().flush();
             const logContent = fs.readFileSync(logPath, 'utf8');
 
             expect(stdoutCapture.output.join('')).toContain('test-info');

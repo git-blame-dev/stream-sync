@@ -5,7 +5,7 @@ import { isLogThreshold } from './logger/levels';
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'warn' as LogThreshold },
-    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY },
+    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY, maxBytes: 20971520, maxQueueBytes: 2097152 },
     platforms: {
         twitch: { enabled: true, fileLogging: true },
         youtube: { enabled: true, fileLogging: true },
@@ -14,10 +14,12 @@ const DEFAULT_LOGGING_CONFIG = {
     chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
 };
 
-function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
+function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null; fileMaxBytes?: number; fileQueueMaxBytes?: number }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
     const config = structuredClone(DEFAULT_LOGGING_CONFIG);
     const logging = normalized.logging || {};
     const general = normalized.general || {};
+    config.file.maxBytes = logging.fileMaxBytes ?? config.file.maxBytes;
+    config.file.maxQueueBytes = logging.fileQueueMaxBytes ?? config.file.maxQueueBytes;
 
     if (isLogThreshold(logging.consoleLevel)) {
         config.console.level = logging.consoleLevel;

@@ -36,7 +36,7 @@ type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
 const buildMainConfig = (overrides: Parameters<typeof createConfigFixture>[0] = {}) => createConfigFixture({
   ...overrides,
   general: { envFileReadEnabled: false, envFileWriteEnabled: false, viewerCountPollingIntervalMs: 0, ...overrides.general },
-  logging: { file: { enabled: false, level: 'warn', directory: '/synthetic-unused' }, chat: { enabled: false, separateFiles: false, directory: '/synthetic-unused' } },
+  logging: { file: { enabled: false, level: 'warn', directory: '/synthetic-unused', maxBytes: 20971520, maxQueueBytes: 2097152 }, chat: { enabled: false, separateFiles: false, directory: '/synthetic-unused' } },
   obs: { enabled: false, ttsChatEnabled: false, ttsNotificationsEnabled: false, ...overrides.obs },
   twitch: { enabled: false, ...overrides.twitch }, youtube: { enabled: false, ...overrides.youtube }, tiktok: { enabled: false, ...overrides.tiktok },
   gui: { enableDock: false, enableOverlay: false, enableOperator: false, enableNotifications: false, port: 0, ...overrides.gui },

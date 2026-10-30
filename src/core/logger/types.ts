@@ -1,6 +1,7 @@
 type LogMethod = (message: unknown, source?: string, data?: unknown) => void;
 
 type AppLogger = {
+  flush?: () => Promise<void>;
   debug: LogMethod;
   info: LogMethod;
   warn: LogMethod;

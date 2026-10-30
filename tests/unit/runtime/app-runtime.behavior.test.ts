@@ -47,6 +47,55 @@ const base = { userId: 'synthetic-user', timestamp: '2024-01-01T00:00:00.000Z' }
 const gift = { ...base, id: 'synthetic-gift', giftType: 'Synthetic gift', giftCount: 1, amount: 5, currency: 'USD' };
 
 describe('AppRuntime with production main owners', () => {
+  it('waits for the logger flush after resource retirement and tolerates a failed sink', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const enteredFlush = new Promise<void>(resolve => { entered = resolve; });
+    const pendingFlush = new Promise<void>(resolve => { release = resolve; });
+    useFakeTimers();
+    const exits: unknown[] = [];
+    const exit = spyOn(process, 'exit').mockImplementation(((code: unknown) => { exits.push(code); }) as never);
+    const originalFlush = h.runtime.logger.flush;
+    h.runtime.logger.flush = async () => { entered(); await pendingFlush; throw new Error('Synthetic flush failure'); };
+    let finished = false;
+    try {
+      const shutdown = h.runtime.shutdown().then(() => { finished = true; });
+      try {
+        await enteredFlush;
+        expect(finished).toBe(false);
+        advanceTimersByTime(2500);
+        expect(exits).toEqual([]);
+      } finally { release(); }
+      await shutdown;
+      expect(finished).toBe(true);
+      advanceTimersByTime(1999); expect(exits).toEqual([]);
+      advanceTimersByTime(1); expect(exits).toEqual([0]);
+    } finally {
+      if (originalFlush) h.runtime.logger.flush = originalFlush;
+      else delete h.runtime.logger.flush;
+      exit.mockRestore();
+    }
+  });
+
+  it('reports an unresponsive log flush and still bounds shutdown', async () => {
+    useFakeTimers();
+    const originalFlush = h.runtime.logger.flush;
+    let entered!: () => void;
+    const flushing = new Promise<void>(resolve => { entered = resolve; });
+    const never = new Promise<void>(() => {});
+    h.runtime.logger.flush = () => { entered(); return never; };
+    try {
+      const shutdown = h.runtime.shutdown();
+      await flushing;
+      advanceTimersByTime(10000);
+      await shutdown;
+      expect(stderr.output.join('')).toContain('pending file records may be lost');
+    } finally {
+      if (originalFlush) h.runtime.logger.flush = originalFlush;
+      else delete h.runtime.logger.flush;
+    }
+  });
+
   it('rejects invalid constructor dependencies before executing their callable shapes', () => {
     const deps = h.runtime.dependencies;
     expect(() => new AppRuntime(h.config, { ...deps, eventBus: null } as never)).toThrow('AppRuntime missing required dependencies');

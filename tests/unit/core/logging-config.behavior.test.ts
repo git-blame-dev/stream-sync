@@ -49,4 +49,10 @@ describe("logging config behavior", () => {
     expect(config.console.level).toBe("warn");
     expect(config.file.level).toBe("debug");
   });
+  it("forwards runtime writer byte limits", () => {
+    const config = buildLoggingConfig({ logging: { fileMaxBytes: 1048576, fileQueueMaxBytes: 131072 } });
+    expect(config.file.maxBytes).toBe(1048576);
+    expect(config.file.maxQueueBytes).toBe(131072);
+  });
+
 });

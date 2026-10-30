@@ -18,6 +18,7 @@ import {
 } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetTimeout } from '../utils/timeout-validator';
+import { withTimeout } from '../utils/timeout-wrapper';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
 import type { DisplayQueueSequenceWriter } from '../interfaces/DisplayQueue';
@@ -783,9 +784,7 @@ class AppRuntime {
             } catch {
                 // Entry diagnostics must not prevent retiring this runtime lifetime.
             }
-            this.beginTeardown('shutdown', true).then(() => {
-                this.emitSystemShutdown({ reason: 'manual-shutdown' });
-            }).then(resolve, reject);
+            this.beginTeardown('shutdown', true).then(() => this.emitSystemShutdown({ reason: 'manual-shutdown' })).then(resolve, reject);
         }
         return this.shutdownPromise;
     }
@@ -870,7 +869,7 @@ class AppRuntime {
         }
     }
 
-    emitSystemShutdown({ reason, restartRequested = false }: { reason?: unknown; restartRequested?: boolean } = {}) {
+    async emitSystemShutdown({ reason, restartRequested = false }: { reason?: unknown; restartRequested?: boolean } = {}) {
         const shutdownReason = typeof reason === 'string' && reason.trim() ? reason : 'unknown';
         const shutdownMode = restartRequested ? 'restart' : 'exit';
         if (this.eventBus && typeof this.eventBus.emit === 'function') {
@@ -884,6 +883,13 @@ class AppRuntime {
             this.logger.debug('[Shutdown] Marking process exit code and scheduling forced-exit fallback', 'system');
         } catch {
             // Completion diagnostics must not prevent scheduling process termination.
+        }
+        if (this.logger.flush) {
+            try { await withTimeout(this.logger.flush(), 10000, 'Runtime log flush'); }
+            catch {
+                try { process.stderr.write('[Shutdown] Log flush failed or exceeded 10000ms; pending file records may be lost\n'); }
+                catch { /* A failed diagnostic cannot prevent the termination fallback. */ }
+            }
         }
         process.exitCode = 0;
         const forcedExitTimer = safeSetTimeout(() => {
