@@ -8,6 +8,7 @@ import { ViewerCountSystem } from '../../src/utils/viewer-count';
 import { OBSViewerCountObserver } from '../../src/observers/obs-viewer-count-observer';
 import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
 import { noOpLogger } from '../helpers/mock-factories';
+import { createRecordingLogger } from '../helpers/recording-logger';
 import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../helpers/bun-timers';
 
 const channelId = `UC${'q'.repeat(22)}`;
@@ -15,6 +16,7 @@ const a = 'synthetic_A';
 const b = 'synthetic_B';
 const epoch = 1900000000000;
 function fixture(maxStreams = 2, extractionEnabled = true) {
+    const logger = createRecordingLogger();
     let now = epoch;
     let discovered = [a, b];
     let discoveryUnavailable = false;
@@ -42,7 +44,9 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
                     membershipAtChat.set(id, platform.getDetectedStreamIds());
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
                     const chat = Object.assign(new EventEmitter(), {
-                        start(this: EventEmitter) { this.emit('start', {}); }, stop() {}, applyFilter() {}
+                        start(this: EventEmitter) { this.emit('start', { header: { view_selector: { sub_menu_items: [
+                            { selected: true }, { selected: true }
+                        ] } } }); }, stop() {}, applyFilter() {}
                     });
                     chats.set(id, chat);
                     return chat;
@@ -55,9 +59,9 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     const platform = new YouTubePlatform({ username: channelId, enabled: true, maxStreams,
         fullCheckInterval: 1, streamPollingInterval: 60, dataLoggingEnabled: false,
         envFileReadEnabled: false, envFileWriteEnabled: false }, {
-        logger: noOpLogger, innertubeService: owner, streamDetectionService: detector,
+        logger, innertubeService: owner, streamDetectionService: detector,
         ...(extractionEnabled ? { viewerExtractionService: extraction } : {}),
-        now: () => now
+        now: () => now, monotonicNow: () => now - epoch
     });
     const writes: Array<Record<string, unknown>> = [];
     const store = new ViewerCountSystem({ logger: noOpLogger,
@@ -76,15 +80,86 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
         if (event.type === PlatformEvents.STREAM_STATUS) statuses.push(event.data.isLive);
         if (event.type === PlatformEvents.STREAM_DETECTED) detected.push(event.data.newStreamIds);
     });
-    return { owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, infoOverrides, infoErrors,
+    return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, infoOverrides, infoErrors,
         setDiscovery(ids: string[]) { discovered = ids; now += 2; },
         failDiscovery() { discoveryUnavailable = true; now += 2; },
+        recoverDiscovery() { discoveryUnavailable = false; now += 2; },
+        advanceTime(ms: number) { now += ms; },
         holdInfo(callback: (id: string) => Promise<void>) { heldInfo = callback; },
         async close() { await store.cleanup(); await platform.cleanup(); await owner.dispose(); }
     };
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
+    it('logs confirmed offline once and keeps repeated offline checks and one live stream below capacity healthy', async () => {
+        const f = fixture();
+        try {
+            f.setDiscovery([]);
+            await f.platform.checkMultiStream();
+            const offlineLogs = () => f.logger.entries.filter(entry => entry.level === 'info' && entry.message.includes('offline; monitoring'));
+            expect(offlineLogs()).toHaveLength(1);
+            await f.platform.checkMultiStream();
+            expect(offlineLogs()).toHaveLength(1);
+            expect(f.logger.entries.filter(entry => entry.level === 'warn')).toEqual([]);
+            f.setDiscovery([a]);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('live');
+            expect(f.platform.connectionManager.isConnectionReady(a)).toBe(true);
+            const visible = f.logger.entries.filter(entry => entry.level !== 'debug').length;
+            await f.platform.checkMultiStream();
+            expect(f.logger.entries.filter(entry => entry.level !== 'debug')).toHaveLength(visible);
+            expect(f.logger.entries.filter(entry => entry.level === 'warn')).toEqual([]);
+        } finally { await f.close(); }
+    });
+
+    it('reports unavailable discovery separately from offline, preserves live connections, and reports recovery', async () => {
+        const f = fixture();
+        try {
+            f.failDiscovery();
+            await f.platform.checkMultiStream();
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('unknown');
+            expect(f.logger.entries.some(entry => entry.level === 'warn' && entry.message.includes('discovery'))).toBe(true);
+            expect(f.logger.entries.some(entry => entry.message.includes('offline; monitoring'))).toBe(false);
+            f.recoverDiscovery();
+            f.setDiscovery([a]);
+            await f.platform.checkMultiStream();
+            expect(f.logger.entries.some(entry => entry.level === 'info' && entry.message.includes('discovery recovered'))).toBe(true);
+            f.failDiscovery();
+            await f.platform.checkMultiStream();
+            expect(f.platform.connectionManager.isConnectionReady(a)).toBe(true);
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('live');
+        } finally { await f.close(); }
+    });
+
+    it('bounds degraded discovery reminders without changing unknown availability to offline', async () => {
+        const f = fixture();
+        f.platform.config.fullCheckInterval = 60000;
+        const warnings = () => f.logger.entries.filter(entry => entry.level === 'warn' && entry.message.includes('discovery'));
+        try {
+            f.failDiscovery();
+            await f.platform.checkMultiStream();
+            expect(warnings()).toHaveLength(1);
+            await f.platform.checkMultiStream();
+            expect(warnings()).toHaveLength(1);
+            f.advanceTime(60000);
+            await f.platform.checkMultiStream();
+            expect(warnings()).toHaveLength(2);
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('unknown');
+            expect(f.logger.entries.some(entry => entry.message.includes('offline; monitoring'))).toBe(false);
+        } finally { await f.close(); }
+    });
+
+    it('retains live discovery and visible errors when a discovered stream cannot attach to chat', async () => {
+        const f = fixture();
+        try {
+            f.setDiscovery([a]);
+            f.chatFailures.add(a);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getViewerMembershipSnapshot()).toMatchObject({ availability: 'live', videoIds: [a] });
+            expect(f.platform.connectionManager.isConnectionReady(a)).toBe(false);
+            expect(f.logger.entries.some(entry => entry.level === 'error')).toBe(true);
+        } finally { await f.close(); }
+    });
     it('clears complete observation metadata with counts on cleanup and does not replay the unobserved default zero', async () => {
         const f = fixture();
         try {

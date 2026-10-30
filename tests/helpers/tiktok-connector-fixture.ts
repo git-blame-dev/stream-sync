@@ -4,6 +4,7 @@ import { RetrySystem } from '../../src/utils/retry-system';
 import { noOpLogger } from './mock-factories';
 import { TikTokWebSocketClient } from '../../src/platforms/tiktok-websocket-client';
 import type { Connector } from '../../src/platforms/tiktok-websocket-client';
+import type { AppLogger } from '../../src/core/logger/types';
 
 /** Only the external SDK boundary is simulated; application classes remain real. */
 class SyntheticTikTokConnector extends EventEmitter implements Connector {
@@ -28,11 +29,12 @@ export { SyntheticTikTokConnector, flushConnectorSetup };
 function createTikTokLifetimeFixture(
     config: ConstructorParameters<typeof TikTokPlatform>[0] = {},
     monotonicNow?: () => number,
+    logger: Pick<AppLogger, 'debug' | 'info' | 'warn' | 'error'> = noOpLogger,
 ) {
     const connectors: SyntheticTikTokConnector[] = [];
     const clients: TikTokWebSocketClient[] = [];
     // Public connection-state callback; TikTokPlatform installs its live callback on construction.
-    const retry = Object.assign(new RetrySystem({ logger: noOpLogger }), { isConnected: (_platform: string) => false });
+    const retry = Object.assign(new RetrySystem({ logger }), { isConnected: (_platform: string) => false });
     class AcquiredTikTokClient extends TikTokWebSocketClient {
         constructor(username: string, options: ConstructorParameters<typeof TikTokWebSocketClient>[1]) {
             super(username, { ...options, connectorFactory: async (_username, _key, signal) => {
@@ -45,7 +47,7 @@ function createTikTokLifetimeFixture(
         }
     }
     const dependencies = {
-        logger: noOpLogger,
+        logger,
         TikTokWebSocketClient: AcquiredTikTokClient,
         WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow', SOCIAL: 'social', ROOM_USER: 'roomUser', ERROR: 'webcast-error', DISCONNECT: 'disconnect', STREAM_END: 'streamEnd' },
         ControlEvent: { CONNECTED: 'connected', DISCONNECTED: 'disconnected', ERROR: 'error' },

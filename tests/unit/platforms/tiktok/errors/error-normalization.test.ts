@@ -1,15 +1,9 @@
-import { describe, it, expect, afterEach, beforeEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import {
   createMockFn,
   restoreAllMocks,
 } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
-import {
-  useFakeTimers,
-  useRealTimers,
-  setSystemTime,
-} from "../../../../helpers/bun-timers";
-import * as testClock from "../../../../helpers/test-clock";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
 type TikTokTestConfig = {
@@ -369,43 +363,6 @@ describe("TikTokPlatform error normalization", () => {
       const result = platform._formatStreamNotLiveMessage("testStreamer", {});
 
       expect(result).toBe("Stream is not live for TikTok user 'testStreamer'");
-    });
-  });
-
-  describe("_wasRecentlyNotLiveLogged", () => {
-    beforeEach(() => {
-      useFakeTimers();
-      setSystemTime(new Date("2025-01-15T12:00:00.000Z"));
-      testClock.set(Date.parse("2025-01-15T12:00:00.000Z"));
-    });
-
-    afterEach(() => {
-      useRealTimers();
-      testClock.reset();
-    });
-
-    it("returns false when no warning recorded", () => {
-      const platform = createPlatform();
-
-      expect(platform._wasRecentlyNotLiveLogged()).toBe(false);
-    });
-
-    it("returns true within 2 seconds of recording", () => {
-      const platform = createPlatform();
-      platform._recordNotLiveWarning();
-
-      setSystemTime(new Date("2025-01-15T12:00:01.500Z"));
-
-      expect(platform._wasRecentlyNotLiveLogged()).toBe(true);
-    });
-
-    it("returns false after 2 seconds", () => {
-      const platform = createPlatform();
-      platform._recordNotLiveWarning();
-
-      setSystemTime(new Date("2025-01-15T12:00:02.500Z"));
-
-      expect(platform._wasRecentlyNotLiveLogged()).toBe(false);
     });
   });
 

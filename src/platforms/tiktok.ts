@@ -387,7 +387,7 @@ class TikTokPlatform extends EventEmitter {
     declare giftAggregator: TikTokGiftAggregator;
     declare cachedViewerCount: number;
     declare connectionOrchestrator: TikTokConnectionOrchestrator;
-    declare _lastNotLiveWarningAt: number | undefined;
+    private offlineMonitoring = false;
 
     constructor(config: TikTokConfig = {}, dependencies: TikTokDependencies = {}) {
         super();
@@ -824,6 +824,7 @@ class TikTokPlatform extends EventEmitter {
 
         const username = this.config.username;
         this.connectionActive = true;
+        this.offlineMonitoring = false;
         this.connectionTime = Date.now();
         this.connectionEstablishedAt = this.monotonicNow();
         this.connectionStateManager.markConnected();
@@ -850,13 +851,11 @@ class TikTokPlatform extends EventEmitter {
         const isStreamNotLive = this._isStreamNotLive(details);
         if (isStreamNotLive) {
             this._resetShareActorTracking('stream-not-live');
-            if (!this._wasRecentlyNotLiveLogged()) {
-                this.logger.warn(this._formatStreamNotLiveMessage(username, details), 'tiktok');
-                this._recordNotLiveWarning();
-            } else {
-                this._recordNotLiveWarning();
-            }
+            this.reportOfflineMonitoring();
+            this.connectionStateManager.markDisconnected();
         } else {
+            this.offlineMonitoring = false;
+            this.connectionStateManager.markError(err);
             this.errorHandler.handleConnectionError(
                 err,
                 'connection',
@@ -864,7 +863,6 @@ class TikTokPlatform extends EventEmitter {
             );
         }
         
-        this.connectionStateManager.markError(err);
         this.cleanupEventListeners();
         this.listenersConfigured = false;
         this.connection = null;
@@ -1025,16 +1023,18 @@ class TikTokPlatform extends EventEmitter {
         return `Stream is not live for TikTok user '${username}'${codeSuffix}`;
     }
 
-    _recordNotLiveWarning(): void {
-        this._lastNotLiveWarningAt = Date.now();
+    private reportOfflineMonitoring(willMonitor = !!this.config.enabled && !this.isPlannedDisconnection): void {
+        if (!willMonitor) {
+            this.logger.debug('TikTok offline; monitoring inactive', 'tiktok');
+            return;
+        }
+        if (this.offlineMonitoring) {
+            this.logger.debug('TikTok remains offline; monitoring continues', 'tiktok');
+            return;
+        }
+        this.offlineMonitoring = true;
+        this.logger.info('TikTok offline; monitoring for next stream', 'tiktok');
     }
-
-  _wasRecentlyNotLiveLogged(): boolean {
-    if (!this._lastNotLiveWarningAt) {
-      return false;
-    }
-    return Date.now() - this._lastNotLiveWarningAt < 2000;
-  }
 
   _ensureDeferredReconnectChecks(context = 'offline'): { scheduled: boolean; reason: string } {
     if (!this.config.enabled) {
@@ -1185,7 +1185,6 @@ class TikTokPlatform extends EventEmitter {
 
     try {
       this.resetRetriesAfterStableConnection();
-      const username = this.config.username;
       const normalizedIssue = this._normalizeConnectionIssue(issue);
       const message = normalizedIssue.message;
       const decision = this._classifyReconnectPolicy({
@@ -1197,11 +1196,12 @@ class TikTokPlatform extends EventEmitter {
 
       if (decision.isStreamNotLive) {
         this._resetShareActorTracking('stream-not-live');
-        this.logger.warn(this._formatStreamNotLiveMessage(username, normalizedIssue), 'tiktok');
-        this._recordNotLiveWarning();
+        this.reportOfflineMonitoring(decision.willReconnect);
       } else if (isError) {
+        this.offlineMonitoring = false;
         this.errorHandler.handleConnectionError(issue, 'connection issue', `Connection issue: ${message}`);
       } else {
+        this.offlineMonitoring = false;
         const codeSuffix = normalizedIssue.code !== undefined ? ` (code ${normalizedIssue.code})` : '';
         this.logger.warn(`Connection issue: ${message}${codeSuffix}`, 'tiktok');
       }
@@ -1576,6 +1576,7 @@ class TikTokPlatform extends EventEmitter {
         this.cleanupEventListeners();
         if (cancelRecovery) {
             this.isPlannedDisconnection = true;
+            this.offlineMonitoring = false;
             this.retrySystem?.cancelConnectionRetry?.('tiktok');
         }
 
@@ -2167,12 +2168,8 @@ class TikTokPlatform extends EventEmitter {
         }
       }
 
-      if (decision.isStreamNotLive) {
-        this._resetShareActorTracking('stream-not-live');
-      } else {
-        this.logger.info('TikTok stream ended; scheduling reconnect checks', 'tiktok');
-        this._resetShareActorTracking('stream-end');
-      }
+      this.reportOfflineMonitoring(decision.willReconnect);
+      this._resetShareActorTracking(decision.isStreamNotLive ? 'stream-not-live' : 'stream-end');
 
       this.isPlannedDisconnection = false;
       this.connectionActive = false;

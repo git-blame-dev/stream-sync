@@ -15,13 +15,6 @@ interface ConnectionManagerLike {
     hasConnection: (videoId: string) => boolean;
 }
 
-interface ShortageState {
-    lastWarningTime: number | null;
-    isInShortage: boolean;
-    lastKnownAvailable: number;
-    lastKnownRequired: number;
-}
-
 interface YouTubeMultiStreamPlatform {
     config: {
         maxStreams: number;
@@ -30,13 +23,11 @@ interface YouTubeMultiStreamPlatform {
     };
     connectionManager: ConnectionManagerLike;
     logger: LoggerLike;
-    shortageState: ShortageState;
     monitoringInterval: number | ReturnType<typeof setInterval> | null;
     monitoringIntervalStart?: number;
     lastFullStreamCheck: number | null;
     lastYouTubeVideoIdsUpdateTime?: number;
     checkMultiStream: (options?: { throwOnError?: boolean }) => Promise<void>;
-    checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
     getActiveYouTubeVideoIds: () => string[];
     getLiveVideoIds: () => Promise<string[]>;
     connectToYouTubeStream: (videoId: string) => Promise<boolean>;
@@ -68,7 +59,6 @@ interface YouTubeMultiStreamManager {
     checkMultiStream: (options?: CheckMultiStreamOptions) => Promise<void>;
     requestImmediateRefresh: (context?: UnknownRecord) => Promise<void>;
     isCheckInProgress: () => boolean;
-    checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
     logStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
 }
 
@@ -201,10 +191,9 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
 
             const videoIds = await platform.getLiveVideoIds();
 
-            platform.checkStreamShortageAndWarn(videoIds.length, maxStreams);
 
             if (videoIds.length > 0) {
-                platform.logger.info('Detected live streams:', 'youtube');
+                platform.logger.debug('Detected live streams:', 'youtube');
                 videoIds.forEach((streamId: string, index: number) => {
                     const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
@@ -319,51 +308,12 @@ const requestImmediateRefresh = async (context: UnknownRecord = {}): Promise<voi
 
 const isCheckInProgress = (): boolean => currentCheckPromise !== null;
 
-const checkStreamShortageAndWarn = (availableCount: number, maxStreams: number): void => {
-        const currentTimeMs = now();
-        const isShortage = maxStreams > 0 && availableCount < maxStreams;
-        const warningThrottleMs = validateTimeout(
-            platform.config.fullCheckInterval,
-            platform.config.fullCheckInterval,
-            'fullCheckInterval'
-        );
-
-        if (isShortage) {
-            const shouldWarn = !platform.shortageState.lastWarningTime ||
-                (currentTimeMs - platform.shortageState.lastWarningTime) >= warningThrottleMs;
-
-            if (shouldWarn) {
-                platform.logger.warn(
-                    `Stream shortage detected: found ${availableCount}/${maxStreams} streams. Some content may be missed.`,
-                    'youtube'
-                );
-                platform.shortageState.lastWarningTime = currentTimeMs;
-            } else {
-                platform.logger.info(
-                    `Stream status: ${availableCount}/${maxStreams} streams available (shortage persists)`,
-                    'youtube'
-                );
-            }
-
-            platform.shortageState.isInShortage = true;
-            platform.shortageState.lastKnownAvailable = availableCount;
-            platform.shortageState.lastKnownRequired = maxStreams;
-        } else if (platform.shortageState.isInShortage) {
-            platform.logger.info(
-                `Stream shortage resolved: ${availableCount}/${maxStreams} streams available`,
-                'youtube'
-            );
-            platform.shortageState.isInShortage = false;
-            platform.shortageState.lastWarningTime = null;
-        }
-    };
-
 const logStatus = (includeDetails = false, includeActiveStreamsList = false): void => {
         const storedConnections = platform.connectionManager.getAllVideoIds();
         const readyConnections = platform.getActiveYouTubeVideoIds();
 
         if (storedConnections.length > 0) {
-            platform.logger.info(
+            platform.logger.debug(
                 `Multi-stream status: ${readyConnections.length} ready, ${storedConnections.length} total connections`,
                 'youtube'
             );
@@ -371,12 +321,12 @@ const logStatus = (includeDetails = false, includeActiveStreamsList = false): vo
             if (includeDetails && storedConnections.length > readyConnections.length) {
                 const pendingConnections = storedConnections.filter((id) => !readyConnections.includes(id));
                 pendingConnections.forEach((streamId: string) => {
-                    platform.logger.info(`Waiting for stream to start: ${streamId}`, 'youtube');
+                    platform.logger.debug(`Waiting for stream to start: ${streamId}`, 'youtube');
                 });
             }
 
             if (includeActiveStreamsList && readyConnections.length > 0) {
-                platform.logger.info('Active streams:', 'youtube');
+                platform.logger.debug('Active streams:', 'youtube');
                 readyConnections.forEach((streamId: string, index: number) => {
                     const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
@@ -392,7 +342,6 @@ const logStatus = (includeDetails = false, includeActiveStreamsList = false): vo
         checkMultiStream,
         requestImmediateRefresh,
         isCheckInProgress,
-        checkStreamShortageAndWarn,
         logStatus
     };
 }

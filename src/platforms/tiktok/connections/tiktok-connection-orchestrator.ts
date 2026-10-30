@@ -92,7 +92,7 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
 
             try {
                 platform.connectionStateManager.markConnecting();
-                platform.logger.info(`Connecting to TikTok user '${platform.config.username}'...`, 'tiktok');
+                platform.logger.debug('Checking TikTok connection...', 'tiktok');
 
                 platform.connection = platform.connectionStateManager.ensureConnection();
                 platform.setupEventListeners();

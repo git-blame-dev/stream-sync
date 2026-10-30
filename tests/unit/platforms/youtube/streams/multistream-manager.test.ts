@@ -22,13 +22,6 @@ type DisconnectRecord = {
   reason: string;
   options?: { requestImmediateRefresh?: boolean; source?: string } | undefined;
 };
-type WarnRecord = { msg: string; scope: string };
-type ShortageStateFixture = {
-  lastWarningTime: number | null;
-  isInShortage: boolean;
-  lastKnownAvailable: number;
-  lastKnownRequired: number;
-};
 type LoggerFixture = {
   debug: (message: string, scope: string) => void;
   info: (message: string, scope: string) => void;
@@ -49,14 +42,12 @@ type MultiStreamPlatformFixture = {
     reason: string,
     options?: { requestImmediateRefresh?: boolean; source?: string },
   ) => Promise<void>;
-  checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
   _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
   _handleProcessingError: (message: string, error: unknown, category: string) => void;
   _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
   _handleError: (error: unknown, context: string) => void;
   logger: LoggerFixture;
   _emitPlatformEvent: (type: PlatformEventType, payload: Record<string, unknown>) => void;
-  shortageState: ShortageStateFixture;
   monitoringInterval: number | ReturnType<typeof setInterval> | null;
   monitoringIntervalStart?: number;
   lastYouTubeVideoIdsUpdateTime?: number;
@@ -88,12 +79,6 @@ describe("YouTube multi-stream manager", () => {
   const buildPlatform = (
     overrides: Partial<MultiStreamPlatformFixture> = {},
   ): MultiStreamPlatformFixture => {
-    const shortageState: ShortageStateFixture = {
-      lastWarningTime: null,
-      isInShortage: false,
-      lastKnownAvailable: 0,
-      lastKnownRequired: 0,
-    };
     const platform = {
       config: {
         maxStreams: 0,
@@ -112,14 +97,12 @@ describe("YouTube multi-stream manager", () => {
         [string, string, { requestImmediateRefresh?: boolean; source?: string }?],
         Promise<void>
       >().mockResolvedValue(undefined),
-      checkStreamShortageAndWarn: createMockFn(),
       _logMultiStreamStatus: createMockFn(),
       _handleProcessingError: createMockFn(),
       _handleConnectionErrorLogging: createMockFn(),
       _handleError: createMockFn(),
       logger: createLoggerFixture(),
       _emitPlatformEvent: createMockFn(),
-      shortageState,
       monitoringInterval: null,
       lastFullStreamCheck: null,
       checkMultiStream: createMockFn<[{ throwOnError?: boolean }?], Promise<void>>().mockResolvedValue(undefined),
@@ -688,110 +671,9 @@ describe("YouTube multi-stream manager", () => {
     });
   });
 
-  describe("checkStreamShortageAndWarn", () => {
-    test("warns when available streams are less than maxStreams", () => {
-      const warnCalls: WarnRecord[] = [];
-      const platform = buildPlatform({
-        logger: createLoggerFixture({
-          warn: (msg: string, scope: string) => {
-            warnCalls.push({ msg, scope });
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.checkStreamShortageAndWarn(1, 3);
-
-      expect(warnCalls).toHaveLength(1);
-      expect(warnCalls[0]?.msg).toContain("Stream shortage detected");
-      expect(platform.shortageState.isInShortage).toBe(true);
-    });
-
-    test("throttles warning when shortage persists within interval", () => {
-      const currentTime = testClock.now();
-      const warnCalls: string[] = [];
-      const infoCalls: string[] = [];
-      const platform = buildPlatform({
-        config: { maxStreams: 0, streamPollingInterval: 60, fullCheckInterval: 60000 },
-        shortageState: {
-          lastWarningTime: currentTime - 100,
-          isInShortage: true,
-          lastKnownAvailable: 1,
-          lastKnownRequired: 3,
-        },
-        logger: createLoggerFixture({
-          warn: (msg: string) => {
-            warnCalls.push(msg);
-          },
-          info: (msg: string) => {
-            infoCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.checkStreamShortageAndWarn(1, 3);
-
-      expect(warnCalls).toHaveLength(0);
-      expect(infoCalls.some((msg) => msg.includes("shortage persists"))).toBe(
-        true,
-      );
-    });
-
-    test("logs resolution when shortage is resolved", () => {
-      const currentTime = testClock.now();
-      const infoCalls: string[] = [];
-      const platform = buildPlatform({
-        shortageState: {
-          lastWarningTime: currentTime - 500,
-          isInShortage: true,
-          lastKnownAvailable: 1,
-          lastKnownRequired: 3,
-        },
-        logger: createLoggerFixture({
-          info: (msg: string) => {
-            infoCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.checkStreamShortageAndWarn(3, 3);
-
-      expect(infoCalls.some((msg) => msg.includes("shortage resolved"))).toBe(
-        true,
-      );
-      expect(platform.shortageState.isInShortage).toBe(false);
-    });
-
-    test("does not log resolution when not previously in shortage", () => {
-      const infoCalls: string[] = [];
-      const platform = buildPlatform({
-        shortageState: {
-          lastWarningTime: null,
-          isInShortage: false,
-          lastKnownAvailable: 0,
-          lastKnownRequired: 0,
-        },
-        logger: createLoggerFixture({
-          info: (msg: string) => {
-            infoCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.checkStreamShortageAndWarn(3, 3);
-
-      expect(infoCalls.filter((msg) => msg.includes("shortage"))).toHaveLength(
-        0,
-      );
-    });
-  });
-
   describe("logStatus", () => {
     test("logs ready and total connection counts", () => {
-      const infoCalls: string[] = [];
+      const detailCalls: string[] = [];
       const platform = buildPlatform({
         connectionManager: {
           getConnectionCount: createMockFn(() => 2),
@@ -800,8 +682,8 @@ describe("YouTube multi-stream manager", () => {
         },
         getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
         logger: createLoggerFixture({
-          info: (msg: string) => {
-            infoCalls.push(msg);
+          debug: (msg: string) => {
+            detailCalls.push(msg);
           },
         }),
       });
@@ -809,12 +691,12 @@ describe("YouTube multi-stream manager", () => {
 
       manager.logStatus();
 
-      expect(infoCalls.some((msg) => msg.includes("1 ready"))).toBe(true);
-      expect(infoCalls.some((msg) => msg.includes("2 total"))).toBe(true);
+      expect(detailCalls.some((msg) => msg.includes("1 ready"))).toBe(true);
+      expect(detailCalls.some((msg) => msg.includes("2 total"))).toBe(true);
     });
 
     test("logs pending connections when includeDetails is true", () => {
-      const infoCalls: string[] = [];
+      const detailCalls: string[] = [];
       const platform = buildPlatform({
         connectionManager: {
           getConnectionCount: createMockFn(() => 2),
@@ -823,8 +705,8 @@ describe("YouTube multi-stream manager", () => {
         },
         getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
         logger: createLoggerFixture({
-          info: (msg: string) => {
-            infoCalls.push(msg);
+          debug: (msg: string) => {
+            detailCalls.push(msg);
           },
         }),
       });
@@ -833,13 +715,12 @@ describe("YouTube multi-stream manager", () => {
       manager.logStatus(true);
 
       expect(
-        infoCalls.some((msg) => msg.includes("Waiting for stream to start")),
+        detailCalls.some((msg) => msg.includes("Waiting for stream to start")),
       ).toBe(true);
     });
 
     test("logs active streams list when includeActiveStreamsList is true", () => {
-      const infoCalls: string[] = [];
-      const debugCalls: string[] = [];
+      const detailCalls: string[] = [];
       const platform = buildPlatform({
         connectionManager: {
           getConnectionCount: createMockFn(() => 1),
@@ -848,11 +729,8 @@ describe("YouTube multi-stream manager", () => {
         },
         getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
         logger: createLoggerFixture({
-          info: (msg: string) => {
-            infoCalls.push(msg);
-          },
           debug: (msg: string) => {
-            debugCalls.push(msg);
+            detailCalls.push(msg);
           },
         }),
       });
@@ -860,7 +738,7 @@ describe("YouTube multi-stream manager", () => {
 
       manager.logStatus(false, true);
 
-      expect(infoCalls.some((msg) => msg.includes("Active streams"))).toBe(
+      expect(detailCalls.some((msg) => msg.includes("Active streams"))).toBe(
         true,
       );
     });

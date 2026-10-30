@@ -161,6 +161,7 @@ type YouTubeDependencies = UnknownMap & {
   viewerExtractionService?: YouTubeExtractionServiceLike;
   innertubeService?: unknown;
   now?: () => number;
+  monotonicNow?: () => number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -227,12 +228,6 @@ class YouTubePlatform extends EventEmitter {
   isInitialized: boolean;
   monitoringInterval: ReturnType<typeof setInterval> | number | null;
   monitoringIntervalStart?: number | undefined;
-  shortageState: {
-    lastWarningTime: number | null;
-    isInShortage: boolean;
-    lastKnownAvailable: number;
-    lastKnownRequired: number;
-  };
   userAgentManager: YouTubeUserAgentManager;
   connectionManager: YouTubeConnectionManager;
   _youtubeConnectionFactory: YouTubeConnectionFactoryLike;
@@ -250,6 +245,8 @@ class YouTubePlatform extends EventEmitter {
   private membershipRequest = 0;
   private metadataOwner?: Pick<InnertubeService, 'withMetadataOperation'>;
   private now: () => number;
+  private monotonicNow: () => number;
+  private lastDiscoveryWarningAt: number | null = null;
 
   constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
@@ -279,6 +276,7 @@ class YouTubePlatform extends EventEmitter {
         
         this.config = { ...config };
         this.now = dependencies.now ?? Date.now;
+        this.monotonicNow = dependencies.monotonicNow ?? (() => performance.now());
         if (isRecord(dependencies.innertubeService) && typeof dependencies.innertubeService.withMetadataOperation === 'function') {
             this.metadataOwner = dependencies.innertubeService as Pick<InnertubeService, 'withMetadataOperation'>;
         }
@@ -308,13 +306,6 @@ class YouTubePlatform extends EventEmitter {
         this.isInitialized = false;
         this.monitoringInterval = null;
         
-        this.shortageState = {
-            lastWarningTime: null,
-            isInShortage: false,
-            lastKnownAvailable: 0,
-            lastKnownRequired: 0
-        };
-
         this.userAgentManager = new YouTubeUserAgentManager(this.logger, {
             ...(this.USER_AGENTS ? { userAgents: this.USER_AGENTS } : {})
         });
@@ -455,7 +446,6 @@ class YouTubePlatform extends EventEmitter {
             config: this.config as UnknownMap & { maxStreams: number; streamPollingInterval: number; fullCheckInterval: number },
             connectionManager: this.connectionManager,
             logger: this.logger,
-            shortageState: this.shortageState,
             get monitoringInterval() {
                 return thisPlatform.monitoringInterval;
             },
@@ -481,9 +471,6 @@ class YouTubePlatform extends EventEmitter {
                 thisPlatform.lastYouTubeVideoIdsUpdateTime = value;
             },
             checkMultiStream: (options?: { throwOnError?: boolean }) => this.checkMultiStream(options),
-            checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => {
-                this.checkStreamShortageAndWarn(availableCount, maxStreams);
-            },
             getActiveYouTubeVideoIds: () => this.getActiveYouTubeVideoIds(),
             getLiveVideoIds: () => this.getLiveVideoIds(),
             connectToYouTubeStream: async (videoId: string) => {
@@ -629,6 +616,11 @@ class YouTubePlatform extends EventEmitter {
         if (previous.availability === availability && videoIds.length === previous.videoIds.length
             && videoIds.every(id => previous.videoIds.includes(id))) return;
         this.membership = { generation: previous.generation + 1, videoIds: [...videoIds], availability };
+        if (availability === 'offline') {
+            this.logger.info('YouTube offline; monitoring for next stream', 'youtube');
+        } else if (availability === 'live') {
+            this.logger.info(`YouTube live streams changed: ${videoIds.length} detected`, 'youtube');
+        }
         if (availability !== previous.availability && availability !== 'unknown') {
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'youtube', isLive: availability === 'live', timestamp: getSystemTimestampISO()
@@ -693,10 +685,6 @@ class YouTubePlatform extends EventEmitter {
         return await this._youtubeMultiStreamManager.checkMultiStream(options);
     }
 
-    checkStreamShortageAndWarn(availableCount: number, maxStreams: number): void {
-        return this._youtubeMultiStreamManager.checkStreamShortageAndWarn(availableCount, maxStreams);
-    }
-
 
     async getLiveVideoIds(): Promise<string[]> {
         this.logger.debug('Using youtubei method for stream detection', 'youtube');
@@ -726,6 +714,7 @@ class YouTubePlatform extends EventEmitter {
             ? [...new Set(result.videoIds.filter(isYouTubeVideoId))] : [];
         const complete = result.success === true && result.observationKind === 'complete'
             && Array.isArray(result.videoIds) && result.videoIds.every(isYouTubeVideoId);
+        this.reportDiscoveryHealth(complete);
         const previousIds = this.getDetectedStreamIds();
         const added = positives.filter(id => !previousIds.includes(id));
         const members = [...previousIds, ...added];
@@ -778,6 +767,22 @@ class YouTubePlatform extends EventEmitter {
             });
         } catch {
             return 'unknown';
+        }
+    }
+
+    private reportDiscoveryHealth(complete: boolean): void {
+        if (complete) {
+            if (this.lastDiscoveryWarningAt !== null) this.logger.info('YouTube stream discovery recovered', 'youtube');
+            this.lastDiscoveryWarningAt = null;
+            return;
+        }
+        const observedAt = this.monotonicNow();
+        const reminderInterval = validateTimeout(this.config.fullCheckInterval, 300000, 'fullCheckInterval');
+        if (this.lastDiscoveryWarningAt === null || observedAt - this.lastDiscoveryWarningAt >= reminderInterval) {
+            this.logger.warn('YouTube stream discovery incomplete or unavailable; preserving last known streams', 'youtube');
+            this.lastDiscoveryWarningAt = observedAt;
+        } else {
+            this.logger.debug('YouTube stream discovery remains degraded', 'youtube');
         }
     }
 
@@ -1750,6 +1755,7 @@ class YouTubePlatform extends EventEmitter {
         if (!lifetime.signal.aborted) {
             this.membershipRequest++;
             this.membership = { generation: this.membership.generation + 1, videoIds: [], availability: 'unknown' };
+            this.lastDiscoveryWarningAt = null;
         }
         this._clearMonitoringInterval();
         this.isInitialized = false;
