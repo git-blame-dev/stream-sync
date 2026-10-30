@@ -98,13 +98,15 @@ function adaptTikTokEvent(type: string, value: unknown): Payload {
     };
     if (type === 'chat') {
         adapted.comment = data.content;
-        adapted.emotes = (Array.isArray(data.emotes) ? data.emotes : []).map(value => {
+        const emotes = Array.isArray(data.emoteList)
+            ? data.emoteList.map((emote, index) => ({ index, emote }))
+            : (Array.isArray(data.emotes) ? data.emotes : []);
+        adapted.emotes = emotes.map(value => {
             const entry = record(value);
             const emote = record(entry.emote);
-            const urls = record(emote.image).urlList ?? record(emote.image).url;
             return { placeInComment: entry.index, emote: {
                 emoteId: emote.emoteId,
-                image: { imageUrl: Array.isArray(urls) ? urls[0] : undefined },
+                image: { imageUrl: firstImageUrl(emote.image) },
             } };
         });
     } else if (type === 'gift') {

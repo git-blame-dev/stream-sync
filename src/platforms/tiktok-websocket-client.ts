@@ -96,7 +96,7 @@ class TikTokWebSocketClient extends EventEmitter {
                     fail(Object.assign(new Error('TikTok stream ended'), { code: 4404 }));
                     if (wasConnected) this.emit('streamEnd', { reason: 'TikTok stream ended' });
                 });
-                const events: Record<string, string> = { chat: 'chat', gift: 'gift', follow: 'follow', share: 'share', social: 'social', roomUser: 'roomUser', member: 'member', like: 'like', envelope: 'envelope', subNotify: 'subscribe', superFan: 'superfan' };
+                const events: Record<string, string> = { chat: 'chat', emote: 'chat', gift: 'gift', follow: 'follow', share: 'share', social: 'social', roomUser: 'roomUser', member: 'member', like: 'like', envelope: 'envelope', subNotify: 'subscribe', superFan: 'superfan' };
                 for (const [source, target] of Object.entries(events)) connector.on(source, data => {
                     if (!current() || !this.isConnected) return;
                     this.stats.messageCount++;

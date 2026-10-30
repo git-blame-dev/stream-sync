@@ -4,6 +4,27 @@ import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from '../../../src
 import { extractTikTokAvatarUrl, extractTikTokUserData } from '../../../src/utils/tiktok-data-extraction';
 const common={msgId:'synthetic-message',createTime:'1800000000'};
 const user={id:'9000000000000000003',displayId:'synthetic-user',nickname:'Synthetic User',avatarLarge:{urlList:['https://example.invalid/avatar.png']},followInfo:{followStatus:1},badgeImageList:[{urlList:['https://example.invalid/badge.png']}],badgeList:[{combine:{icon:{urlList:['https://example.invalid/combine.png']}},text:{defaultPattern:'Synthetic badge'}}]};
+test('standalone emote lists become ordered chat parts without invented text', () => {
+    const result = normalizeTikTokChatEvent(adaptTikTokEvent('chat', {
+        common, user, userIdentity: { isModeratorOfAnchor: true, isSubscriberOfAnchor: true },
+        emoteList: ['synthetic-first', 'synthetic-second'].map(emoteId => ({
+            emoteId, image: { urlList: ['', 'invalid', `https://example.invalid/${emoteId}.png`] },
+        })),
+    }));
+    expect(result.message).toEqual({ text: '', parts: [
+        { type: 'emote', platform: 'tiktok', emoteId: 'synthetic-first', imageUrl: 'https://example.invalid/synthetic-first.png', placeInComment: 0 },
+        { type: 'emote', platform: 'tiktok', emoteId: 'synthetic-second', imageUrl: 'https://example.invalid/synthetic-second.png', placeInComment: 1 },
+    ] });
+    expect(result).toMatchObject({ userId: 'synthetic-user', username: 'Synthetic User', isMod: true, isPaypiggy: true,
+        timestamp: '2027-01-15T08:00:00.000Z', metadata: { profilePicture: 'https://example.invalid/avatar.png' } });
+    expect(result.badgeImages).toHaveLength(2);
+});
+test.each([{ emoteList: [] }, { emoteList: [{ emoteId: '', image: { urlList: ['https://example.invalid/synthetic.png'] } }] },
+    { emoteList: [{ emoteId: 'synthetic-invalid', image: { urlList: ['invalid', 'javascript:synthetic'] } }] }, { emoteList: [null] }])(
+    'invalid standalone emotes do not invent chat content: %j', ({ emoteList }) => {
+        expect(() => normalizeTikTokChatEvent(adaptTikTokEvent('chat', { common, user, emoteList }))).toThrow('Missing TikTok message text');
+    },
+);
 test('v3 emote-only chat preserves identities, privileges, avatar and badge images',()=>{
     const payload=adaptTikTokEvent('chat',{common,user,content:'',userIdentity:{isModeratorOfAnchor:true,isAnchor:true,isSubscriberOfAnchor:true},emotes:[{index:0,emote:{emoteId:'synthetic-emote',image:{urlList:['https://example.invalid/emote.png']}}}]});
     const result=normalizeTikTokChatEvent(payload);

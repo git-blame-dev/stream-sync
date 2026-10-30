@@ -9,6 +9,10 @@ test('actual SDK wire decoding, application mapping, signer validation and cance
     expect(result.stdout).toContain('"wireGift":true');
     expect(result.stdout).toContain('"wireViewers":true');
     expect(result.stdout).toContain('"wireSubscription":true');
+    expect(result.stdout).toContain('"wireEmotes":true');
+    expect(result.stdout).toContain('"wireMedia":true');
+    expect(result.stdout).toContain('"wireSocial":true');
+    expect(result.stdout).toContain('"wireMembershipAliases":true');
     expect(result.stdout).toContain('"destinationGuard":true');
     expect(result.stdout).toContain('"signingCancellation":true');
     expect(result.stdout).toContain('"lateSocketCancellation":true');

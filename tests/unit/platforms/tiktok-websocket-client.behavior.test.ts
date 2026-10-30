@@ -37,4 +37,22 @@ describe('TikTok maintained connector boundary', () => {
         sdk.emit('disconnected',{code:1011});sdk.enter();sdk.emit('disconnected',{code:1011});
         expect(client.isConnected).toBe(false);expect(connected).toHaveLength(1);expect(lost).toHaveLength(1);expect(client.lastConnectionError).toMatchObject({code:1011});
     });
+    test('routes standalone SDK emotes once only while the connection is ready', async () => {
+        const { client, sdk } = setup();
+        const received: unknown[] = [];
+        client.on('chat', event => received.push(event));
+        const payload = { common: { msgId: 'synthetic-emote-message', createTime: '1800000000' },
+            user: { displayId: 'synthetic-viewer', nickname: 'Synthetic Viewer' },
+            emoteList: [{ emoteId: 'synthetic-emote', image: { urlList: ['https://example.invalid/synthetic-emote.png'] } }] };
+        const pending = client.connect();
+        await flushConnectorSetup();
+        sdk.emit('emote', payload);
+        sdk.open(); sdk.enter(); await pending;
+        sdk.emit('emote', payload);
+        client.disconnect();
+        sdk.emit('emote', payload);
+        expect(received).toHaveLength(1);
+        expect(received[0]).toMatchObject({ msgId: 'synthetic-emote-message', user: { uniqueId: 'synthetic-viewer' },
+            emotes: [{ placeInComment: 0, emote: { emoteId: 'synthetic-emote', image: { imageUrl: 'https://example.invalid/synthetic-emote.png' } } }] });
+    });
 });

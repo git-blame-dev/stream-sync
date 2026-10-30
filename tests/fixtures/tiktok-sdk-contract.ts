@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
 import { TikTokLiveConnection, RouteConfig, ControlEvent } from 'tiktok-live-connector';
-import { ProtoMessageFetchResult, BaseProtoMessage, WebcastPushFrame, WebcastChatMessage, WebcastGiftMessage, WebcastRoomUserSeqMessage, WebcastSubNotifyMessage, CommonMessageData, User, Gift } from 'tiktok-live-proto/v3';
+import { ProtoMessageFetchResult, BaseProtoMessage, WebcastPushFrame, WebcastChatMessage, WebcastEmoteChatMessage, WebcastGiftMessage, WebcastRoomUserSeqMessage, WebcastSubNotifyMessage, WebcastSocialMessage, WebcastBarrageMessage, CommonMessageData, User, Gift, ImageModel, UserIdentity, BadgeStruct, ImageBadge, CombineBadgeStruct, EmoteModel } from 'tiktok-live-proto/v3';
 import { TikTokWebSocketClient, type Connector } from '../../src/platforms/tiktok-websocket-client';
 import { createTikTokConnector } from '../../src/platforms/tiktok/tiktok-connector';
 import { createTikTokEventFactory } from '../../src/platforms/tiktok/events/event-factory';
@@ -14,7 +14,18 @@ initializeLoggingConfig({logging:{console:{enabled:false},file:{enabled:false}}}
 const empty=new Uint8Array();
 const roomId='9000000000000000001';
 const common={...CommonMessageData.decode(empty),msgId:'9000000000000000002',createTime:'1800000000'};
-const user={...User.decode(empty),id:'9000000000000000003',displayId:'synthetic-viewer',nickname:'Synthetic Viewer'};
+const image = (name: string) => ({ ...ImageModel.decode(empty), urlList: [`https://example.invalid/synthetic-${name}.png`] });
+const user={...User.decode(empty),id:'9000000000000000003',displayId:'synthetic-viewer',nickname:'Synthetic Viewer',
+    avatarThumb: image('avatar'), badgeList: [
+        { ...BadgeStruct.decode(empty), displayType: 1, image: { ...ImageBadge.decode(empty), image: image('image-badge') } },
+        { ...BadgeStruct.decode(empty), displayType: 4, combine: { ...CombineBadgeStruct.decode(empty), icon: image('combine-badge'), str: 'Synthetic badge' } },
+    ] };
+const userIdentity = { ...UserIdentity.decode(empty), isModeratorOfAnchor: true, isSubscriberOfAnchor: true };
+const emote = { ...EmoteModel.decode(empty), emoteId: 'synthetic-emote', image: image('emote') };
+const expectedBadges = [
+    { imageUrl: 'https://example.invalid/synthetic-image-badge.png', source: 'tiktok', label: '' },
+    { imageUrl: 'https://example.invalid/synthetic-combine-badge.png', source: 'tiktok', label: 'Synthetic badge' },
+];
 function frame(type:string,payload:Uint8Array=empty){return WebcastPushFrame.encode({...WebcastPushFrame.decode(empty),payloadEncoding:'pb',payloadType:type,payload:Buffer.from(payload)}).finish();}
 function message(method:string,payload:Uint8Array){return frame('msg',ProtoMessageFetchResult.encode({...ProtoMessageFetchResult.decode(empty),messages:[{...BaseProtoMessage.decode(empty),method,payload:Buffer.from(payload)}]}).finish());}
 
@@ -30,15 +41,70 @@ async function main(){
         await client.connect();assert.equal(client.isConnected,true);
         const chat=once(client,'chat',{signal:AbortSignal.timeout(2000)});const gift=once(client,'gift',{signal:AbortSignal.timeout(2000)});const viewer=once(client,'roomUser',{signal:AbortSignal.timeout(2000)});const subscription=once(client,'subscribe',{signal:AbortSignal.timeout(2000)});
         for(const socket of server.clients){
-            socket.send(message('WebcastChatMessage',WebcastChatMessage.encode({...WebcastChatMessage.decode(empty),common,user,content:'synthetic hello'}).finish()));
-            socket.send(message('WebcastGiftMessage',WebcastGiftMessage.encode({...WebcastGiftMessage.decode(empty),common,user,repeatCount:3,repeatEnd:1,gift:{...Gift.decode(empty),name:'Synthetic Rose',diamondCount:5,type:1}}).finish()));
+            socket.send(message('WebcastChatMessage',WebcastChatMessage.encode({...WebcastChatMessage.decode(empty),common,user,userIdentity,content:'synthetic hello',emotes:[{index:0,emote}]}).finish()));
+            socket.send(message('WebcastGiftMessage',WebcastGiftMessage.encode({...WebcastGiftMessage.decode(empty),common,user,repeatCount:3,repeatEnd:1,gift:{...Gift.decode(empty),name:'Synthetic Rose',diamondCount:5,type:1,icon:image('gift')}}).finish()));
             socket.send(message('WebcastSubNotifyMessage',WebcastSubNotifyMessage.encode({...WebcastSubNotifyMessage.decode(empty),common,user,subMonth:'3'}).finish()));
             socket.send(message('WebcastRoomUserSeqMessage',WebcastRoomUserSeqMessage.encode({...WebcastRoomUserSeqMessage.decode(empty),total:'4'}).finish()));
         }
-        assert.equal(normalizeTikTokChatEvent((await chat)[0]).message.text,'synthetic hello');
-        assert.equal(normalizeTikTokGiftEvent((await gift)[0]).amount,15);
+        const chatPayload = (await chat)[0];
+        const normalizedChat = normalizeTikTokChatEvent(chatPayload);
+        assert.equal(chatPayload.msgId, common.msgId);
+        assert.equal(normalizedChat.message.text,'synthetic hello');
+        assert.equal(normalizedChat.userId, 'synthetic-viewer');
+        assert.equal(normalizedChat.timestamp, '2027-01-15T08:00:00.000Z');
+        assert.equal(normalizedChat.isMod, true);
+        assert.equal(normalizedChat.isPaypiggy, true);
+        assert.equal(normalizedChat.metadata.profilePicture, 'https://example.invalid/synthetic-avatar.png');
+        assert.deepEqual(normalizedChat.badgeImages, expectedBadges);
+        assert.deepEqual(normalizedChat.message.parts?.[0], {type:'emote',platform:'tiktok',emoteId:'synthetic-emote',imageUrl:'https://example.invalid/synthetic-emote.png',placeInComment:0});
+        const normalizedGift = normalizeTikTokGiftEvent((await gift)[0]);
+        assert.equal(normalizedGift.amount,15);
+        assert.equal(normalizedGift.avatarUrl, 'https://example.invalid/synthetic-avatar.png');
+        assert.equal(normalizedGift.giftImageUrl, 'https://example.invalid/synthetic-gift.png');
+        assert.equal(normalizedGift.id, common.msgId);
+        assert.equal(normalizedGift.timestamp, normalizedChat.timestamp);
         assert.equal((await viewer)[0].viewerCount,4);
-        assert.equal(createTikTokEventFactory().createSubscription((await subscription)[0]).months,3);
+        const subscribed = createTikTokEventFactory().createSubscription((await subscription)[0]);
+        assert.equal(subscribed.months,3);
+        assert.equal(subscribed.avatarUrl, 'https://example.invalid/synthetic-avatar.png');
+
+        const standalone = once(client, 'chat', { signal: AbortSignal.timeout(2000) });
+        for (const socket of server.clients) socket.send(message('WebcastEmoteChatMessage', WebcastEmoteChatMessage.encode({
+            ...WebcastEmoteChatMessage.decode(empty), common, user, userIdentity, emoteList: [emote, { ...emote, emoteId: 'synthetic-second' }],
+        }).finish()));
+        const standalonePayload = (await standalone)[0];
+        const normalizedEmotes = normalizeTikTokChatEvent(standalonePayload);
+        assert.equal(standalonePayload.msgId, common.msgId);
+        assert.equal(normalizedEmotes.message.text, '');
+        assert.deepEqual(normalizedEmotes.message.parts?.map(part => part.emoteId), ['synthetic-emote', 'synthetic-second']);
+        assert.equal(normalizedEmotes.metadata.profilePicture, normalizedChat.metadata.profilePicture);
+        assert.deepEqual(normalizedEmotes.badgeImages, expectedBadges);
+        assert.equal(normalizedEmotes.isMod, true);
+        assert.equal(normalizedEmotes.timestamp, normalizedChat.timestamp);
+
+        for (const action of ['follow', 'share']) {
+            const social = once(client, action, { signal: AbortSignal.timeout(2000) });
+            for (const socket of server.clients) socket.send(message('WebcastSocialMessage', WebcastSocialMessage.encode({
+                ...WebcastSocialMessage.decode(empty), user,
+                common: { ...common, displayText: { defaultPattern: '', defaultFormat: undefined, pieces: [], key: `synthetic_${action}` } },
+            }).finish()));
+            const payload = (await social)[0];
+            assert.equal(payload.msgId, common.msgId);
+            assert.equal(payload.user.uniqueId, 'synthetic-viewer');
+            assert.equal(payload.user.profilePicture.url[0], 'https://example.invalid/synthetic-avatar.png');
+        }
+        const memberships: unknown[] = [];
+        client.on('superfan', data => memberships.push(data));
+        const purchase = once(client, 'superfan', { signal: AbortSignal.timeout(2000) });
+        for (const socket of server.clients) {
+            socket.send(message('WebcastBarrageMessage', WebcastBarrageMessage.encode({ ...WebcastBarrageMessage.decode(empty), common, user,
+                content: { defaultPattern: '', defaultFormat: undefined, pieces: [], key: 'ttlive_superFan_commentNotif_superFanJoined' }, msgType: 11 }).finish()));
+            socket.send(message('WebcastBarrageMessage', WebcastBarrageMessage.encode({ ...WebcastBarrageMessage.decode(empty), common, user,
+                content: { defaultPattern: '', defaultFormat: undefined, pieces: [], key: 'ttlive_superFan_synthetic_purchase' }, msgType: 4 }).finish()));
+        }
+        const member = (await purchase)[0];
+        assert.equal(memberships.length, 1);
+        assert.equal(createTikTokEventFactory().createSuperfan(member).avatarUrl, 'https://example.invalid/synthetic-avatar.png');
         client.disconnect();assert.equal(client.isConnected,false);
     }finally{client.disconnect();for(const socket of server.clients)socket.terminate();server.close();}
 
@@ -77,6 +143,6 @@ async function main(){
         try {await assert.rejects(wrapped.connect(),error=>!!(error&&typeof error==='object'&&'code' in error&&error.code===(status===401?4401:status===403?4403:4429)));}
         finally {wrapped.disconnect();http.closeAllConnections();http.close();}
     }
-    process.stdout.write(JSON.stringify({wireChat:true,wireGift:true,wireViewers:true,wireSubscription:true,destinationGuard:true,signingCancellation:true,lateSocketCancellation:true,httpStatusClassification:true})+'\n');
+    process.stdout.write(JSON.stringify({wireChat:true,wireGift:true,wireViewers:true,wireSubscription:true,wireEmotes:true,wireMedia:true,wireSocial:true,wireMembershipAliases:true,destinationGuard:true,signingCancellation:true,lateSocketCancellation:true,httpStatusClassification:true})+'\n');
 }
 test('actual TikTok SDK transport and signer contracts',main,15000);
