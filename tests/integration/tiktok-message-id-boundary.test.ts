@@ -89,4 +89,18 @@ describe('TikTok root message-ID boundary', () => {
         }
         expect(gifts).toHaveLength(3);
     });
+
+    it('ignores immediate gift replays without reserving interim streak packets or dropping distinct purchases', async () => {
+        const { platform, gifts } = createPlatform();
+        const raw = createTikTokGiftNotificationFixture();
+        const completed = { ...raw, giftDetails: { ...raw.giftDetails, giftType: 1 }, repeatCount: 3, repeatEnd: 1,
+            common: { ...raw.common, msgId: 'synthetic-completed-gift' } };
+        await platform.handleTikTokGift({ ...completed, repeatCount: 1, repeatEnd: 0 });
+        expect(gifts).toHaveLength(0);
+        await Promise.all([platform.handleTikTokGift(completed), platform.handleTikTokGift(completed)]);
+        expect(gifts).toHaveLength(1);
+        expect(gifts[0]?.giftCount).toBe(3);
+        await platform.handleTikTokGift({ ...completed, common: { ...completed.common, msgId: 'synthetic-next-purchase' } });
+        expect(gifts).toHaveLength(2);
+    });
 });

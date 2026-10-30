@@ -1295,6 +1295,10 @@ class TikTokPlatform extends EventEmitter {
             }
 
             if (!this.config.giftAggregationEnabled) {
+                if (this._shouldSkipDuplicatePlatformMessage({ common: { msgId: normalizedGift.id } }).isDuplicate) {
+                    this.logger.debug('Ignoring duplicate TikTok gift message', 'tiktok');
+                    return;
+                }
                 this.logger.debug('[TikTok Gift] Aggregation disabled, sending gift immediately', 'tiktok');
                 await this.handleOfficialGift(normalizedGift, { isStreakCompleted });
                 return;
