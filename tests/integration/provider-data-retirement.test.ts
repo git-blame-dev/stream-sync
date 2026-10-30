@@ -151,8 +151,8 @@ test('Twitch stale avatar completion cannot overwrite a replacement owner cache 
   expect([...platform.avatarUrlCache.values()]).toEqual(['https://synthetic.invalid/new.png']);
 });
 
-for (const nested of [false, true]) for (const rejection of [false, true]) {
-  test(`TikTok same-connection reregistration fences ${nested ? 'nested' : 'ingress'} raw-log ${rejection ? 'failure' : 'success'} continuations`, async () => {
+for (const direct of [false, true]) for (const rejection of [false, true]) {
+  test(`TikTok same-connection reregistration fences ${direct ? 'direct helper' : 'ingress'} raw-log ${rejection ? 'failure' : 'success'} continuations`, async () => {
     const held = Promise.withResolvers<void>();
     const entered = Promise.withResolvers<void>();
     const platform = new TikTokPlatform({ enabled: false, dataLoggingEnabled: true, dataLoggingPath: '/tmp/synthetic-unused' }, { logger });
@@ -160,7 +160,7 @@ for (const nested of [false, true]) for (const rejection of [false, true]) {
     platform.rawPlatformDataLoggingService.rawEventLogWriter = {
       resolveLogFileName: () => 'synthetic-unused.jsonl',
       writeRawEvent: async () => {
-        if (++writes === (nested ? 2 : 1)) { entered.resolve(); await held.promise; }
+        if (++writes === 1) { entered.resolve(); await held.promise; }
         return { fileName: 'synthetic-unused.jsonl', filePath: '/tmp/synthetic-unused.jsonl' };
       },
     };
@@ -171,12 +171,14 @@ for (const nested of [false, true]) for (const rejection of [false, true]) {
     platform.on('platform:event', event => events.push(event));
     const payload = { comment: 'synthetic chat', user: { uniqueId: 'synthetic-viewer', nickname: 'SyntheticViewer' },
       common: { msgId: 'synthetic-old', createTime: 1767225600 } };
-    connection.emit('chat', payload);
+    const pending = direct ? platform._handleChatMessage(payload) : null;
+    if (!direct) connection.emit('chat', payload);
     await entered.promise;
     platform.cleanupEventListeners();
     platform.setupEventListeners();
     if (rejection) held.reject(new Error('synthetic delayed raw failure'));
     else held.resolve();
+    await pending;
     await drain();
     expect(events).toHaveLength(0);
     connection.emit('chat', { ...payload, common: { ...payload.common, msgId: 'synthetic-new' } });

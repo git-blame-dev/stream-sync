@@ -9,7 +9,7 @@ import { PlatformConnectionFactory } from '../utils/platform-connection-factory'
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { resolveLogger as resolveAppLogger } from '../utils/logger-resolver';
 import { resolveTikTokTimestampMs, resolveTikTokTimestampISO } from '../utils/platform-timestamp';
-import { getSystemTimestampISO } from '../utils/timestamp';
+import { getSystemTimestampISO, isIsoTimestamp } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createMonetizationErrorPayload } from '../utils/monetization-error-utils';
 import { createRetrySystem } from '../utils/retry-system';
@@ -264,6 +264,7 @@ type StandardEventOptions = TikTokPayload & {
     factoryMethod?: string;
     emitType?: string;
     logEventType?: string;
+    rawEventLogged?: boolean;
     normalizedData?: TikTokPayload | null;
 };
 
@@ -355,6 +356,7 @@ class TikTokPlatform extends EventEmitter {
     declare listenersConfigured: boolean;
     declare recentPlatformMessageIds: Map<string, number>;
     declare recentShareActors: Set<string>;
+    private readonly recentPaypiggyActors = new Map<string, number>();
     declare deduplicationConfig: DeduplicationConfig;
     declare fallbackAvatarUrl: string;
     declare config: TikTokConfig;
@@ -567,7 +569,7 @@ class TikTokPlatform extends EventEmitter {
             },
             _logIncomingEvent: (eventType: string, data: unknown) => platform._logIncomingEvent(eventType, data),
             _emitPlatformEvent: (type: string, payload: TikTokPayload) => platform._emitPlatformEvent(type, payload),
-            _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => platform._handleStandardEvent(eventType, data, options),
+            _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => platform._handleStandardEvent(eventType, data, { ...options, rawEventLogged: true }),
             _handleStreamEnd: (data?: TikTokRawEvent, connectionGeneration?: number) => platform._handleStreamEnd(data, connectionGeneration),
             handleConnectionIssue: (issue: unknown, isError?: boolean) => platform.handleConnectionIssue(issue, isError),
             handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
@@ -585,7 +587,7 @@ class TikTokPlatform extends EventEmitter {
             _getTimestamp: (data: TikTokRawEvent) => platform._getTimestamp(data),
             _getPlatformMessageId: (data: TikTokRawEvent) => platform._getPlatformMessageId(data),
             _handleChatMessage: async (rawData: TikTokRawEvent, normalizedData: TikTokPayload) => {
-                await platform._handleChatMessage(rawData, normalizedData);
+                await platform._handleChatMessage(rawData, normalizedData, true);
             }
         };
         return this.cachedEventRouterAdapter;
@@ -1799,6 +1801,26 @@ class TikTokPlatform extends EventEmitter {
         return { isDuplicate: false, cleanupPerformed };
     }
 
+    private _shouldSkipDuplicatePaypiggyActor(userId: unknown): boolean {
+        if (typeof userId !== 'string' || !userId.trim()) return false;
+        const actor = userId.trim();
+        const now = this.monotonicNow();
+        const lastSeen = this.recentPaypiggyActors.get(actor);
+        if (lastSeen !== undefined && now - lastSeen < 60_000) return true;
+        this.recentPaypiggyActors.delete(actor);
+        this.recentPaypiggyActors.set(actor, now);
+        // Preserve this bounded window across reconnects so fresh alias IDs cannot replay a purchase.
+        const maxCacheSize = this.deduplicationConfig?.maxCacheSize ?? 2000;
+        for (const [id, seenAt] of this.recentPaypiggyActors) {
+            if (now - seenAt >= 60_000 || this.recentPaypiggyActors.size > maxCacheSize) {
+                this.recentPaypiggyActors.delete(id);
+            } else {
+                break;
+            }
+        }
+        return false;
+    }
+
     _shouldSkipDuplicateShareActor(userId: unknown): boolean {
         const normalizedUserId = typeof userId === 'string'
             ? userId.trim()
@@ -1915,8 +1937,20 @@ class TikTokPlatform extends EventEmitter {
         const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}`;
         const emitType = options.emitType || eventType;
         try {
-            await this._logRawEvent(options.logEventType || emitType, data);
+            if (!options.rawEventLogged) await this._logRawEvent(options.logEventType || emitType, data);
             if (!isCurrent()) return { success: false };
+            const isMembership = factoryMethod === 'createSubscription' || factoryMethod === 'createSuperfan';
+            if (isMembership || factoryMethod === 'createEnvelope') {
+                const timestamp = TikTokPlatform.resolveEventTimestampMs(data);
+                if (timestamp !== null && timestamp < this.connectionTime) {
+                    this.logger.debug('Ignoring pre-connection TikTok monetization event', 'tiktok');
+                    return { success: false };
+                }
+                if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
+                    this.logger.debug('Ignoring duplicate TikTok monetization message', 'tiktok');
+                    return { success: false };
+                }
+            }
             const normalizedInput = {
                 ...asRecord(data),
                 avatarUrl: this._resolveAvatarUrl(data)
@@ -1926,6 +1960,10 @@ class TikTokPlatform extends EventEmitter {
                 throw new Error(`Missing TikTok event factory method: ${factoryMethod}`);
             }
             const eventData = eventFactoryMethod(normalizedInput, options);
+            if (isMembership && isIsoTimestamp(eventData.timestamp) && this._shouldSkipDuplicatePaypiggyActor(eventData.userId)) {
+                this.logger.debug('Ignoring recent TikTok membership alias', 'tiktok');
+                return { success: false };
+            }
             this._emitPlatformEvent(emitType, eventData);
             return { success: true };
         } catch (error) {
@@ -1939,9 +1977,10 @@ class TikTokPlatform extends EventEmitter {
     }
 
 
-    async _handleChatMessage(data: unknown, normalizedData: TikTokPayload | null = null) {
+    async _handleChatMessage(data: unknown, normalizedData: TikTokPayload | null = null, rawEventLogged = false) {
         return this._handleStandardEvent('chatMessage', data, {
             factoryMethod: 'createChatMessage',
+            rawEventLogged,
             emitType: PlatformEvents.CHAT_MESSAGE,
             normalizedData
         });

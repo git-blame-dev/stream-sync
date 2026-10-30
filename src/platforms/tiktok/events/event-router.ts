@@ -144,6 +144,22 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return value as Record<string, unknown>;
 }
 
+function isNonPurchaseSuperFanBarrage(data: TikTokRawEvent): boolean {
+    const msgType = typeof data.msgType === 'number' || typeof data.msgType === 'string' ? Number(data.msgType) : null;
+    if (msgType !== null && [8, 9, 10, 11].includes(msgType)) return true;
+    const subType = typeof data.subType === 'string' ? data.subType.toLowerCase() : '';
+    if (subType.endsWith('_entrance') || subType.endsWith('_upgrade')) return true;
+    const texts = [data.content, data.commonBarrageContent, data.common?.displayText, data.displayText];
+    return texts.some(value => {
+        const text = asRecord(value);
+        if (!text) return false;
+        const isNonPurchaseKey = [text.key, text.displayType].some(key =>
+            typeof key === 'string' && /superfanjoined|entrance|upgrade/i.test(key));
+        return isNonPurchaseKey || (typeof text.defaultPattern === 'string'
+            && /\bjoined\b|reached\s+(?:member|gifter)?\s*lv\./i.test(text.defaultPattern));
+    });
+}
+
 function asTikTokRawEvent(value: unknown): TikTokRawEvent {
 const record = asRecord(value);
 return record ? { ...record } : {};
@@ -596,6 +612,10 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('superfan', data);
             if (!isCurrentRegistration()) return;
+            if (isNonPurchaseSuperFanBarrage(data)) {
+                platform.logger.debug('Ignoring non-purchase TikTok Super Fan barrage', 'tiktok');
+                return;
+            }
 
             try {
                 await platform._handleStandardEvent('paypiggy', data, {
