@@ -66,12 +66,20 @@ type Session = {
     reject: (error: unknown) => void;
     settled: boolean;
     handoff: boolean;
+    connectionAttempt: number;
+    startedAt: number;
+    lastMessageAt: number | null;
+    keepaliveTimeoutMs: number | null;
+    keepaliveDueAt: number | null;
+    readyAt: number | null;
 };
 type LossCause = 'socket-close' | 'socket-error' | 'welcome-timeout' | 'first-subscription-timeout'
     | 'keepalive-timeout' | 'message-or-setup-failure';
 type Owner = {
     disposed: boolean;
     generation: number;
+    nextConnectionAttempt: number;
+    unstableLosses: number;
     active: Session | null;
     pending: Session | null;
     operation: { controller: AbortController; kind: 'reconnect' | 'repair' } | null;
@@ -79,6 +87,37 @@ type Owner = {
 
 // Application admission limit, not a Twitch protocol maximum.
 const MAX_EVENTSUB_WS_MESSAGE_BYTES = 1024 * 1024;
+const KEEPALIVE_GRACE_MS = 5000;
+const STABLE_SESSION_MS = 120000;
+
+const TRANSPORT_ERROR_NAMES = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError', 'TimeoutError', 'AggregateError']);
+const TRANSPORT_ERROR_CODES = new Set([
+    'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH',
+    'ECONNABORTED', 'EPIPE', 'ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'ERR_SSL_WRONG_VERSION_NUMBER'
+]);
+
+function normalizeWebSocketError(value: unknown): Error {
+    if (value instanceof Error) return value;
+    // Bun's ws adapter can emit an ErrorEvent; Node's ws emits the Error directly.
+    try {
+        const nested = value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
+        if (nested instanceof Error) return nested;
+    } catch { /* An unusable envelope must still retire its transport. */ }
+    return new Error('EventSub WebSocket transport error');
+}
+
+function transportErrorCategory(error: unknown): { errorName: string; errorCode: string | null } {
+    try {
+        const value = error as { name?: unknown; code?: unknown } | null;
+        const name = value?.name;
+        const code = value?.code;
+        return {
+            errorName: typeof name === 'string' && TRANSPORT_ERROR_NAMES.has(name) ? name : 'unknown',
+            errorCode: typeof code === 'string' && TRANSPORT_ERROR_CODES.has(code) ? code : null
+        };
+    } catch { return { errorName: 'unknown', errorCode: null }; }
+}
 
 function parseWebSocketMessage(data: unknown): Record<string, unknown> {
     const checkSize = (size: number) => {
@@ -134,7 +173,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     const owner = (state: LifecycleState): Owner => {
         let value = owners.get(state);
         if (!value) {
-            value = { disposed: false, generation: 0, active: null, pending: null, operation: null };
+            value = { disposed: false, generation: 0, nextConnectionAttempt: 0, unstableLosses: 0, active: null, pending: null, operation: null };
             owners.set(state, value);
         }
         return value;
@@ -185,8 +224,12 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     const lose = (state: LifecycleState, session: Session, error: unknown, cause: LossCause, code: number | null = null) => {
         if (!current(state, session)) return;
         const phase = session.settled ? 'ready' : session.sessionId ? 'setting-up' : 'startup';
+        const observedAt = now();
+        const elapsed = (since: number | null) => since === null || !Number.isFinite(since) || !Number.isFinite(observedAt)
+            ? null : Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(observedAt - since)));
         const value = owner(state);
         const wasActive = value.active === session;
+        if (wasActive && session.readyAt !== null) value.unstableLosses = Math.min(value.unstableLosses + 1, 16);
         if (wasActive) {
             value.active = null;
             state.disconnectedSessionId = session.sessionId;
@@ -209,7 +252,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             state.logger?.warn?.('EventSub session lost', 'twitch', {
                 cause, phase, closeCode: code === null ? null : Number.isInteger(code) && code >= 1000 && code <= 4999 ? code : 0,
                 willReconnect: willReconnect || !!value.pending,
-                terminal: recoveryBlocked || authorizationFailure
+                terminal: recoveryBlocked || authorizationFailure,
+                connectionAttempt: session.connectionAttempt,
+                sessionAgeMs: elapsed(session.startedAt),
+                silenceMs: elapsed(session.lastMessageAt),
+                keepaliveTimeoutMs: session.keepaliveTimeoutMs,
+                deadlineLatenessMs: cause === 'keepalive-timeout' ? elapsed(session.keepaliveDueAt) : null,
+                ...(cause === 'socket-error' ? transportErrorCategory(error) : {})
             });
         } catch { /* Diagnostics cannot interrupt loss notification or recovery. */ }
         if (activeSurvives) return;
@@ -230,7 +279,8 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             catch (error) { reject(error); return; }
             const session: Session = { socket, controller: new AbortController(), sessionId: null,
                 firstSubscriptionAt: Infinity, firstSubscriptionCreated: false, timer: null, startupTimer: null,
-                settled: false, handoff, reject };
+                settled: false, handoff, reject, connectionAttempt: ++value.nextConnectionAttempt,
+                startedAt: now(), lastMessageAt: null, keepaliveTimeoutMs: null, keepaliveDueAt: null, readyAt: null };
             value.pending = session;
             if (!handoff) state.ws = socket;
             state.connectionStartTime = now();
@@ -238,15 +288,32 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             const ready = () => {
                 if (!current(state, session) || session.settled) return;
                 session.settled = true;
+                session.readyAt = now();
                 state.subscriptionsReady = true;
                 resolve();
                 notify(state, 'eventSubConnected', { sessionId: session.sessionId });
             };
             let silenceMs = 0;
+            const checkWatchdog = (deadline: number) => {
+                if (!current(state, session) || session.keepaliveDueAt !== deadline) return;
+                const remaining = deadline - now();
+                if (remaining > 0) {
+                    session.timer = safeSetTimeout(() => checkWatchdog(deadline), remaining);
+                    return;
+                }
+                lose(state, session, new Error('EventSub keepalive silence timeout'), 'keepalive-timeout');
+            };
             const resetWatchdog = () => {
                 if (!silenceMs || !current(state, session)) return;
                 if (session.timer) clearTimeout(session.timer);
-                session.timer = safeSetTimeout(() => lose(state, session, new Error('EventSub keepalive silence timeout'), 'keepalive-timeout'), silenceMs);
+                session.lastMessageAt = now();
+                session.keepaliveTimeoutMs = silenceMs;
+                const deadline = session.lastMessageAt + silenceMs + KEEPALIVE_GRACE_MS;
+                session.keepaliveDueAt = deadline;
+                if (session.readyAt !== null && session.lastMessageAt - session.readyAt >= STABLE_SESSION_MS) {
+                    value.unstableLosses = 0;
+                }
+                session.timer = safeSetTimeout(() => checkWatchdog(deadline), silenceMs + KEEPALIVE_GRACE_MS);
             };
             socket.on('message', async (data: unknown) => {
                 if (!current(state, session)) return;
@@ -313,7 +380,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     notify(state, 'eventSubSubscriptionFailed', { sessionId: session.sessionId, reason: (error as { reason?: unknown })?.reason, error: error instanceof Error ? error.message : String(error) });
                 }
             });
-            socket.on('error', (error: unknown) => lose(state, session, error, 'socket-error'));
+            socket.on('error', (error: unknown) => lose(state, session, normalizeWebSocketError(error), 'socket-error'));
             socket.on('close', (code: unknown) => {
                 const closeCode = typeof code === 'number' ? code : 0;
                 const phase = session.settled ? 'EventSub session' : session.sessionId ? 'EventSub subscription setup' : 'initial handshake';
@@ -332,7 +399,10 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             notify(state, 'eventSubDisconnected', { reason: 'max reconnect attempts exceeded', abnormal: true, willReconnect: false, terminal: true });
             return;
         }
-        const delay = Math.min(state.retryDelay * Math.pow(2, state.retryAttempts) + random() * 1000, 30000);
+        // Short-lived ready sessions affect backoff, not the consecutive setup-failure limit.
+        const exponent = Math.max(state.retryAttempts, value.unstableLosses - 1);
+        const ceiling = Math.min(state.retryDelay * Math.pow(2, exponent), 30000);
+        const delay = ceiling * (0.5 + random() * 0.5);
         state.reconnectTimeout = safeSetTimeout(() => {
             state.reconnectTimeout = null;
             void state._reconnect?.();

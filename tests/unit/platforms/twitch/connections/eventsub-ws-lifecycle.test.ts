@@ -236,6 +236,120 @@ describe("Twitch EventSub WS lifecycle", () => {
     payload: { session: { id: 'synthetic-session', keepalive_timeout_seconds: 30 } },
   }));
 
+  test("rechecks an early watchdog and never treats pings as EventSub activity", async () => {
+    const lifecycle = buildLifecycle();
+    const state = createState();
+    const connected = lifecycle.connectWebSocket(state); const socket = state.ws;
+    welcome(socket); await connected;
+    testClock.advance(34000); await advanceTimersByTime(35000);
+    expect(state.scheduleReconnectCalls).toHaveLength(0);
+    socket.emit('message', JSON.stringify({ metadata: { message_type: 'notification' }, payload: {} }));
+    testClock.advance(30000); await advanceTimersByTime(30000);
+    socket.emit('ping', Buffer.from('synthetic-ping'));
+    socket.emit('pong', Buffer.from('synthetic-pong'));
+    testClock.advance(5000); await advanceTimersByTime(5000);
+    expect(state.scheduleReconnectCalls).toHaveLength(1);
+    lifecycle.dispose(state);
+    await advanceTimersByTime(35000);
+    expect(state.scheduleReconnectCalls).toHaveLength(1);
+  });
+
+  test("backoff survives repeated ready-session losses without exhausting setup retries and resets after healthy traffic", async () => {
+    const lifecycle = buildLifecycle();
+    const state = createState({ maxRetryAttempts: 1 });
+    let reconnecting = Promise.resolve();
+    state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
+    state._reconnect = () => { reconnecting = lifecycle.reconnect(state); return reconnecting; };
+    state._connectWebSocket = async () => {
+      const connected = lifecycle.connectWebSocket(state);
+      welcome(state.ws);
+      await connected;
+    };
+    await state._connectWebSocket();
+    for (const expectedDelay of [2500, 5000, 10000, 15000, 15000]) {
+      testClock.advance(5000); await advanceTimersByTime(5000);
+      state.ws.emit('close', 1006);
+      testClock.advance(expectedDelay - 1); await advanceTimersByTime(expectedDelay - 1);
+      expect(state.ws).toBeNull();
+      testClock.advance(1); await advanceTimersByTime(1);
+      await reconnecting;
+      expect(state.retryAttempts).toBe(0);
+      expect(state.isInitialized).toBe(true);
+      expect(state.subscriptionsReady).toBe(true);
+    }
+    for (let index = 0; index < 4; index++) {
+      testClock.advance(30000); await advanceTimersByTime(30000);
+      state.ws.emit('message', JSON.stringify({ metadata: { message_type: index % 2 ? 'notification' : 'session_keepalive' }, payload: {} }));
+    }
+    state.ws.emit('close', 1006);
+    testClock.advance(2499); await advanceTimersByTime(2499);
+    expect(state.ws).toBeNull();
+    testClock.advance(1); await advanceTimersByTime(1);
+    await reconnecting;
+    expect(state.subscriptionsReady).toBe(true);
+    lifecycle.dispose(state);
+  });
+
+  test("reconnect delay remains jittered at the cap", async () => {
+    for (const [randomValue, expectedDelay] of [[0, 15000], [0.5, 22500], [0.999, 29985]] as const) {
+      const lifecycle = buildLifecycle({ random: () => randomValue });
+      const state = createState({ retryAttempts: 8 });
+      lifecycle.scheduleReconnect(state);
+      await advanceTimersByTime(expectedDelay - 1);
+      expect(state.reconnectCalls).toHaveLength(0);
+      await advanceTimersByTime(1);
+      expect(state.reconnectCalls).toHaveLength(1);
+      lifecycle.dispose(state);
+    }
+  });
+
+  test("normalizes native ErrorEvent causes and keeps transport diagnostic values allowlisted", async () => {
+    for (const wrap of [false, true]) {
+      const logger = createRecordingLogger();
+      const lifecycle = buildLifecycle(); const state = createState({ logger });
+      const connected = lifecycle.connectWebSocket(state); const rejected = connected.catch(error => error);
+      const cause = Object.assign(new Error('synthetic-secret-error-message'), { code: 'ECONNRESET' });
+      state.ws.emit('error', wrap ? new ErrorEvent('error', { error: cause, message: 'synthetic-secret-wrapper-message' }) : cause);
+      expect(await rejected).toBe(cause);
+      const diagnostics = logger.entries.find(entry => entry.message === 'EventSub session lost')?.data;
+      expect(diagnostics).toMatchObject({ cause: 'socket-error', phase: 'startup', errorName: 'Error', errorCode: 'ECONNRESET' });
+      expect(JSON.stringify(diagnostics)).not.toContain('synthetic-secret');
+      expect(state.scheduleReconnectCalls).toHaveLength(1);
+      lifecycle.dispose(state);
+    }
+  });
+
+  test("records monotonic silence and timer lateness at the tolerated deadline", async () => {
+    const logger = createRecordingLogger(); let monotonic = 1000;
+    const lifecycle = buildLifecycle({ now: () => monotonic }); const state = createState({ logger });
+    const connected = lifecycle.connectWebSocket(state); welcome(state.ws); await connected;
+    monotonic += 10000; await advanceTimersByTime(10000);
+    state.ws.emit('message', JSON.stringify({ metadata: { message_type: 'notification' }, payload: {} }));
+    setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    monotonic += 35007; await advanceTimersByTime(35000);
+    expect(state.scheduleReconnectCalls).toHaveLength(1);
+    expect(logger.entries.find(entry => entry.message === 'EventSub session lost')?.data).toMatchObject({
+      connectionAttempt: 1, sessionAgeMs: 45007, silenceMs: 35007, keepaliveTimeoutMs: 30000, deadlineLatenessMs: 7
+    });
+    const replacement = lifecycle.connectWebSocket(state); const socket = state.ws; welcome(socket); await replacement;
+    socket.emit('error', Object.assign(new Error('synthetic-secret-message'), { name: 'synthetic-secret-name', code: 'synthetic-secret-code' }));
+    expect(logger.entries.filter(entry => entry.message === 'EventSub session lost').at(-1)?.data).toMatchObject({
+      connectionAttempt: 2, errorName: 'unknown', errorCode: null
+    });
+    lifecycle.dispose(state);
+  });
+
+  test("contains malformed error envelopes without invoking their string conversion", async () => {
+    for (const error of [null, { get error() { throw new Error('synthetic getter'); }, toString() { throw new Error('synthetic conversion'); } }]) {
+      const lifecycle = buildLifecycle(); const state = createState();
+      const rejected = lifecycle.connectWebSocket(state).catch(error => error);
+      expect(() => state.ws.emit('error', error)).not.toThrow();
+      expect(await rejected).toMatchObject({ message: 'EventSub WebSocket transport error' });
+      expect(state.scheduleReconnectCalls).toHaveLength(1);
+      lifecycle.dispose(state);
+    }
+  });
+
   test("ready close reports one safe loss diagnostic and an accurate emitted reason", async () => {
     for (const code of [1000, 1006, 4002]) {
       const logger = createRecordingLogger();
@@ -253,11 +367,12 @@ describe("Twitch EventSub WS lifecycle", () => {
       // Loss diagnostics are the operator-facing contract; exact fields also prove redaction.
       expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
         cause: 'socket-close', phase: 'ready', closeCode: code, willReconnect: true, terminal: false,
+        connectionAttempt: 1, sessionAgeMs: 0, silenceMs: 0, keepaliveTimeoutMs: 30000, deadlineLatenessMs: null,
       } }]);
     }
   });
 
-  test("30 second welcome stays healthy for 12 seconds, refreshes keepalive, and loses once at silence deadline", async () => {
+  test("30 second welcome tolerates boundary jitter, refreshes keepalive, and loses once after grace", async () => {
     const logger = createRecordingLogger();
     const lifecycle = buildLifecycle();
     const state = createState({ logger });
@@ -265,18 +380,26 @@ describe("Twitch EventSub WS lifecycle", () => {
     const socket = state.ws;
     welcome(socket);
     await connected;
+    testClock.advance(12000);
     await advanceTimersByTime(12000);
     expect(state.ws).toBe(socket);
     expect(state.subscriptionsReady).toBe(true);
     expect(state.scheduleReconnectCalls).toHaveLength(0);
     socket.emit('message', JSON.stringify({ metadata: { message_type: 'session_keepalive' }, payload: {} }));
-    await advanceTimersByTime(29999);
+    testClock.advance(30001);
+    await advanceTimersByTime(30001);
+    expect(state.ws).toBe(socket);
+    socket.emit('message', JSON.stringify({ metadata: { message_type: 'session_keepalive' }, payload: {} }));
+    testClock.advance(34999);
+    await advanceTimersByTime(34999);
     expect(state.ws).toBe(socket);
     expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([]);
+    testClock.advance(1);
     await advanceTimersByTime(1);
     expect(state.scheduleReconnectCalls).toHaveLength(1);
     expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
       cause: 'keepalive-timeout', phase: 'ready', closeCode: null, willReconnect: true, terminal: false,
+      connectionAttempt: 1, sessionAgeMs: 77001, silenceMs: 35000, keepaliveTimeoutMs: 30000, deadlineLatenessMs: 0,
     } }]);
     const replacement = lifecycle.connectWebSocket(state);
     const replacementSocket = state.ws;
@@ -316,6 +439,10 @@ describe("Twitch EventSub WS lifecycle", () => {
       expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
         cause, phase: cause === 'welcome-timeout' ? 'startup' : 'setting-up',
         closeCode: null, willReconnect: true, terminal: false,
+        connectionAttempt: 1, sessionAgeMs: 0,
+        silenceMs: cause === 'welcome-timeout' ? null : 0,
+        keepaliveTimeoutMs: cause === 'welcome-timeout' ? null : 30000, deadlineLatenessMs: null,
+        ...(cause === 'socket-error' ? { errorName: 'Error', errorCode: null } : {}),
       } }]);
       expect(state.scheduleReconnectCalls).toHaveLength(1);
       lifecycle.dispose(state);
@@ -1318,9 +1445,9 @@ describe("Twitch EventSub WS lifecycle", () => {
     state.retryDelay = 2000;
     lifecycle.scheduleReconnect(state);
 
-    await advanceTimersByTime(2100);
+    await advanceTimersByTime(1400);
     expect(state._isConnected).toBe(false);
-    await advanceTimersByTime(2100);
+    await advanceTimersByTime(100);
     expect(state._isConnected).toBe(true);
   });
 
