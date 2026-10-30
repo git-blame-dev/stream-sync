@@ -416,7 +416,7 @@ class ViewerCountSystem {
         this.counts[platformKey] = count;
         this.observations[platformKey] = { hasCompleteObservation: true, lastCompleteAt: completedAt,
             latestOutcome: 'complete', ...(observation ? { membershipGeneration: observation.membershipGeneration } : {}) };
-        this.logger.info(`${platformKey} viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+        if (count !== previousCount) this.logger.info(`${platformKey} viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         await this.notifyObservers(platformKey, count, previousCount);
         return true;
     }

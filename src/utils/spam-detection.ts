@@ -474,7 +474,7 @@ class DonationSpamDetection {
             }
 
             const remainingUsers = Object.keys(this.donationSpamTracker).length;
-            this.logger.info(`Cleanup complete: ${cleanedUsers} users removed, ${remainingUsers} users remaining`, 'spam-detection');
+            this.logger[cleanedUsers > 0 ? 'info' : 'debug'](`Cleanup complete: ${cleanedUsers} users removed, ${remainingUsers} users remaining`, 'spam-detection');
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.handleSpamDetectionError(`Error during spam detection cleanup: ${errorMessage}`, error);
