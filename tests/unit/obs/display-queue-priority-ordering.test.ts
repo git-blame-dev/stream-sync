@@ -19,8 +19,10 @@ describe('DisplayQueue priority ordering', () => {
         }, { PRIORITY_LEVELS }, { emit: () => {} }, {
             operatorControls: controls, delay: async () => {},
             onPresentationStarted: (item) => { presented.push(item.type); },
-            fetch: async (_url, init) => {
-                if (init?.method === 'POST') spoken.push((JSON.parse(String(init.body)) as { text: string }).text);
+            fetch: async (url, init) => {
+                if (init?.method === 'POST' && new URL(String(url)).pathname === '/v1/speak') {
+                    spoken.push((JSON.parse(String(init.body)) as { text: string }).text);
+                }
                 return new Response(null, { status: 200 });
             }
         });
