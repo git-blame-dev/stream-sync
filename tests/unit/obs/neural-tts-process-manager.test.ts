@@ -3,6 +3,7 @@ import { NeuralTtsProcessManager } from '../../../src/obs/neural-tts-process-man
 import { AppRuntime } from '../../../src/runtime/AppRuntime';
 import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
 import { noOpLogger } from '../../helpers/mock-factories';
+import { withTimeout } from '../../../src/utils/timeout-wrapper';
 
 type RecordedRequest = {
     url: string;
@@ -665,6 +666,60 @@ describe('NeuralTtsProcessManager', () => {
             expect(lifecycle).toEqual(['queue stopped', 'lease released', 'platforms disconnected']);
             expect(h.runtime.isStarted).toBe(false);
         } finally { initPlatformsObserver.mockRestore(); restoreObservers(); fetch.mockRestore(); }
+    });
+
+    it('waits for a warming neural service before completing real runtime startup and releases its lease', async () => {
+        const h = await createMainPresentationFixture();
+        h.config.logging.file.enabled = false;
+        h.config.logging.chat.enabled = false;
+        h.config.obs.ttsNotificationsEnabled = true;
+        h.config.obs.neuralTtsEndpoint = 'http://127.0.0.1:8765';
+        const requests: string[] = [];
+        const leaseBodies: unknown[] = [];
+        let healthCalls = 0;
+        let markReadinessProbe!: () => void;
+        const readinessProbe = new Promise<void>(resolve => { markReadinessProbe = resolve; });
+        let releaseReadiness!: () => void;
+        const readinessGate = new Promise<void>(resolve => { releaseReadiness = resolve; });
+        const syntheticFetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const path = new URL(String(input)).pathname;
+            requests.push(path);
+            if (path.startsWith('/v1/lease/')) leaseBodies.push(JSON.parse(String(init?.body)));
+            if (path === '/health') {
+                healthCalls += 1;
+                if (healthCalls === 1) return new Response(null, { status: 503 });
+                markReadinessProbe();
+                await readinessGate;
+                return new Response(null, { status: 200 });
+            }
+            if (path === '/v1/lease/acquire') return Response.json({ active_clients: 1, active_jobs: 0 });
+            if (path === '/v1/lease/release') return Response.json({ active_clients: 0, active_jobs: 0, should_shutdown: false });
+            throw new Error(`Unexpected synthetic neural request: ${path}`);
+        }, { preconnect: globalThis.fetch.preconnect });
+        const fetch = spyOn(globalThis, 'fetch').mockImplementation(syntheticFetch);
+        const starting = h.start();
+        try {
+            await withTimeout(readinessProbe, 2000);
+            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health']);
+            expect(h.runtime.isStarted).toBe(false);
+            releaseReadiness();
+            await starting;
+            expect(h.runtime.isStarted).toBe(true);
+            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health']);
+        } finally {
+            releaseReadiness();
+            try {
+                await starting;
+            } finally {
+                try { await h.dispose(); }
+                finally { fetch.mockRestore(); }
+            }
+        }
+        expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health', '/v1/lease/release']);
+        expect(leaseBodies).toHaveLength(2);
+        expect(leaseBodies[0]).toEqual({ client_id: expect.any(String) });
+        expect(leaseBodies[1]).toEqual(leaseBodies[0]);
+        expect(h.runtime.isStarted).toBe(false);
     });
 
     it('retires the real runtime after degraded neural endpoint startup', async () => {
