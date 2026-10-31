@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, readFile, readdir, rm, stat, utimes, appendFile, mkdir, rename } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, utimes, appendFile, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
 import { LineFileAppender } from '../../../src/utils/line-file-appender';
 import { captureStderr } from '../../helpers/output-capture';
 
@@ -16,9 +15,9 @@ describe('bounded runtime file writer', () => {
         const writer = new LineFileAppender({ logDir: root, maxBytes: 14 });
         for (const text of ['first', 'second', 'third']) expect(writer.log(text)).toBe(true);
         await writer.flush();
-        const archives = (await readdir(root)).filter(name => name.endsWith('.gz'));
+        const archives = (await readdir(root)).filter(name => name.startsWith('archive-'));
         expect(archives).toHaveLength(1);
-        expect(gunzipSync(await readFile(path.join(root, archives[0]!))).toString() + await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('first\nsecond\nthird\n');
+        expect(await readFile(path.join(root, archives[0]!), 'utf8') + await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('first\nsecond\nthird\n');
         expect((await stat(path.join(root, 'runtime.log'))).size).toBeLessThanOrEqual(14);
     });
 
@@ -27,8 +26,8 @@ describe('bounded runtime file writer', () => {
         const old = new LineFileAppender({ logDir: root }); old.log('previous'); await old.flush();
         await utimes(path.join(root, 'runtime.log'), new Date('2000-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'));
         const writer = new LineFileAppender({ logDir: root }); writer.log('current'); await writer.flush();
-        const archive = (await readdir(root)).find(name => name.endsWith('.gz'))!;
-        expect(gunzipSync(await readFile(path.join(root, archive))).toString()).toBe('previous\n');
+        const archive = (await readdir(root)).find(name => name.startsWith('archive-'))!;
+        expect(await readFile(path.join(root, archive), 'utf8')).toBe('previous\n');
         expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('current\n');
     });
 
@@ -50,8 +49,8 @@ describe('bounded runtime file writer', () => {
         const writer = new LineFileAppender({ logDir: a }); writer.log('a1');
         writer.reconfigure({ logDir: b }); writer.log('b1');
         writer.reconfigure({ logDir: a }); writer.log('a2'); await writer.flush();
-        const archived = (await readdir(a)).filter(name => name.endsWith('.gz'));
-        const prior = await Promise.all(archived.map(async name => gunzipSync(await readFile(path.join(a, name))).toString()));
+        const archived = (await readdir(a)).filter(name => name.startsWith('archive-'));
+        const prior = await Promise.all(archived.map(async name => await readFile(path.join(a, name), 'utf8')));
         expect(prior.join('') + await readFile(path.join(a, 'runtime.log'), 'utf8')).toBe('a1\na2\n');
         expect(await readFile(path.join(b, 'runtime.log'), 'utf8')).toBe('b1\n');
     });
@@ -59,9 +58,9 @@ describe('bounded runtime file writer', () => {
         const root = await directory(); const filename = 'x'.repeat(220);
         const writer = new LineFileAppender({ logDir: root, filename, maxBytes: 14 });
         writer.log('first'); writer.log('second'); writer.log('third'); await writer.flush();
-        const archive = (await readdir(root)).find(name => name.endsWith('.gz'));
+        const archive = (await readdir(root)).find(name => name.startsWith('archive-'));
         expect(archive).toBeDefined();
-        expect(gunzipSync(await readFile(path.join(root, archive!))).toString() + await readFile(path.join(root, filename), 'utf8')).toBe('first\nsecond\nthird\n');
+        expect(await readFile(path.join(root, archive!), 'utf8') + await readFile(path.join(root, filename), 'utf8')).toBe('first\nsecond\nthird\n');
     });
 
     it('counts the active write against the bound and reports sustained overload before draining', async () => {
@@ -108,24 +107,20 @@ describe('bounded runtime file writer', () => {
         } finally { stderr.mockRestore(); await writer.flush(); }
     });
 
-    it('preserves the original archive and accepts later records after compression I/O failure', async () => {
-        const root = await directory(); const capture = captureStderr();
-        let originalArchive = '';
+    it('preserves the active file when rotation fails and permits subsequent recovery', async () => {
+        const root = await directory();
+        let fail = true;
         const writer = new LineFileAppender({ logDir: root, maxBytes: 14 }, {
-            rename: async (from, to) => {
-                await rename(from, to);
-                if (String(from).endsWith('runtime.log')) {
-                    originalArchive = String(to);
-                    await mkdir(`${to}.gz.partial`);
-                }
-            }
+            rename: async (from, to) => { if (fail) throw new Error('synthetic rename failure'); await rename(from, to); }
         });
-        try {
-            writer.log('first'); writer.log('second'); writer.log('third'); await writer.flush();
-            expect(await readFile(originalArchive, 'utf8')).toBe('first\nsecond\n');
-            expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('third\n');
-            expect(capture.output.join('')).toContain('original archive preserved');
-        } finally { capture.restore(); }
+        await writer.writeConfirmed('runtime.log', 'first');
+        await expect(writer.writeConfirmed('runtime.log', 'second record')).rejects.toThrow('Log append failed');
+        expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('first\n');
+        fail = false;
+        await writer.writeConfirmed('runtime.log', 'recovered');
+        expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('recovered\n');
+        const archives = (await readdir(root)).filter(name => name.startsWith('archive-'));
+        expect(await readFile(path.join(root, archives[0]!), 'utf8')).toBe('first\n');
+        await writer.flush();
     });
-
 });

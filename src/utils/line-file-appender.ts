@@ -1,8 +1,8 @@
-import fs, { promises as asyncFs } from 'node:fs';
+import { promises as asyncFs } from 'node:fs';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
-import { createGzip } from 'node:zlib';
-import { pipeline } from 'node:stream/promises';
+import { randomUUID } from 'node:crypto';
+import { archiveIdentity, pruneLogArchives, type LogRetention } from './log-retention';
+import { FILE_LOG_LIMITS, OPERATIONAL_RETENTION } from '../core/logger/file-policy';
 import { getSystemTimestampISO } from './timestamp';
 
 export type LineFileAppenderConfig = {
@@ -10,14 +10,18 @@ export type LineFileAppenderConfig = {
     filename?: string;
     maxBytes?: number;
     maxQueueBytes?: number;
+    archiveMaxBytes?: number;
+    archiveMaxAgeDays?: number;
+    archiveFilenames?: readonly string[];
 };
 type WriterDependencies = {
     appendFile?: (file: string, data: string) => Promise<void>;
     rename?: typeof asyncFs.rename;
     now?: () => number;
 };
-type Destination = { logDir: string; filename: string; maxBytes: number; maxQueueBytes: number };
-type Batch = { destination: Destination; day: string; lines: string[]; bytes: number };
+type Destination = LogRetention & { logDir: string; filename: string; maxBytes: number; maxQueueBytes: number; archiveFilenames: readonly string[] };
+type Completion = { promise: Promise<void>; resolve: () => void; reject: (error: Error) => void };
+type Batch = { configuration: Destination; destination: Destination; day: string; lines: string[]; bytes: number; completion?: Completion };
 const MAX_ENTRY_BYTES = 64 * 1024;
 
 function report(message: string): void {
@@ -38,10 +42,13 @@ function resolve(config: LineFileAppenderConfig): Destination {
         return value;
     };
     return { logDir: config.logDir, filename: config.filename ?? 'runtime.log',
-        maxBytes: positive(config.maxBytes, 20 * 1024 * 1024), maxQueueBytes: positive(config.maxQueueBytes, 2 * 1024 * 1024) };
+        maxBytes: positive(config.maxBytes, FILE_LOG_LIMITS.maxBytes), maxQueueBytes: positive(config.maxQueueBytes, FILE_LOG_LIMITS.maxQueueBytes),
+        archiveMaxBytes: positive(config.archiveMaxBytes, OPERATIONAL_RETENTION.archiveMaxBytes),
+        archiveMaxAgeDays: positive(config.archiveMaxAgeDays, OPERATIONAL_RETENTION.archiveMaxAgeDays),
+        archiveFilenames: config.archiveFilenames ?? [config.filename ?? 'runtime.log'] };
 }
 
-/** One serialized, bounded writer across destination changes. Archives are never expired. */
+/** One serialized, bounded writer across destination changes, with optional append confirmation. */
 export class LineFileAppender {
     private destination: Destination;
     private queue: Batch[] = [];
@@ -53,6 +60,8 @@ export class LineFileAppender {
     private readonly rename: typeof asyncFs.rename;
     private readonly now: () => number;
     private writeFailureReported = false;
+    private readonly maintained = new WeakSet<Destination>();
+    private retentionFailureReported = false;
     private current: { file: string; bytes: number; day: string } | null = null;
 
     constructor(config: LineFileAppenderConfig = {}, dependencies: WriterDependencies = {}) {
@@ -64,10 +73,24 @@ export class LineFileAppender {
 
     reconfigure(config: LineFileAppenderConfig): void { this.destination = resolve(config); }
 
-    write(filename: string, content: string): boolean {
+    write(filename: string, content: string): boolean { return this.enqueue(filename, content) !== null; }
+
+    writeConfirmed(filename: string, content: string): Promise<void> {
+        const batch = this.enqueue(filename, content);
+        if (!batch) return Promise.reject(new Error('Log entry not admitted'));
+        if (!batch.completion) {
+            let resolve!: () => void;
+            let reject!: (error: Error) => void;
+            const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+            batch.completion = { promise, resolve, reject };
+        }
+        return batch.completion.promise;
+    }
+
+    private enqueue(filename: string, content: string): Batch | null {
         if (!safeFilename(filename)) {
             report('[LineFileAppender] Rejected unsafe log filename\n');
-            return false;
+            return null;
         }
         const destination = filename === this.destination.filename ? this.destination : { ...this.destination, filename };
         const text = `${content}\n`;
@@ -77,16 +100,16 @@ export class LineFileAppender {
             this.dropped++;
             this.reportDrops();
             this.start();
-            return false;
+            return null;
         }
         const day = getSystemTimestampISO().slice(0, 10);
         const tail = this.queue.at(-1);
-        if (tail && tail.destination === destination && tail.day === day && tail.bytes + bytes <= Math.min(MAX_ENTRY_BYTES, destination.maxBytes)) {
+        if (tail && tail.configuration === this.destination && tail.destination.filename === filename && tail.day === day && tail.bytes + bytes <= Math.min(MAX_ENTRY_BYTES, destination.maxBytes)) {
             tail.lines.push(text); tail.bytes += bytes;
-        } else this.queue.push({ destination, day, lines: [text], bytes });
+        } else this.queue.push({ configuration: this.destination, destination, day, lines: [text], bytes });
         this.queuedBytes += bytes;
         this.start();
-        return true;
+        return this.queue.at(-1)!;
     }
 
     log(content: string): boolean { return this.write(this.destination.filename, content); }
@@ -107,7 +130,9 @@ export class LineFileAppender {
             try {
                 await this.append(batch);
                 this.writeFailureReported = false;
+                batch.completion?.resolve();
             } catch {
+                batch.completion?.reject(new Error('Log append failed'));
                 this.current = null;
                 if (!this.writeFailureReported) {
                     report('[LineFileAppender] File write failed; entries in this batch were not confirmed written\n');
@@ -139,9 +164,14 @@ export class LineFileAppender {
                 this.current = { file, bytes: 0, day: batch.day };
             }
         }
+        if (!this.maintained.has(batch.configuration)) {
+            await this.maintain(batch.destination);
+            this.maintained.add(batch.configuration);
+        }
         const current = this.current!;
         if (current.bytes > 0 && (current.day !== batch.day || current.bytes + batch.bytes > maxBytes)) {
-            await this.rotate(file, current.day);
+            await this.rotate(file);
+            await this.maintain(batch.destination);
             current.bytes = 0;
         }
         current.day = batch.day;
@@ -149,17 +179,18 @@ export class LineFileAppender {
         current.bytes += batch.bytes;
     }
 
-    private async rotate(file: string, day: string): Promise<void> {
-        const identity = createHash('sha256').update(path.basename(file)).digest('hex').slice(0, 12);
-        const archive = path.join(path.dirname(file), `log-${identity}.${day}.${randomUUID()}`);
-        await this.rename(file, archive);
+    private async maintain(destination: Destination): Promise<void> {
         try {
-            await pipeline(fs.createReadStream(archive), createGzip({ level: 1 }), fs.createWriteStream(`${archive}.gz.partial`, { flags: 'wx', mode: 0o600 }));
-            await this.rename(`${archive}.gz.partial`, `${archive}.gz`);
-            await asyncFs.unlink(archive);
+            await pruneLogArchives(destination.logDir, destination.archiveFilenames, destination);
+            this.retentionFailureReported = false;
         } catch {
-            // The renamed original remains recoverable if compression fails.
-            report('[LineFileAppender] Archive compression failed; original archive preserved\n');
+            if (!this.retentionFailureReported) report('[LineFileAppender] Archive retention failed; storage budget is not enforced\n');
+            this.retentionFailureReported = true;
         }
+    }
+
+    private async rotate(file: string): Promise<void> {
+        const archive = path.join(path.dirname(file), `archive-${archiveIdentity(path.basename(file))}.${Date.parse(getSystemTimestampISO())}.${randomUUID()}.log`);
+        await this.rename(file, archive);
     }
 }
