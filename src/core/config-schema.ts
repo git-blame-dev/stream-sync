@@ -167,8 +167,8 @@ const CONFIG_SCHEMA = {
         consoleLevel: { type: 'string', userDefined: true },
         fileLevel: { type: 'string', userDefined: true },
         fileLoggingEnabled: { type: 'boolean', userDefined: true },
-        fileMaxBytes: { type: 'number', default: 20971520, min: 65536, integer: true },
-        fileQueueMaxBytes: { type: 'number', default: 2097152, min: 65536, integer: true }
+        fileMaxBytes: { type: 'number', default: 20971520, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
+        fileQueueMaxBytes: { type: 'number', default: 2097152, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true }
     },
 
     handcam: {

@@ -393,6 +393,7 @@ class ConfigValidator {
         };
 
         return {
+            ...ConfigValidator.normalizeFromSchema('logging', raw),
             consoleLevel: normalizeLevel(raw.consoleLevel),
             fileLevel: normalizeLevel(raw.fileLevel),
             fileLoggingEnabled: ConfigValidator.parseBoolean(raw.fileLoggingEnabled, null)

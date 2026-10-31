@@ -68,6 +68,29 @@ describe('config load and build behavior', () => {
         });
     });
 
+    for (const scenario of [
+        { name: 'nondefault limits', max: '1048576', queue: '131072', expectedMax: 1048576, expectedQueue: 131072 },
+        { name: 'below-minimum limits', max: '65535', queue: '0', expectedMax: 20971520, expectedQueue: 2097152 },
+        { name: 'fractional limits', max: '1048576.5', queue: '131072.5', expectedMax: 20971520, expectedQueue: 2097152 },
+        { name: 'unsafe integer limits', max: '9007199254740992', queue: '9007199254740992', expectedMax: 20971520, expectedQueue: 2097152 },
+        { name: 'maximum safe limits', max: String(Number.MAX_SAFE_INTEGER), queue: String(Number.MAX_SAFE_INTEGER), expectedMax: Number.MAX_SAFE_INTEGER, expectedQueue: Number.MAX_SAFE_INTEGER },
+    ]) {
+        it(`loads and builds logging byte limits: ${scenario.name}`, () => {
+            const raw = getRawTestConfig();
+            raw.logging = { ...raw.logging, fileMaxBytes: scenario.max, fileQueueMaxBytes: scenario.queue };
+            fs.writeFileSync(tempConfigPath, ini.stringify(raw), 'utf8');
+            process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+            configModule._resetConfigForTesting();
+
+            const normalized = configModule.loadConfig();
+            const built = configModule.config.logging;
+            expect(normalized.logging.fileMaxBytes).toBe(scenario.expectedMax);
+            expect(normalized.logging.fileQueueMaxBytes).toBe(scenario.expectedQueue);
+            expect(built.file.maxBytes).toBe(scenario.expectedMax);
+            expect(built.file.maxQueueBytes).toBe(scenario.expectedQueue);
+        });
+    }
+
     it('loads and builds configuration from ini file with debug enabled', async () => {
         const stdoutCapture = captureStdout();
         try {
