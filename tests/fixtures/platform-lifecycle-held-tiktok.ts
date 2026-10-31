@@ -25,8 +25,6 @@ export function createHeldTikTokLifecycle() {
     const platform = new TikTokPlatform({ enabled: true, username: 'synthetic-streamer', dataLoggingEnabled: false }, {
         logger: noOpLogger,
         TikTokWebSocketClient,
-        WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow', SOCIAL: 'social', ROOM_USER: 'roomUser', ERROR: 'error', DISCONNECT: 'disconnected' },
-        ControlEvent: { CONNECTED: 'connected', DISCONNECTED: 'disconnected', ERROR: 'error' },
         connectionFactory: { createConnection: () => client }
     });
     const retrySystem = platform.retrySystem;

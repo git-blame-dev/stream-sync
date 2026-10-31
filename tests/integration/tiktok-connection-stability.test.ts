@@ -1,22 +1,11 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
 
 type TikTokTestDependencies = {
   logger: typeof noOpLogger;
   TikTokWebSocketClient: unknown;
-  WebcastEvent: {
-    CHAT: string;
-    GIFT: string;
-    FOLLOW: string;
-    SOCIAL: string;
-    ROOM_USER: string;
-    ERROR: string;
-    DISCONNECT: string;
-  };
-  ControlEvent: Record<string, string>;
-  WebcastPushConnection: unknown;
   constants: { GRACE_PERIODS: { TIKTOK: number } };
 };
 
@@ -26,24 +15,13 @@ describe("TikTok Platform Validation", () => {
   beforeEach(() => {
     mockDependencies = {
       logger: noOpLogger,
-      TikTokWebSocketClient: createMockFn(),
-      WebcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        SOCIAL: "social",
-        ROOM_USER: "roomUser",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-      },
-      ControlEvent: { CONNECTED: "connected" },
-      WebcastPushConnection: createMockFn(),
+      TikTokWebSocketClient: vi.fn<(...args: unknown[]) => unknown>(),
       constants: { GRACE_PERIODS: { TIKTOK: 5000 } },
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Platform Construction and Basic Validation", () => {

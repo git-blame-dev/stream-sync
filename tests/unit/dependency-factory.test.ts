@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { DependencyFactory } from "../../src/utils/dependency-factory";
 import { NotificationManager } from "../../src/notifications/NotificationManager";
 import { TwitchAuth } from "../../src/auth/TwitchAuth";
@@ -43,7 +43,7 @@ describe("DependencyFactory", () => {
       await Promise.all([...owners.map(owner => owner.dispose()), twitchAuth.dispose()]);
     } finally {
       owners = [];
-      restoreAllMocks();
+      vi.restoreAllMocks();
       _resetForTesting();
       initializeStaticSecrets();
     }
@@ -220,7 +220,6 @@ describe("DependencyFactory", () => {
   describe("createTiktokDependencies", () => {
     it("should create complete TikTok dependencies with all required services", () => {
       const options = {
-        WebcastPushConnection: TikTokWebSocketClient,
         TikTokWebSocketClient,
         config: configFixture,
       };
@@ -231,7 +230,7 @@ describe("DependencyFactory", () => {
       );
 
       expect(result).toHaveProperty("logger");
-      expect(result).toHaveProperty("WebcastPushConnection");
+      expect(result).not.toHaveProperty("WebcastPushConnection");
       expect(result).toHaveProperty("TikTokWebSocketClient");
       expect(result).toHaveProperty("connectionFactory");
 
@@ -254,22 +253,6 @@ describe("DependencyFactory", () => {
 
       expect(result.logger).toBeDefined();
       expect(result.connectionFactory).toBeDefined();
-    });
-
-    it("should provide WebcastPushConnection from options", () => {
-      const suppliedConstructor = TikTokWebSocketClient;
-      const options = {
-        WebcastPushConnection: suppliedConstructor,
-        TikTokWebSocketClient,
-        config: configFixture,
-      };
-
-      const result = factory.createTiktokDependencies(
-        configFixture.tiktok,
-        options,
-      );
-
-      expect(result.WebcastPushConnection).toBe(suppliedConstructor);
     });
 
     it("should expose the actual TikTok client to the actual connection factory", () => {
@@ -397,10 +380,10 @@ describe("DependencyFactory", () => {
   describe("validateDependencyInterface", () => {
     it("should validate logger interface correctly", () => {
       const validLogger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
+        debug: vi.fn<(...args: unknown[]) => unknown>(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
+        warn: vi.fn<(...args: unknown[]) => unknown>(),
+        error: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       expect(() => {
@@ -410,8 +393,8 @@ describe("DependencyFactory", () => {
 
     it("should reject invalid logger interface", () => {
       const invalidLogger = {
-        debug: createMockFn(),
-        info: createMockFn(),
+        debug: vi.fn<(...args: unknown[]) => unknown>(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       expect(() => {
@@ -421,9 +404,9 @@ describe("DependencyFactory", () => {
 
     it("should validate notification manager interface", () => {
       const validNotificationManager = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        removeListener: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        removeListener: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       expect(() => {
@@ -436,7 +419,7 @@ describe("DependencyFactory", () => {
 
     it("should reject invalid notification manager interface", () => {
       const invalidNotificationManager = {
-        emit: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       expect(() => {
@@ -521,7 +504,7 @@ describe("DependencyFactory", () => {
       expect(tiktokDeps).toHaveProperty("logger");
       expect(twitchDeps).toHaveProperty("logger");
 
-      expect(tiktokDeps).toHaveProperty("WebcastPushConnection");
+      expect(tiktokDeps).not.toHaveProperty("WebcastPushConnection");
       expect(twitchDeps).toHaveProperty("twitchAuth");
     });
   });

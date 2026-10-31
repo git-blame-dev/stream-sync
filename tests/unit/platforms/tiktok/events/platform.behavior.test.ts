@@ -1,8 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import {
   useFakeTimers,
@@ -12,20 +9,6 @@ import {
 
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
-
-type WebcastEventMap = {
-  CHAT: string;
-  GIFT: string;
-  FOLLOW: string;
-  SOCIAL: string;
-  ROOM_USER: string;
-  ENVELOPE?: string;
-  SUBSCRIBE?: string;
-  SUPER_FAN?: string;
-  ERROR: string;
-  DISCONNECT: string;
-  STREAM_END?: string;
-};
 type PlatformEventPayload = Record<string, unknown> & {
   type?: string;
   platform?: string;
@@ -52,8 +35,6 @@ type DependencyOverrides = {
     createConnection: (platform: string, config: unknown, dependencies: unknown) => unknown;
   };
   TikTokWebSocketClient?: unknown;
-  WebcastEvent?: WebcastEventMap;
-  ControlEvent?: Record<string, string>;
 };
 
 const isPlatformEventPayload = (value: unknown): value is PlatformEventPayload =>
@@ -67,51 +48,38 @@ const expectDefined = <T>(value: T | undefined): T => {
   return value;
 };
 
-const defaultWebcastEvent = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies WebcastEventMap;
-
 const createPlatform = (
   configOverrides: Record<string, unknown> = {},
   dependencyOverrides: DependencyOverrides = {},
 ) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: vi.fn<(...args: unknown[]) => unknown>(),
+    on: vi.fn<(...args: unknown[]) => unknown>(),
+    removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+    handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
-      emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(undefined),
-      disconnect: createMockFn().mockResolvedValue(undefined),
+    createConnection: vi.fn<(...args: unknown[]) => { on: import("bun:test").Mock<(...args: unknown[]) => unknown>; emit: import("bun:test").Mock<(...args: unknown[]) => unknown>; removeAllListeners: import("bun:test").Mock<(...args: unknown[]) => unknown>; connect: import("bun:test").Mock<(..._args: unknown[]) => Promise<undefined>>; disconnect: import("bun:test").Mock<(..._args: unknown[]) => Promise<undefined>>; }>().mockReturnValue({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
     }),
   };
 
   const TikTokWebSocketClient =
     dependencyOverrides.TikTokWebSocketClient ||
-    createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn().mockResolvedValue(undefined),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+    vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
-
-  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
-  const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
     enabled: true,
@@ -124,8 +92,6 @@ const createPlatform = (
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
-    ControlEvent,
     connectionFactory,
     ...dependencyOverrides,
   });
@@ -133,7 +99,7 @@ const createPlatform = (
 
 describe("TikTokPlatform behavior alignment", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("gift handling", () => {
@@ -424,28 +390,19 @@ describe("TikTokPlatform behavior alignment", () => {
       const platform = createPlatform(
         {},
         {
-          WebcastEvent: {
-            ROOM_USER: "room_user",
-            ERROR: "error",
-            DISCONNECT: "disconnect",
-            CHAT: "chat",
-            GIFT: "gift",
-            FOLLOW: "follow",
-            SOCIAL: "social",
-          },
-          connectionFactory: { createConnection: createMockFn() },
+          connectionFactory: { createConnection: vi.fn<(...args: unknown[]) => unknown>() },
         },
       );
 
       const listeners: Record<string, (payload: unknown) => void | Promise<void>> = {};
       const connection = {
-        on: createMockFn<[event: string, handler: (payload: unknown) => void | Promise<void>], void>((event, handler) => {
+        on: vi.fn<(...args: [event: string, handler: (payload: unknown) => void | Promise<void>]) => void>((event, handler) => {
           listeners[event] = handler;
         }),
-        off: createMockFn(),
-        connect: createMockFn().mockResolvedValue(undefined),
-        disconnect: createMockFn().mockResolvedValue(undefined),
-        removeAllListeners: createMockFn(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
+        connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
         isConnecting: false,
         isConnected: false,
       };
@@ -464,7 +421,7 @@ describe("TikTokPlatform behavior alignment", () => {
       platform.setupEventListeners();
 
       const viewerTimestamp = Date.parse("2024-01-01T00:00:00Z");
-      await listeners["room_user"]?.({
+      await listeners["roomUser"]?.({
         viewerCount: 42,
         common: { createTime: viewerTimestamp },
       });
@@ -483,28 +440,20 @@ describe("TikTokPlatform behavior alignment", () => {
           new TikTokPlatform(
             { enabled: true, username: "tester" },
             {
-              WebcastEvent: defaultWebcastEvent,
-              ControlEvent: {},
-              connectionFactory: { createConnection: createMockFn() },
+              connectionFactory: { createConnection: vi.fn<(...args: unknown[]) => unknown>() },
               logger: noOpLogger,
             },
           ),
       ).toThrow(/TikTokWebSocketClient/i);
     });
 
-    it("fails fast when WebcastEvent is missing", () => {
-      expect(
-        () =>
-          new TikTokPlatform(
-            { enabled: true, username: "tester" },
-            {
-              TikTokWebSocketClient: createMockFn(),
-              ControlEvent: {},
-              connectionFactory: { createConnection: createMockFn() },
-              logger: noOpLogger,
-            },
-          ),
-      ).toThrow(/WebcastEvent/i);
+    it("uses the current transport vocabulary without event-map injection", async () => {
+      const platform = createPlatform();
+      expect(platform.WebcastEvent.ROOM_USER).toBe('roomUser');
+      expect(platform.WebcastEvent.DISCONNECT).toBe('disconnected');
+      expect(platform.ControlEvent.CONNECTED).toBe('connected');
+      expect(Object.isFrozen(platform.WebcastEvent)).toBe(true);
+      await platform.cleanup();
     });
   });
 });

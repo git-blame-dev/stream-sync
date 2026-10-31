@@ -20,6 +20,7 @@ import { createTikTokConnectionOrchestrator } from './tiktok/connections/tiktok-
 import { cleanupTikTokEventListeners, isTikTokEventListenerSetupCurrent, setupTikTokEventListeners } from './tiktok/events/event-router';
 import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregator';
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
+import { TIKTOK_EVENTS, TIKTOK_CONTROL_EVENTS } from './tiktok/events/transport-events';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
@@ -105,27 +106,6 @@ type TikTokConnection = {
 
 type TikTokHandlers = Record<string, (payload: unknown) => unknown>;
 
-type TikTokWebcastEventMap = {
-    CHAT: string;
-    GIFT: string;
-    FOLLOW: string;
-    SHARE?: string;
-    SOCIAL: string;
-    ROOM_USER: string;
-    ENVELOPE?: string;
-    SUBSCRIBE?: string;
-    SUPER_FAN?: string;
-    ERROR: string;
-    DISCONNECT: string;
-    STREAM_END?: string;
-};
-
-type TikTokControlEventMap = {
-    CONNECTED?: string;
-    DISCONNECTED?: string;
-    ERROR?: string;
-};
-
 type RetrySystem = {
     isConnected?: (platform: string) => boolean | undefined;
     resetRetryCount: (platform: string) => void;
@@ -153,8 +133,6 @@ type TikTokDependencies = {
     deduplicationTtlMs?: number;
     monotonicNow?: () => number;
     TikTokWebSocketClient?: unknown;
-    WebcastEvent?: TikTokWebcastEventMap;
-    ControlEvent?: TikTokControlEventMap;
     retrySystem?: RetrySystem;
     connectionFactory?: ConnectionFactoryLike;
     RawPlatformDataLoggingService?: new (options: RawPlatformDataLoggingOptions) => RawPlatformDataLoggingService;
@@ -361,8 +339,8 @@ class TikTokPlatform extends EventEmitter {
     declare fallbackAvatarUrl: string;
     declare config: TikTokConfig;
     declare TikTokWebSocketClient: unknown;
-    declare WebcastEvent: TikTokWebcastEventMap;
-    declare ControlEvent: TikTokControlEventMap;
+    readonly WebcastEvent = TIKTOK_EVENTS;
+    readonly ControlEvent = TIKTOK_CONTROL_EVENTS;
     declare retrySystem: RetrySystem | null;
     declare platformName: 'tiktok';
     declare eventFactory: EventFactory;
@@ -420,16 +398,6 @@ class TikTokPlatform extends EventEmitter {
         this.config = config;
 
         this.TikTokWebSocketClient = dependencies.TikTokWebSocketClient;
-        this.WebcastEvent = dependencies.WebcastEvent ?? {
-            CHAT: 'chat',
-            GIFT: 'gift',
-            FOLLOW: 'follow',
-            SOCIAL: 'social',
-            ROOM_USER: 'roomUser',
-            ERROR: 'error',
-            DISCONNECT: 'disconnect'
-        };
-        this.ControlEvent = dependencies.ControlEvent ?? {};
         if (dependencies.retrySystem) {
             this.retrySystem = dependencies.retrySystem;
         } else {
@@ -601,12 +569,6 @@ class TikTokPlatform extends EventEmitter {
 
         if (!dependencies.TikTokWebSocketClient) {
             missing.push('TikTokWebSocketClient');
-        }
-        if (!dependencies.WebcastEvent) {
-            missing.push('WebcastEvent');
-        }
-        if (!dependencies.ControlEvent) {
-            missing.push('ControlEvent');
         }
 
         if (missing.length) {

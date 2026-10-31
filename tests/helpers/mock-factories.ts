@@ -1,8 +1,8 @@
+import { vi } from 'bun:test';
 import type { DisplayQueueItem } from '../../src/interfaces/DisplayQueue';
 
-import { setupAutomatedCleanup } from './mock-lifecycle';
 import { waitForDelay } from './time-utils';
-import { createMockFn, isMockFunction } from './bun-mock-utils';
+
 import { parseTimestampISO, parseTimestampMs } from '../../src/utils/timestamp';
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
@@ -185,13 +185,13 @@ const normalizeUserData = (userData: unknown) => {
 
 const createMockNotificationDispatcher = (methodOverrides: UnknownRecord = {}) => {
     const baseMethods = {
-        dispatchSuperChat: createMockFn().mockResolvedValue(true),
-        dispatchMembership: createMockFn().mockResolvedValue(true),
-        dispatchGiftMembership: createMockFn().mockResolvedValue(true),
-        dispatchSuperSticker: createMockFn().mockResolvedValue(true),
-        dispatchFollow: createMockFn().mockResolvedValue(true),
-        dispatchRaid: createMockFn().mockResolvedValue(true),
-        dispatchMessage: createMockFn().mockResolvedValue(true)
+        dispatchSuperChat: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchMembership: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchGiftMembership: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchSuperSticker: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchFollow: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchRaid: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        dispatchMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
     };
 
     return {
@@ -204,7 +204,7 @@ const createMockNotificationDispatcher = (methodOverrides: UnknownRecord = {}) =
 
 const createMockNotificationBuilder = (dataOverrides: UnknownRecord = {}) => {
     return {
-        build: createMockFn<[unknown?], UnknownRecord>().mockImplementation((notificationData = {}) => {
+        build: vi.fn<(...args: [unknown?]) => UnknownRecord>().mockImplementation((notificationData = {}) => {
             const notificationRecord = requireRecord(notificationData, 'notificationData');
             const type = requireNonEmptyString(notificationRecord.type, 'type');
             const platform = requireNonEmptyString(notificationRecord.platform, 'platform');
@@ -240,20 +240,20 @@ const createMockNotificationBuilder = (dataOverrides: UnknownRecord = {}) => {
 
 const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
     const baseHandlers = {
-        emit: createMockFn<unknown[], boolean>().mockImplementation((_event, _data) => true),
-        on: createMockFn<unknown[], boolean>().mockImplementation((_event, _handler) => true),
-        removeListener: createMockFn<unknown[], boolean>().mockImplementation((_event, _handler) => true),
-        handleNotification: createMockFn().mockResolvedValue(true),
-        processNotification: createMockFn().mockResolvedValue(true),
-        handleGiftNotification: createMockFn().mockResolvedValue(true),
-        handleFollowNotification: createMockFn().mockResolvedValue(true),
-        handlePaypiggyNotification: createMockFn().mockResolvedValue(true),
-        handleRaidNotification: createMockFn().mockResolvedValue(true),
-        handleChatMessage: createMockFn().mockResolvedValue(true)
+        emit: vi.fn<(...args: unknown[]) => boolean>().mockImplementation((_event, _data) => true),
+        on: vi.fn<(...args: unknown[]) => boolean>().mockImplementation((_event, _handler) => true),
+        removeListener: vi.fn<(...args: unknown[]) => boolean>().mockImplementation((_event, _handler) => true),
+        handleNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        processNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleGiftNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleFollowNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handlePaypiggyNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleRaidNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
     };
 
     const behaviorMethods = {
-        createNotification: createMockFn<[unknown?], UnknownRecord>().mockImplementation((notificationData = {}) => {
+        createNotification: vi.fn<(...args: [unknown?]) => UnknownRecord>().mockImplementation((notificationData = {}) => {
             const notificationRecord = requireRecord(notificationData, 'notificationData');
 
             const sourceNotification = isRecord(notificationRecord.notification) ? notificationRecord.notification : notificationRecord;
@@ -281,7 +281,7 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
                 username
             };
         }),
-        normalizeMessage: createMockFn<[unknown], NormalizedMessageResult>().mockImplementation((message) => {
+        normalizeMessage: vi.fn<(...args: [unknown]) => NormalizedMessageResult>().mockImplementation((message) => {
             const sourceMessage = asRecord(message);
             let displayMessage = typeof sourceMessage.displayMessage === 'string'
                 ? sourceMessage.displayMessage
@@ -312,7 +312,7 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
                     : (sourceMessage.timestamp || timestamp.iso)
             };
         }),
-        processGift: createMockFn<[unknown?], Promise<GiftWorkflowResult>>().mockImplementation(async (giftData = {}) => {
+        processGift: vi.fn<(...args: [unknown?]) => Promise<GiftWorkflowResult>>().mockImplementation(async (giftData = {}) => {
             const giftRecord = requireRecord(giftData, 'giftData');
             const platform = requireNonEmptyString(giftRecord.platform, 'platform');
             const username = requireNonEmptyString(giftRecord.username, 'username');
@@ -355,7 +355,7 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
                 obsUpdated: true
             };
         }),
-        processFollow: createMockFn<[unknown?], Promise<UnknownRecord>>().mockImplementation(async (followData = {}) => {
+        processFollow: vi.fn<(...args: [unknown?]) => Promise<UnknownRecord>>().mockImplementation(async (followData = {}) => {
             const followRecord = requireRecord(followData, 'followData');
             const platform = requireNonEmptyString(followRecord.platform, 'platform');
             const username = requireNonEmptyString(followRecord.username, 'username');
@@ -376,7 +376,7 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
                 displayed: true
             };
         }),
-        processSubscription: createMockFn<[unknown?], Promise<UnknownRecord>>().mockImplementation(async (subData = {}) => {
+        processSubscription: vi.fn<(...args: [unknown?]) => Promise<UnknownRecord>>().mockImplementation(async (subData = {}) => {
             const subRecord = requireRecord(subData, 'subData');
             const platform = requireNonEmptyString(subRecord.platform, 'platform');
             const username = requireNonEmptyString(subRecord.username, 'username');
@@ -427,53 +427,53 @@ const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
 
     return {
         google: {
-            youtube: createMockFn().mockReturnValue({
+            youtube: vi.fn<(...args: unknown[]) => { v3: { search: { list: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ data: { items: never[]; }; }>>; }; videos: { list: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ data: { items: { liveStreamingDetails: { activeLiveChatId: string; }; }[]; }; }>>; }; liveChatMessages: { list: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ data: { items: never[]; }; }>>; }; }; }>().mockReturnValue({
                 v3: {
-                    search: { list: createMockFn().mockResolvedValue({ data: { items: [] } }) },
-                    videos: { list: createMockFn().mockResolvedValue({ data: { items: [{ liveStreamingDetails: { activeLiveChatId: 'test-chat-id' } }] } }) },
-                    liveChatMessages: { list: createMockFn().mockResolvedValue({ data: { items: [] } }) }
+                    search: { list: vi.fn<(...args: unknown[]) => Promise<{ data: { items: never[]; }; }>>().mockResolvedValue({ data: { items: [] } }) },
+                    videos: { list: vi.fn<(...args: unknown[]) => Promise<{ data: { items: { liveStreamingDetails: { activeLiveChatId: string; }; }[]; }; }>>().mockResolvedValue({ data: { items: [{ liveStreamingDetails: { activeLiveChatId: 'test-chat-id' } }] } }) },
+                    liveChatMessages: { list: vi.fn<(...args: unknown[]) => Promise<{ data: { items: never[]; }; }>>().mockResolvedValue({ data: { items: [] } }) }
                 }
             })
         },
 
         Innertube: {
-            create: createMockFn().mockResolvedValue({
-                getInfo: createMockFn().mockResolvedValue({
-                    getLiveChat: createMockFn().mockResolvedValue({
-                        start: createMockFn(),
-                        stop: createMockFn(),
-                        on: createMockFn(),
-                        sendMessage: createMockFn()
+            create: vi.fn<(...args: unknown[]) => Promise<{ getInfo: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ getLiveChat: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ start: import("bun:test").Mock<(...args: unknown[]) => unknown>; stop: import("bun:test").Mock<(...args: unknown[]) => unknown>; on: import("bun:test").Mock<(...args: unknown[]) => unknown>; sendMessage: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>>; }>>; }>>().mockResolvedValue({
+                getInfo: vi.fn<(...args: unknown[]) => Promise<{ getLiveChat: import("bun:test").Mock<(..._args: unknown[]) => Promise<{ start: import("bun:test").Mock<(...args: unknown[]) => unknown>; stop: import("bun:test").Mock<(...args: unknown[]) => unknown>; on: import("bun:test").Mock<(...args: unknown[]) => unknown>; sendMessage: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>>; }>>().mockResolvedValue({
+                    getLiveChat: vi.fn<(...args: unknown[]) => Promise<{ start: import("bun:test").Mock<(...args: unknown[]) => unknown>; stop: import("bun:test").Mock<(...args: unknown[]) => unknown>; on: import("bun:test").Mock<(...args: unknown[]) => unknown>; sendMessage: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>>().mockResolvedValue({
+                        start: vi.fn<(...args: unknown[]) => unknown>(),
+                        stop: vi.fn<(...args: unknown[]) => unknown>(),
+                        on: vi.fn<(...args: unknown[]) => unknown>(),
+                        sendMessage: vi.fn<(...args: unknown[]) => unknown>()
                     })
                 })
             })
         },
 
-        axios: createMockFn().mockResolvedValue({ data: { status: 'success' } }),
+        axios: vi.fn<(...args: unknown[]) => Promise<{ data: { status: string; }; }>>().mockResolvedValue({ data: { status: 'success' } }),
 
-        ConnectionService: createMockFn<[], YouTubeConnectionService>().mockImplementation(() => ({
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(true),
-            isConnected: createMockFn().mockReturnValue(true),
-            getActiveChatId: createMockFn().mockResolvedValue('test-chat-id')
+        ConnectionService: vi.fn<(...args: []) => YouTubeConnectionService>().mockImplementation(() => ({
+            connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            isConnected: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+            getActiveChatId: vi.fn<(...args: unknown[]) => Promise<string>>().mockResolvedValue('test-chat-id')
         })),
 
-        EventRouter: createMockFn().mockImplementation(() => ({
-            routeEvent: createMockFn().mockResolvedValue(true),
-            registerHandler: createMockFn(),
-            unregisterHandler: createMockFn()
+        EventRouter: vi.fn(() => ({
+            routeEvent: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            registerHandler: vi.fn<(...args: unknown[]) => unknown>(),
+            unregisterHandler: vi.fn<(...args: unknown[]) => unknown>()
         })),
 
-        StreamManager: createMockFn<[], YouTubeStreamManager>().mockImplementation(() => ({
-            detectActiveStreams: createMockFn().mockResolvedValue(['test-stream-id']),
-            getStreamDetails: createMockFn().mockResolvedValue({ title: 'Test Stream', viewerCount: 100 }),
-            monitorStreams: createMockFn()
+        StreamManager: vi.fn<(...args: []) => YouTubeStreamManager>().mockImplementation(() => ({
+            detectActiveStreams: vi.fn<(...args: unknown[]) => Promise<string[]>>().mockResolvedValue(['test-stream-id']),
+            getStreamDetails: vi.fn<(...args: unknown[]) => Promise<{ title: string; viewerCount: number; }>>().mockResolvedValue({ title: 'Test Stream', viewerCount: 100 }),
+            monitorStreams: vi.fn<(...args: unknown[]) => unknown>()
         })),
 
-        ViewerService: createMockFn().mockImplementation(() => ({
-            getViewerCount: createMockFn().mockResolvedValue(100),
-            startMonitoring: createMockFn(),
-            stopMonitoring: createMockFn()
+        ViewerService: vi.fn(() => ({
+            getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(100),
+            startMonitoring: vi.fn<(...args: unknown[]) => unknown>(),
+            stopMonitoring: vi.fn<(...args: unknown[]) => unknown>()
         })),
 
         _mockType: 'YouTubeServices',
@@ -490,46 +490,23 @@ const createMockTikTokServices = (configOverrides: UnknownRecord = {}) => {
     };
 
     return {
-        TikTokWebSocketClient: createMockFn<[], TikTokWebSocketClientConnection>().mockImplementation(() => ({
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(true),
-            on: createMockFn(),
-            off: createMockFn(),
-            getState: createMockFn().mockReturnValue({ isConnected: true }),
-            getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
+        TikTokWebSocketClient: vi.fn<(...args: []) => TikTokWebSocketClientConnection>().mockImplementation(() => ({
+            connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            on: vi.fn<(...args: unknown[]) => unknown>(),
+            off: vi.fn<(...args: unknown[]) => unknown>(),
+            getState: vi.fn<(...args: unknown[]) => { isConnected: true; }>().mockReturnValue({ isConnected: true }),
+            getRoomInfo: vi.fn<(...args: unknown[]) => Promise<{ viewerCount: number; title: string; }>>().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         })),
 
         mockConnection: {
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(true),
-            on: createMockFn(),
-            off: createMockFn(),
-            getState: createMockFn().mockReturnValue({ isConnected: true }),
-            getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
+            connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            on: vi.fn<(...args: unknown[]) => unknown>(),
+            off: vi.fn<(...args: unknown[]) => unknown>(),
+            getState: vi.fn<(...args: unknown[]) => { isConnected: true; }>().mockReturnValue({ isConnected: true }),
+            getRoomInfo: vi.fn<(...args: unknown[]) => Promise<{ viewerCount: number; title: string; }>>().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         },
-
-        WebcastEvent: {
-            CHAT: 'chat',
-            GIFT: 'gift',
-            FOLLOW: 'follow',
-            MEMBER: 'member',
-            LIKE: 'like',
-            SOCIAL: 'social'
-        },
-
-        ControlEvent: {
-            CONNECTED: 'connected',
-            DISCONNECTED: 'disconnected',
-            ERROR: 'error',
-            WEBSOCKET_CONNECTED: 'websocketConnected'
-        },
-
-        WebcastPushConnection: createMockFn<[], TikTokServiceConnection>().mockImplementation(() => ({
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(true),
-            on: createMockFn(),
-            getState: createMockFn().mockReturnValue({ isConnected: true })
-        })),
 
         _mockType: 'TikTokServices',
         _config: defaultConfig
@@ -547,40 +524,40 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
     };
 
     return {
-        tmi: createMockFn().mockImplementation(() => ({
-            connect: createMockFn().mockResolvedValue(['#testchannel']),
-            disconnect: createMockFn().mockResolvedValue(['#testchannel']),
-            on: createMockFn(),
-            say: createMockFn().mockResolvedValue(['#testchannel', 'Test message']),
-            getChannels: createMockFn().mockReturnValue(['#testchannel'])
+        tmi: vi.fn(() => ({
+            connect: vi.fn<(...args: unknown[]) => Promise<string[]>>().mockResolvedValue(['#testchannel']),
+            disconnect: vi.fn<(...args: unknown[]) => Promise<string[]>>().mockResolvedValue(['#testchannel']),
+            on: vi.fn<(...args: unknown[]) => unknown>(),
+            say: vi.fn<(...args: unknown[]) => Promise<string[]>>().mockResolvedValue(['#testchannel', 'Test message']),
+            getChannels: vi.fn<(...args: unknown[]) => string[]>().mockReturnValue(['#testchannel'])
         })),
 
-        TwitchEventSub: createMockFn<[], TwitchEventSubService>().mockImplementation(() => ({
-            initialize: createMockFn().mockResolvedValue(true),
-            shutdown: createMockFn().mockResolvedValue(true),
+        TwitchEventSub: vi.fn<(...args: []) => TwitchEventSubService>().mockImplementation(() => ({
+            initialize: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            shutdown: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
             isInitialized: true
         })),
 
-        ApiClient: createMockFn<[], TwitchApiClient>().mockImplementation(() => ({
+        ApiClient: vi.fn<(...args: []) => TwitchApiClient>().mockImplementation(() => ({
             users: {
-                getUserByName: createMockFn().mockResolvedValue({ id: 'test-user-id', displayName: 'TestUser' })
+                getUserByName: vi.fn<(...args: unknown[]) => Promise<{ id: string; displayName: string; }>>().mockResolvedValue({ id: 'test-user-id', displayName: 'TestUser' })
             },
             channels: {
-                getChannelInfo: createMockFn().mockResolvedValue({ title: 'Test Stream', viewerCount: 75 })
+                getChannelInfo: vi.fn<(...args: unknown[]) => Promise<{ title: string; viewerCount: number; }>>().mockResolvedValue({ title: 'Test Stream', viewerCount: 75 })
             }
         })),
 
-        RefreshingAuthProvider: createMockFn().mockImplementation(() => ({
-            getAccessToken: createMockFn().mockResolvedValue({ accessToken: 'test-token' }),
-            refresh: createMockFn().mockResolvedValue(true)
+        RefreshingAuthProvider: vi.fn(() => ({
+            getAccessToken: vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; }>>().mockResolvedValue({ accessToken: 'test-token' }),
+            refresh: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
         })),
 
-        EventSubWsListener: createMockFn().mockImplementation(() => ({
-            start: createMockFn().mockResolvedValue(true),
-            stop: createMockFn().mockResolvedValue(true),
-            subscribeToChannelFollowEvents: createMockFn().mockResolvedValue(true),
-            subscribeToChannelSubscriptionEvents: createMockFn().mockResolvedValue(true),
-            subscribeToChannelRaidEvents: createMockFn().mockResolvedValue(true)
+        EventSubWsListener: vi.fn(() => ({
+            start: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            stop: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            subscribeToChannelFollowEvents: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            subscribeToChannelSubscriptionEvents: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            subscribeToChannelRaidEvents: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
         })),
 
         _mockType: 'TwitchServices',
@@ -592,27 +569,27 @@ const createMockOBSManager = (connectionState = 'connected', overrides = {}) => 
     const isConnected = connectionState === 'connected';
     
     const baseMethods = {
-        isConnected: createMockFn().mockReturnValue(isConnected),
-        isReady: createMockFn().mockResolvedValue(isConnected),
-        connect: createMockFn().mockResolvedValue(isConnected),
-        disconnect: createMockFn().mockResolvedValue(true),
-        call: createMockFn().mockResolvedValue({ status: 'success' }),
-        addEventListener: createMockFn(),
-        removeEventListener: createMockFn(),
+        isConnected: vi.fn<(...args: unknown[]) => typeof isConnected>().mockReturnValue(isConnected),
+        isReady: vi.fn<(...args: unknown[]) => Promise<typeof isConnected>>().mockResolvedValue(isConnected),
+        connect: vi.fn<(...args: unknown[]) => Promise<typeof isConnected>>().mockResolvedValue(isConnected),
+        disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        call: vi.fn<(...args: unknown[]) => Promise<{ status: string; }>>().mockResolvedValue({ status: 'success' }),
+        addEventListener: vi.fn<(...args: unknown[]) => unknown>(),
+        removeEventListener: vi.fn<(...args: unknown[]) => unknown>(),
         
-        setCurrentScene: createMockFn().mockResolvedValue(true),
-        getCurrentScene: createMockFn().mockResolvedValue({ sceneName: 'main_scene' }),
-        getSceneList: createMockFn().mockResolvedValue({ scenes: [{ sceneName: 'main_scene' }] }),
+        setCurrentScene: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getCurrentScene: vi.fn<(...args: unknown[]) => Promise<{ sceneName: string; }>>().mockResolvedValue({ sceneName: 'main_scene' }),
+        getSceneList: vi.fn<(...args: unknown[]) => Promise<{ scenes: { sceneName: string; }[]; }>>().mockResolvedValue({ scenes: [{ sceneName: 'main_scene' }] }),
         
-        setTextSource: createMockFn().mockResolvedValue(true),
-        getSourceSettings: createMockFn().mockResolvedValue({ text: 'Test text' }),
-        setSourceVisibility: createMockFn().mockResolvedValue(true),
+        setTextSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getSourceSettings: vi.fn<(...args: unknown[]) => Promise<{ text: string; }>>().mockResolvedValue({ text: 'Test text' }),
+        setSourceVisibility: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        triggerMediaSource: createMockFn().mockResolvedValue(true),
-        setMediaSource: createMockFn().mockResolvedValue(true),
+        triggerMediaSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        setMediaSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        setFilterEnabled: createMockFn().mockResolvedValue(true),
-        getFilterList: createMockFn().mockResolvedValue({ filters: [] })
+        setFilterEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getFilterList: vi.fn<(...args: unknown[]) => Promise<{ filters: never[]; }>>().mockResolvedValue({ filters: [] })
     };
 
     return {
@@ -626,21 +603,21 @@ const createMockOBSManager = (connectionState = 'connected', overrides = {}) => 
 
 const createMockSourcesManager = (overrides = {}) => {
     const baseMethods = {
-        updateTextSource: createMockFn().mockResolvedValue(),
-        clearTextSource: createMockFn().mockResolvedValue(),
-        updateChatMsgText: createMockFn().mockResolvedValue(),
-        getSceneItemId: createMockFn().mockResolvedValue({ sceneItemId: 1, sceneName: 'test-scene' }),
-        setSourceVisibility: createMockFn().mockResolvedValue(),
-        getGroupSceneItemId: createMockFn().mockResolvedValue({ sceneItemId: 1 }),
-        setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-        setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-        setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-        hideAllPlatformLogos: createMockFn().mockResolvedValue(),
-        hideAllNotificationPlatformLogos: createMockFn().mockResolvedValue(),
-        setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-        setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-        hideAllDisplays: createMockFn().mockResolvedValue(),
-        setSourceFilterVisibility: createMockFn().mockResolvedValue()
+        updateTextSource: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        clearTextSource: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        updateChatMsgText: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        getSceneItemId: vi.fn<(...args: unknown[]) => Promise<{ sceneItemId: number; sceneName: string; }>>().mockResolvedValue({ sceneItemId: 1, sceneName: 'test-scene' }),
+        setSourceVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        getGroupSceneItemId: vi.fn<(...args: unknown[]) => Promise<{ sceneItemId: number; }>>().mockResolvedValue({ sceneItemId: 1 }),
+        setGroupSourceVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        setPlatformLogoVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        setNotificationPlatformLogoVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        hideAllPlatformLogos: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        hideAllNotificationPlatformLogos: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        setChatDisplayVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        setNotificationDisplayVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        hideAllDisplays: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        setSourceFilterVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined)
     };
 
     return {
@@ -662,7 +639,7 @@ const createMockRetrySystem = (behaviorConfig: UnknownRecord = {}) => {
     let callCount = 0;
 
     return {
-        executeWithRetry: createMockFn<[unknown, () => unknown | Promise<unknown>], Promise<unknown>>().mockImplementation(async (_platform, fn) => {
+        executeWithRetry: vi.fn<(...args: [unknown, () => unknown | Promise<unknown>]) => Promise<unknown>>().mockImplementation(async (_platform, fn) => {
             callCount++;
             
             if (nextPseudoRandom() > defaultBehavior.successRate) {
@@ -672,14 +649,14 @@ const createMockRetrySystem = (behaviorConfig: UnknownRecord = {}) => {
             return await fn();
         }),
         
-        resetRetryCount: createMockFn().mockImplementation(() => { callCount = 0; }),
-        handleConnectionError: createMockFn(),
-        handleConnectionSuccess: createMockFn(),
-        incrementRetryCount: createMockFn().mockImplementation(() => {
+        resetRetryCount: vi.fn(() => { callCount = 0; }),
+        handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+        handleConnectionSuccess: vi.fn<(...args: unknown[]) => unknown>(),
+        incrementRetryCount: vi.fn(() => {
             callCount++;
             return defaultBehavior.baseDelay * (defaultBehavior.shouldExponentialBackoff ? Math.pow(2, callCount - 1) : 1);
         }),
-        getRetryCount: createMockFn().mockImplementation(() => callCount),
+        getRetryCount: vi.fn(() => callCount),
         
         _mockType: 'RetrySystem',
         _behavior: defaultBehavior,
@@ -696,14 +673,14 @@ const createMockFileSystem = (behaviorConfig: UnknownRecord = {}) => {
     };
 
     const baseMethods = {
-        readFile: createMockFn<unknown[], Promise<unknown>>().mockImplementation((_path, callback) => {
+        readFile: vi.fn<(...args: unknown[]) => Promise<unknown>>().mockImplementation((_path, callback) => {
             if (typeof callback === 'function') {
                 callback(null, defaultBehavior.readFileContent);
             }
             return Promise.resolve(defaultBehavior.readFileContent);
         }),
-        readFileSync: createMockFn().mockReturnValue(defaultBehavior.readFileContent),
-        writeFile: createMockFn<unknown[], Promise<void>>().mockImplementation((_path, _data, callback) => {
+        readFileSync: vi.fn<(...args: unknown[]) => string>().mockReturnValue(defaultBehavior.readFileContent),
+        writeFile: vi.fn<(...args: unknown[]) => Promise<void>>().mockImplementation((_path, _data, callback) => {
             if (defaultBehavior.writeSucceeds) {
                 if (typeof callback === 'function') callback(null);
                 return Promise.resolve();
@@ -713,28 +690,28 @@ const createMockFileSystem = (behaviorConfig: UnknownRecord = {}) => {
                 return Promise.reject(error);
             }
         }),
-        writeFileSync: createMockFn<unknown[], void>().mockImplementation((_path, _data) => {
+        writeFileSync: vi.fn<(...args: unknown[]) => void>().mockImplementation((_path, _data) => {
             if (!defaultBehavior.writeSucceeds) {
                 throw new Error('Write failed');
             }
         }),
-        existsSync: createMockFn().mockReturnValue(defaultBehavior.fileExists),
-        access: createMockFn<unknown[], Promise<void>>().mockImplementation((_path, callback) => {
+        existsSync: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(defaultBehavior.fileExists),
+        access: vi.fn<(...args: unknown[]) => Promise<void>>().mockImplementation((_path, callback) => {
             if (typeof callback === 'function') {
                 callback(defaultBehavior.fileExists ? null : new Error('File not found'));
             }
             return defaultBehavior.fileExists ? Promise.resolve() : Promise.reject(new Error('File not found'));
         }),
-        mkdir: createMockFn<unknown[], Promise<void>>().mockImplementation((_path, options, callback) => {
+        mkdir: vi.fn<(...args: unknown[]) => Promise<void>>().mockImplementation((_path, options, callback) => {
             const cb: NodeStyleCallback | undefined = typeof options === 'function'
                 ? options as NodeStyleCallback
                 : (typeof callback === 'function' ? callback as NodeStyleCallback : undefined);
             if (cb) cb(null);
             return Promise.resolve();
         }),
-        mkdirSync: createMockFn(),
-        stat: createMockFn().mockResolvedValue({ isFile: () => true, isDirectory: () => false }),
-        statSync: createMockFn().mockReturnValue({ isFile: () => true, isDirectory: () => false })
+        mkdirSync: vi.fn<(...args: unknown[]) => unknown>(),
+        stat: vi.fn<(...args: unknown[]) => Promise<{ isFile: () => true; isDirectory: () => false; }>>().mockResolvedValue({ isFile: () => true, isDirectory: () => false }),
+        statSync: vi.fn<(...args: unknown[]) => { isFile: () => true; isDirectory: () => false; }>().mockReturnValue({ isFile: () => true, isDirectory: () => false })
     };
 
     return {
@@ -748,16 +725,16 @@ const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () 
 
 const createTestApp = (handlerOverrides: UnknownRecord = {}) => {
     const baseHandlers = {
-        handleChatMessage: createMockFn().mockResolvedValue(true),
-        handleGiftNotification: createMockFn().mockResolvedValue(true),
-        handleFollowNotification: createMockFn().mockResolvedValue(true),
-        handlePaypiggyNotification: createMockFn().mockResolvedValue(true),
-        handleRaidNotification: createMockFn().mockResolvedValue(true),
-        updateViewerCount: createMockFn().mockResolvedValue(true),
+        handleChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleGiftNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleFollowNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handlePaypiggyNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleRaidNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        updateViewerCount: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        handlePlatformConnection: createMockFn().mockResolvedValue(true),
-        handlePlatformDisconnection: createMockFn().mockResolvedValue(true),
-        handleError: createMockFn().mockResolvedValue(true)
+        handlePlatformConnection: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handlePlatformDisconnection: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleError: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
     };
 
     return {
@@ -777,44 +754,44 @@ const createTestApp = (handlerOverrides: UnknownRecord = {}) => {
 
 const createMockOBSConnection = (connectionState = 'connected', methodOverrides: UnknownRecord = {}) => {
     const baseMethods = {
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn().mockResolvedValue(true),
-        isConnected: createMockFn().mockReturnValue(connectionState === 'connected'),
-        getConnectionState: createMockFn().mockReturnValue(connectionState),
-        sendRequest: createMockFn().mockResolvedValue({ status: 'ok' }),
-        sendCommand: createMockFn().mockResolvedValue({ status: 'ok' }),
-        updateTextSource: createMockFn().mockResolvedValue(true),
-        setSourceVisibility: createMockFn().mockResolvedValue(true),
-        playMediaSource: createMockFn().mockResolvedValue(true),
-        stopMediaSource: createMockFn().mockResolvedValue(true),
-        getSceneList: createMockFn().mockResolvedValue({ scenes: [] }),
-        getSourceList: createMockFn().mockResolvedValue({ sources: [] }),
-        setSceneItemEnabled: createMockFn().mockResolvedValue(true),
-        getSceneItemEnabled: createMockFn().mockResolvedValue(true),
-        setSourceFilterEnabled: createMockFn().mockResolvedValue(true),
-        getSourceFilterEnabled: createMockFn().mockResolvedValue(true),
-        setSourceSettings: createMockFn().mockResolvedValue(true),
-        getSourceSettings: createMockFn().mockResolvedValue({}),
-        setInputVolume: createMockFn().mockResolvedValue(true),
-        getInputVolume: createMockFn().mockResolvedValue({ inputVolume: 1.0 }),
-        setInputMute: createMockFn().mockResolvedValue(true),
-        getInputMute: createMockFn().mockResolvedValue({ inputMuted: false }),
-        triggerHotkeyBySequence: createMockFn().mockResolvedValue(true),
-        triggerHotkeyByName: createMockFn().mockResolvedValue(true),
-        triggerHotkeyByKeySequence: createMockFn().mockResolvedValue(true),
-        getStudioModeEnabled: createMockFn().mockResolvedValue({ studioModeEnabled: false }),
-        setStudioModeEnabled: createMockFn().mockResolvedValue(true),
-        getTransitionList: createMockFn().mockResolvedValue({ transitions: [] }),
-        setCurrentTransition: createMockFn().mockResolvedValue(true),
-        setTransitionDuration: createMockFn().mockResolvedValue(true),
-        triggerStudioModeTransition: createMockFn().mockResolvedValue(true),
-        executeBatch: createMockFn().mockResolvedValue({ results: [] }),
-        on: createMockFn(),
-        off: createMockFn(),
-        once: createMockFn(),
-        emit: createMockFn(),
+        connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        isConnected: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(connectionState === 'connected'),
+        getConnectionState: vi.fn<(...args: unknown[]) => typeof connectionState>().mockReturnValue(connectionState),
+        sendRequest: vi.fn<(...args: unknown[]) => Promise<{ status: string; }>>().mockResolvedValue({ status: 'ok' }),
+        sendCommand: vi.fn<(...args: unknown[]) => Promise<{ status: string; }>>().mockResolvedValue({ status: 'ok' }),
+        updateTextSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        setSourceVisibility: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        playMediaSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        stopMediaSource: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getSceneList: vi.fn<(...args: unknown[]) => Promise<{ scenes: never[]; }>>().mockResolvedValue({ scenes: [] }),
+        getSourceList: vi.fn<(...args: unknown[]) => Promise<{ sources: never[]; }>>().mockResolvedValue({ sources: [] }),
+        setSceneItemEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getSceneItemEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        setSourceFilterEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getSourceFilterEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        setSourceSettings: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getSourceSettings: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+        setInputVolume: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getInputVolume: vi.fn<(...args: unknown[]) => Promise<{ inputVolume: number; }>>().mockResolvedValue({ inputVolume: 1.0 }),
+        setInputMute: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getInputMute: vi.fn<(...args: unknown[]) => Promise<{ inputMuted: false; }>>().mockResolvedValue({ inputMuted: false }),
+        triggerHotkeyBySequence: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        triggerHotkeyByName: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        triggerHotkeyByKeySequence: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getStudioModeEnabled: vi.fn<(...args: unknown[]) => Promise<{ studioModeEnabled: false; }>>().mockResolvedValue({ studioModeEnabled: false }),
+        setStudioModeEnabled: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getTransitionList: vi.fn<(...args: unknown[]) => Promise<{ transitions: never[]; }>>().mockResolvedValue({ transitions: [] }),
+        setCurrentTransition: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        setTransitionDuration: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        triggerStudioModeTransition: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        executeBatch: vi.fn<(...args: unknown[]) => Promise<{ results: never[]; }>>().mockResolvedValue({ results: [] }),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
+        once: vi.fn<(...args: unknown[]) => unknown>(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
         
-        processSourceEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
+        processSourceEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sourceData) => {
             const sourceRecord = asRecord(sourceData);
             const eventData = asRecord(sourceRecord.eventData);
             const inputSettings = asRecord(eventData.inputSettings);
@@ -834,7 +811,7 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
                 timestamp: timestamp.iso
             };
         }),
-        processSceneEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
+        processSceneEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sceneData) => {
             const sceneRecord = asRecord(sceneData);
             const eventData = asRecord(sceneRecord.eventData);
             const timestamp = createTimestamp();
@@ -855,7 +832,7 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
             };
         }),
         
-        displayNotification: createMockFn<[unknown], UnknownRecord>().mockImplementation((notification) => {
+        displayNotification: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((notification) => {
             const notificationRecord = asRecord(notification);
             const timestamp = createTimestamp();
             return {
@@ -883,42 +860,42 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
     const throwOnAdd = methodOverrides.shouldThrowError ?? normalizedQueueState.shouldThrowError;
     const errorMessage = methodOverrides.errorMessage ?? normalizedQueueState.errorMessage;
     const addItemMock = throwOnAdd
-        ? createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>().mockImplementation(() => {
+        ? vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>().mockImplementation(() => {
             throw new Error(errorMessage || 'DisplayQueue error');
         })
-        : createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]);
+        : vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]);
     const baseMethods = {
         addItem: addItemMock,
-        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>().mockImplementation((items) => {
+        addSequence: vi.fn<(...args: [DisplayQueueItem[]]) => readonly DisplayQueueItem[]>().mockImplementation((items) => {
             for (const item of items) {
                 addItemMock(item);
             }
             return items;
         }),
-        addToQueue: createMockFn().mockResolvedValue(true),
-        processQueue: createMockFn().mockResolvedValue(true),
-        removeItem: createMockFn().mockResolvedValue(true),
-        clearQueue: createMockFn().mockResolvedValue(true),
-        getQueueLength: createMockFn().mockReturnValue(normalizedQueueState.length || 0),
-        getNextItem: createMockFn().mockReturnValue(normalizedQueueState.nextItem || null),
-        isProcessing: createMockFn().mockReturnValue(normalizedQueueState.isProcessing || false),
-        startProcessing: createMockFn().mockResolvedValue(true),
-        stopProcessing: createMockFn().mockResolvedValue(true),
-        pauseProcessing: createMockFn().mockResolvedValue(true),
-        resumeProcessing: createMockFn().mockResolvedValue(true),
-        getQueueItems: createMockFn().mockReturnValue(normalizedQueueState.items || []),
-        setMaxQueueSize: createMockFn().mockResolvedValue(true),
-        getMaxQueueSize: createMockFn().mockReturnValue(normalizedQueueState.maxSize ?? 100),
-        isQueueFull: createMockFn().mockReturnValue(normalizedQueueState.isFull || false),
-        getProcessingStats: createMockFn().mockReturnValue({
+        addToQueue: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        processQueue: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        removeItem: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        clearQueue: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getQueueLength: vi.fn<(...args: unknown[]) => number>().mockReturnValue(normalizedQueueState.length || 0),
+        getNextItem: vi.fn<(...args: unknown[]) => {} | null>().mockReturnValue(normalizedQueueState.nextItem || null),
+        isProcessing: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(normalizedQueueState.isProcessing || false),
+        startProcessing: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        stopProcessing: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        pauseProcessing: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        resumeProcessing: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getQueueItems: vi.fn<(...args: unknown[]) => unknown[]>().mockReturnValue(normalizedQueueState.items || []),
+        setMaxQueueSize: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        getMaxQueueSize: vi.fn<(...args: unknown[]) => number>().mockReturnValue(normalizedQueueState.maxSize ?? 100),
+        isQueueFull: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(normalizedQueueState.isFull || false),
+        getProcessingStats: vi.fn<(...args: unknown[]) => { processed: number; failed: number; averageProcessingTime: number; }>().mockReturnValue({
             processed: normalizedQueueState.processed || 0,
             failed: normalizedQueueState.failed || 0,
             averageProcessingTime: normalizedQueueState.avgTime || 0
         }),
-        on: createMockFn(),
-        off: createMockFn(),
-        once: createMockFn(),
-        emit: createMockFn()
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
+        once: vi.fn<(...args: unknown[]) => unknown>(),
+        emit: vi.fn<(...args: unknown[]) => unknown>()
     };
 
     return {
@@ -938,8 +915,9 @@ const resetMock = (mockObject: unknown) => {
     }
 
     Object.keys(mockRecord).forEach(key => {
-        if (isMockFunction(mockRecord[key])) {
-            mockRecord[key].mockReset();
+        const method = mockRecord[key];
+        if (typeof method === 'function' && 'mockReset' in method && typeof method.mockReset === 'function') {
+            method.mockReset();
         }
     });
 };
@@ -952,8 +930,9 @@ const clearMockCalls = (mockObject: unknown) => {
     }
 
     Object.keys(mockRecord).forEach(key => {
-        if (isMockFunction(mockRecord[key])) {
-            mockRecord[key].mockClear();
+        const method = mockRecord[key];
+        if (typeof method === 'function' && 'mockClear' in method && typeof method.mockClear === 'function') {
+            method.mockClear();
         }
     });
 };
@@ -984,7 +963,7 @@ const createMockYouTubePlatform = (behaviorConfig: UnknownRecord = {}) => {
     };
     
     const youtubeMethods = {
-        processSuperChat: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (superChatData) => {
+        processSuperChat: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (superChatData) => {
             if (defaultBehavior.superChatProcessing === 'disabled') {
                 throw new Error('SuperChat processing disabled');
             }
@@ -1017,7 +996,7 @@ const createMockYouTubePlatform = (behaviorConfig: UnknownRecord = {}) => {
                 notification: notification
             };
         }),
-        handleMembership: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (membershipData) => {
+        handleMembership: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (membershipData) => {
             const membershipRecord = asRecord(membershipData);
             const priority = defaultBehavior.membershipHandling === 'priority' ? 'high' : 'normal';
             const timestamp = createTimestamp();
@@ -1037,7 +1016,7 @@ const createMockYouTubePlatform = (behaviorConfig: UnknownRecord = {}) => {
                 }
             };
         }),
-        processRegularMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (messageData) => {
+        processRegularMessage: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (messageData) => {
             return {
                 processed: true,
                 message: messageData
@@ -1062,7 +1041,7 @@ const createMockTwitchPlatform = (behaviorConfig: UnknownRecord = {}) => {
     };
     
     const twitchMethods = {
-        processSubscription: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (subData) => {
+        processSubscription: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (subData) => {
             if (defaultBehavior.subscriptionProcessing === 'disabled') {
                 throw new Error('Subscription processing disabled');
             }
@@ -1083,7 +1062,7 @@ const createMockTwitchPlatform = (behaviorConfig: UnknownRecord = {}) => {
                 }
             };
         }),
-        handleRaid: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (raidData) => {
+        handleRaid: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (raidData) => {
             const raidRecord = asRecord(raidData);
             const priority = defaultBehavior.raidHandling === 'priority' ? 'high' : 'normal';
             const timestamp = createTimestamp();
@@ -1103,7 +1082,7 @@ const createMockTwitchPlatform = (behaviorConfig: UnknownRecord = {}) => {
                 }
             };
         }),
-        processFollow: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (followData) => {
+        processFollow: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (followData) => {
             const followRecord = asRecord(followData);
             const timestamp = createTimestamp();
             return {
@@ -1139,7 +1118,7 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
     };
     
     const tiktokMethods = {
-        processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation((giftData) => {
+        processGift: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((giftData) => {
             const giftRecord = requireRecord(giftData, 'giftData');
             const giftCount = requireFiniteNumber(giftRecord.giftCount, 'giftCount');
             const shouldAggregate = defaultBehavior.giftAggregation === 'enabled' && giftCount > 1;
@@ -1175,7 +1154,7 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
                 }
             };
         }),
-        aggregateGifts: createMockFn<[unknown], Promise<unknown>>().mockImplementation(async (giftEvents) => {
+        aggregateGifts: vi.fn<(...args: [unknown]) => Promise<unknown>>().mockImplementation(async (giftEvents) => {
             if (defaultBehavior.giftAggregation === 'disabled') {
                 return giftEvents;
             }
@@ -1519,13 +1498,13 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
     };
     
     const behaviorMethods = {
-        connectToChat: createMockFn<[], Promise<boolean>>().mockImplementation(async () => {
+        connectToChat: vi.fn<(...args: []) => Promise<boolean>>().mockImplementation(async () => {
             if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < getErrorRate()) {
                 throw new Error('Connection unstable');
             }
             return true;
         }),
-        processMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((message) => {
+        processMessage: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((message) => {
             if (message === null) {
                 throw new Error('Message data is missing - unable to process chat message');
             }
@@ -1632,8 +1611,8 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 displayMessage: `${baseResult.username}: ${baseResult.messageContent}`
             };
         }),
-        processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation(processGiftForPlatform),
-        processEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((event) => {
+        processGift: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation(processGiftForPlatform),
+        processEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((event) => {
             if (defaultBehavior.processingSpeed === 'slow') {
                 // Simulate slow processing without actual delay in tests
             }
@@ -1653,11 +1632,11 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 timestamp: timestamp.iso
             };
         }),
-        handleNotification: createMockFn<[unknown], UnknownRecord>().mockImplementation((notification) => {
+        handleNotification: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((notification) => {
             return { handled: true, notification };
         }),
         
-        processFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
+        processFollow: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((followData) => {
             const normalizedUser = normalizeUserData(followData);
             const followRecord = asRecord(followData);
             const timestamp = createTimestamp();
@@ -1678,7 +1657,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processMemberJoin: createMockFn<[unknown], UnknownRecord>().mockImplementation((memberData) => {
+        processMemberJoin: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((memberData) => {
             const memberRecord = memberData as UnknownRecord;
             const normalizedUser = normalizeUserData(memberData);
             const timestamp = createTimestamp();
@@ -1700,7 +1679,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processLike: createMockFn<[unknown], UnknownRecord>().mockImplementation((likeData) => {
+        processLike: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((likeData) => {
             const likeRecord = likeData as UnknownRecord;
             const user = asRecord(likeRecord.user);
             const username = user.uniqueId || 'TestLiker';
@@ -1722,7 +1701,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSocial: createMockFn<[unknown], UnknownRecord>().mockImplementation((socialData) => {
+        processSocial: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((socialData) => {
             const socialRecord = socialData as UnknownRecord;
             const user = asRecord(socialRecord.user);
             const username = user.uniqueId || 'TestUser';
@@ -1740,7 +1719,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processEmote: createMockFn<[unknown], UnknownRecord>().mockImplementation((emoteData) => {
+        processEmote: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((emoteData) => {
             const emoteRecord = emoteData as UnknownRecord;
             const user = asRecord(emoteRecord.user);
             const emote = asRecord(emoteRecord.emote);
@@ -1761,7 +1740,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processViewerCount: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+        processViewerCount: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((viewerData) => {
             const viewerRecord = viewerData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -1774,7 +1753,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
+        processRoomUser: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((roomUserData) => {
             const roomUserRecord = roomUserData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -1788,7 +1767,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processEventSubMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((messageData) => {
+        processEventSubMessage: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((messageData) => {
             const messageRecord = messageData as UnknownRecord;
             const chatter = asRecord(messageRecord.chatter);
             const user = asRecord(messageRecord.user);
@@ -1811,7 +1790,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processEventSubFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
+        processEventSubFollow: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((followData) => {
             const followRecord = followData as UnknownRecord;
             const user = asRecord(followRecord.user);
             const username = followRecord.user_name || user.display_name || 'TestFollower';
@@ -1837,7 +1816,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processEventSubRaid: createMockFn<[unknown], UnknownRecord>().mockImplementation((raidData) => {
+        processEventSubRaid: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((raidData) => {
             const raidRecord = raidData as UnknownRecord;
             const username = raidRecord.from_broadcaster_user_name || 'RaiderUser';
             const viewerCount = raidRecord.viewerCount ?? 42;
@@ -1864,7 +1843,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processEventSubBits: createMockFn<[unknown], UnknownRecord>().mockImplementation((bitsData) => {
+        processEventSubBits: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((bitsData) => {
             const bitsRecord = bitsData as UnknownRecord;
             const message = asRecord(bitsRecord.message);
             const username = bitsRecord.user_name || 'CheererUser';
@@ -1905,7 +1884,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSuperSticker: createMockFn<[unknown], UnknownRecord>().mockImplementation((stickerData) => {
+        processSuperSticker: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((stickerData) => {
             const stickerRecord = stickerData as UnknownRecord;
             const item = asRecord(stickerRecord.item);
             const author = asRecord(item.author);
@@ -1939,7 +1918,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processViewerJoin: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+        processViewerJoin: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((viewerData) => {
             const viewerRecord = viewerData as UnknownRecord;
             const user = asRecord(viewerRecord.user);
             const timestamp = createTimestamp();
@@ -1954,7 +1933,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processViewerLeave: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+        processViewerLeave: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((viewerData) => {
             const viewerRecord = viewerData as UnknownRecord;
             const user = asRecord(viewerRecord.user);
             const timestamp = createTimestamp();
@@ -1969,7 +1948,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processFollowWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
+        processFollowWebhook: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((followData) => {
             const followRecord = followData as UnknownRecord;
             const data = asRecord(followRecord.data);
             const resolvedUsername = followRecord.username || data.displayName || data.username || 'TestFollower';
@@ -1988,7 +1967,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSubscriberWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((subData) => {
+        processSubscriberWebhook: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((subData) => {
             const subRecord = subData as UnknownRecord;
             const data = asRecord(subRecord.data);
             const resolvedUsername = subRecord.username || data.displayName || 'TestSubscriber';
@@ -2007,7 +1986,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((webhookData) => {
+        processWebhook: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((webhookData) => {
             const webhookRecord = webhookData as UnknownRecord;
             const user = asRecord(webhookRecord.user);
             const eventId = typeof webhookRecord.eventId === 'string' ? webhookRecord.eventId : '';
@@ -2067,7 +2046,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             }
         }),
         
-        processSceneTransition: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
+        processSceneTransition: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sceneData) => {
             const sceneRecord = sceneData as UnknownRecord;
             const eventData = asRecord(sceneRecord.eventData);
             const timestamp = createTimestamp();
@@ -2081,7 +2060,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSourceUpdate: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
+        processSourceUpdate: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sourceData) => {
             const sourceRecord = sourceData as UnknownRecord;
             const eventData = asRecord(sourceRecord.eventData);
             const timestamp = createTimestamp();
@@ -2096,7 +2075,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processConnectionEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((connectionData) => {
+        processConnectionEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((connectionData) => {
             const connectionRecord = connectionData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2111,7 +2090,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSceneEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
+        processSceneEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sceneData) => {
             const sceneRecord = sceneData as UnknownRecord;
             const eventData = asRecord(sceneRecord.eventData);
             const timestamp = createTimestamp();
@@ -2132,7 +2111,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processSourceEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
+        processSourceEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((sourceData) => {
             const sourceRecord = sourceData as UnknownRecord;
             const eventData = asRecord(sourceRecord.eventData);
             const inputSettings = asRecord(eventData.inputSettings);
@@ -2162,7 +2141,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        processViewerEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+        processViewerEvent: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((viewerData) => {
             const viewerRecord = viewerData as UnknownRecord;
             const user = asRecord(viewerRecord.user);
             let eventType = viewerRecord.type || 'viewer_join';
@@ -2183,7 +2162,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleWebSocketMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+        handleWebSocketMessage: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const metadata = asRecord(messageRecord.metadata);
             const timestamp = createTimestamp();
@@ -2195,7 +2174,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleNotificationEvent: createMockFn<[unknown, unknown], UnknownRecord>().mockImplementation((subscriptionType, event) => {
+        handleNotificationEvent: vi.fn<(...args: [unknown, unknown]) => UnknownRecord>().mockImplementation((subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2206,7 +2185,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleNotificationEventWithDispatcher: createMockFn<[unknown, unknown], Promise<UnknownRecord>>().mockImplementation(async (subscriptionType, event) => {
+        handleNotificationEventWithDispatcher: vi.fn<(...args: [unknown, unknown]) => Promise<UnknownRecord>>().mockImplementation(async (subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2218,7 +2197,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleChatMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+        handleChatMessage: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2229,7 +2208,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleSuperChat: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+        handleSuperChat: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2240,7 +2219,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleMembershipGift: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+        handleMembershipGift: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2251,7 +2230,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleNewSponsor: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+        handleNewSponsor: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2262,7 +2241,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleGift: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+        handleGift: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (event) => {
             const eventRecord = event as UnknownRecord;
             const gift = asRecord(eventRecord.gift);
             const timestamp = createTimestamp();
@@ -2274,7 +2253,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleFollow: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+        handleFollow: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (event) => {
             const eventRecord = event as UnknownRecord;
             const user = asRecord(eventRecord.user);
             const timestamp = createTimestamp();
@@ -2286,7 +2265,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleViewerCount: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+        handleViewerCount: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (event) => {
             const eventRecord = event as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2297,7 +2276,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        handleWebcastEvent: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+        handleWebcastEvent: vi.fn<(...args: [unknown]) => Promise<UnknownRecord>>().mockImplementation(async (event) => {
             const eventRecord = event as UnknownRecord;
             const timestamp = createTimestamp();
             return {
@@ -2308,15 +2287,15 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        isConnected: createMockFn<[], boolean>().mockImplementation(() => {
+        isConnected: vi.fn<(...args: []) => boolean>().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        isActive: createMockFn<[], boolean>().mockImplementation(() => {
+        isActive: vi.fn<(...args: []) => boolean>().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        getViewerCount: createMockFn<[], number>().mockImplementation(() => {
+        getViewerCount: vi.fn<(...args: []) => number>().mockImplementation(() => {
             return 1000;
         }),
 
@@ -2329,7 +2308,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
     
     if (platformName === 'youtube') {
         platformSpecificMethods = {
-            processSuperChat: createMockFn<[unknown], UnknownRecord>().mockImplementation((superChatData) => {
+            processSuperChat: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((superChatData) => {
                 const superChatRecord = superChatData as UnknownRecord;
                 const item = asRecord(superChatRecord.item);
                 const author = asRecord(item.author);
@@ -2360,15 +2339,15 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 };
             }),
             
-            searchLiveStreams: createMockFn().mockResolvedValue(['testvideoid1', 'testvideoid2']),
-            connectToStream: createMockFn().mockResolvedValue(true)
+            searchLiveStreams: vi.fn<(...args: unknown[]) => Promise<string[]>>().mockResolvedValue(['testvideoid1', 'testvideoid2']),
+            connectToStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
         };
     } else if (platformName === 'tiktok') {
         let cachedViewerCount = 100;
         
         platformSpecificMethods = {
-            getCachedViewerCount: createMockFn<[], number>().mockImplementation(() => cachedViewerCount),
-            processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
+            getCachedViewerCount: vi.fn<(...args: []) => number>().mockImplementation(() => cachedViewerCount),
+            processRoomUser: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((roomUserData) => {
                 const roomUserRecord = roomUserData as UnknownRecord;
                 cachedViewerCount = Number(roomUserRecord.viewerCount ?? 1847);
                 const timestamp = createTimestamp();
@@ -2382,7 +2361,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                     timestamp: timestamp.iso
                 };
             }),
-            processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation((giftData) => {
+            processGift: vi.fn<(...args: [unknown]) => UnknownRecord>().mockImplementation((giftData) => {
                 const giftRecord = giftData as UnknownRecord;
                 const normalizedUser = normalizeUserData(giftRecord);
                 const giftDetails = asRecord(giftRecord.giftDetails);
@@ -2439,18 +2418,18 @@ const createMockSpamDetector = (behaviorOverrides = {}) => {
     };
 
     const baseMethods = {
-        handleDonationSpam: createMockFn().mockReturnValue({
+        handleDonationSpam: vi.fn<(...args: unknown[]) => { shouldShow: boolean; aggregatedMessage: null; }>().mockReturnValue({
             shouldShow: defaultBehavior.shouldShow,
             aggregatedMessage: defaultBehavior.aggregatedMessage
         }),
-        isLowValueDonation: createMockFn().mockReturnValue(defaultBehavior.isLowValue),
-        getStatistics: createMockFn().mockReturnValue({
+        isLowValueDonation: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(defaultBehavior.isLowValue),
+        getStatistics: vi.fn<(...args: unknown[]) => { totalMessages: number; duplicates: number; spamDetected: number; }>().mockReturnValue({
             totalMessages: 0,
             duplicates: 0,
             spamDetected: 0
         }),
-        resetTracking: createMockFn(),
-        destroy: createMockFn()
+        resetTracking: vi.fn<(...args: unknown[]) => unknown>(),
+        destroy: vi.fn<(...args: unknown[]) => unknown>()
     };
 
     return {
@@ -2472,34 +2451,34 @@ const createMockAuthManager = (state = 'READY', authOverrides = {}) => {
     };
 
     const baseMethods = {
-        getState: createMockFn().mockReturnValue(state),
-        getUserId: createMockFn().mockImplementation(() => {
+        getState: vi.fn<(...args: unknown[]) => typeof state>().mockReturnValue(state),
+        getUserId: vi.fn(() => {
             if (state !== 'READY') {
                 throw new Error('Authentication not initialized. Call initialize() first.');
             }
             return defaultAuthData.userId;
         }),
-        getAccessToken: createMockFn().mockImplementation(() => {
+        getAccessToken: vi.fn(() => {
             if (state !== 'READY') {
                 return Promise.reject(new Error('Authentication not initialized. Call initialize() first.'));
             }
             return Promise.resolve(defaultAuthData.accessToken);
         }),
-        getScopes: createMockFn().mockImplementation(() => {
+        getScopes: vi.fn(() => {
             if (state !== 'READY') {
                 return Promise.reject(new Error('Authentication not initialized. Call initialize() first.'));
             }
             return Promise.resolve(defaultAuthData.scopes);
         }),
-        initialize: createMockFn().mockImplementation(async () => {
+        initialize: vi.fn(async () => {
             if (state === 'ERROR') {
                 throw new Error('Mock authentication initialization failed');
             }
             return state === 'READY';
         }),
-        updateConfig: createMockFn(),
-        getLastError: createMockFn().mockReturnValue(state === 'ERROR' ? new Error('Mock auth error') : null),
-        isReady: createMockFn().mockReturnValue(state === 'READY')
+        updateConfig: vi.fn<(...args: unknown[]) => unknown>(),
+        getLastError: vi.fn<(...args: unknown[]) => Error | null>().mockReturnValue(state === 'ERROR' ? new Error('Mock auth error') : null),
+        isReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(state === 'READY')
     };
 
     return {
@@ -2515,19 +2494,16 @@ const createMockAuthManager = (state = 'READY', authOverrides = {}) => {
 
 const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord = {}) => {
     const connectionOverrides = asRecord(behaviorOverrides.connection);
-    const webcastEventOverrides = asRecord(behaviorOverrides.webcastEvent);
-    const controlEventOverrides = asRecord(behaviorOverrides.controlEvent);
-    const pushConnectionOverrides = asRecord(behaviorOverrides.pushConnection);
     const constantsOverrides = asRecord(behaviorOverrides.constants);
-    const mockTikTokWebSocketClient = createMockFn<[], TikTokWebSocketClientConnection>().mockImplementation(() => {
+    const mockTikTokWebSocketClient = vi.fn<(...args: []) => TikTokWebSocketClientConnection>().mockImplementation(() => {
         const mockConnection = {
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(true),
-            on: createMockFn(),
-            off: createMockFn(),
-            removeAllListeners: createMockFn(),
-            getState: createMockFn().mockReturnValue('DISCONNECTED'),
-            getRoomInfo: createMockFn().mockResolvedValue({
+            connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+            on: vi.fn<(...args: unknown[]) => unknown>(),
+            off: vi.fn<(...args: unknown[]) => unknown>(),
+            removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
+            getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue('DISCONNECTED'),
+            getRoomInfo: vi.fn<(...args: unknown[]) => Promise<{ room_id: string; title: string; user_count: number; }>>().mockResolvedValue({
                 room_id: '12345',
                 title: 'Test Room',
                 user_count: 100
@@ -2541,39 +2517,8 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
         return mockConnection;
     });
 
-    const mockWebcastEvent = {
-        CHAT: 'WebcastChatMessage',
-        GIFT: 'WebcastGiftMessage', 
-        MEMBER: 'WebcastMemberMessage',
-        FOLLOW: 'WebcastSocialMessage',
-        LIKE: 'WebcastLikeMessage',
-        VIEWER_COUNT: 'WebcastRoomUserSeqMessage',
-        ROOM_UPDATE: 'WebcastRoomInfoUpdate',
-        ...webcastEventOverrides
-    };
-
-    const mockControlEvent = {
-        CONNECTED: 'connected',
-        DISCONNECTED: 'disconnected',
-        ERROR: 'error',
-        RECONNECTING: 'reconnecting',
-        ...controlEventOverrides
-    };
-
-    const mockWebcastPushConnection = createMockFn<[], TikTokServiceConnection>().mockImplementation(() => ({
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn().mockResolvedValue(true),
-        getState: createMockFn().mockReturnValue('CONNECTED'),
-        on: createMockFn(),
-        off: createMockFn(),
-        ...pushConnectionOverrides
-    }));
-
     return {
         TikTokWebSocketClient: mockTikTokWebSocketClient,
-        WebcastEvent: mockWebcastEvent,
-        ControlEvent: mockControlEvent,
-        WebcastPushConnection: mockWebcastPushConnection,
         logger: noOpLogger,
         retrySystem: createMockRetrySystem(),
         constants: {
@@ -2588,31 +2533,31 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
 
 const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
     const baseHandlers = {
-        processChatMessage: createMockFn().mockResolvedValue(true),
-        sendChatMessage: createMockFn().mockResolvedValue(true),
+        processChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        sendChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        processGiftNotification: createMockFn().mockResolvedValue(true),
-        processFollowNotification: createMockFn().mockResolvedValue(true),
-        processSubscriptionNotification: createMockFn().mockResolvedValue(true),
+        processGiftNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        processFollowNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        processSubscriptionNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        getViewerCount: createMockFn().mockResolvedValue(100),
-        updateViewerCount: createMockFn().mockResolvedValue(true),
+        getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(100),
+        updateViewerCount: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn().mockResolvedValue(true),
-        isConnected: createMockFn().mockReturnValue(true),
-        getConnectionState: createMockFn().mockReturnValue('connected'),
+        connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        isConnected: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        getConnectionState: vi.fn<(...args: unknown[]) => string>().mockReturnValue('connected'),
         
-        handleTikTokMessage: createMockFn().mockResolvedValue(true),
-        handleTwitchMessage: createMockFn().mockResolvedValue(true),
-        handleYouTubeMessage: createMockFn().mockResolvedValue(true),
+        handleTikTokMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleTwitchMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleYouTubeMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         
-        checkPermissions: createMockFn().mockReturnValue(true),
-        validateMessage: createMockFn().mockReturnValue(true),
-        normalizeMessage: createMockFn<[UnknownRecord], UnknownRecord>().mockImplementation(msg => msg),
+        checkPermissions: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        validateMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        normalizeMessage: vi.fn<(...args: [UnknownRecord]) => UnknownRecord>().mockImplementation(msg => msg),
         
-        handleRapidMessages: createMockFn().mockResolvedValue(true),
-        handleConcurrentOperations: createMockFn().mockResolvedValue(true)
+        handleRapidMessages: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+        handleConcurrentOperations: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true)
     };
 
     return {
@@ -3019,7 +2964,6 @@ export {
     resetMock,
     clearMockCalls,
     validateMockAPI,
-    setupAutomatedCleanup,
 
     createUserGiftScenario,
     getUserExperienceState,

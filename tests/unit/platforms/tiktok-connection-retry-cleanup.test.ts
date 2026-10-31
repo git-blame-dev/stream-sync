@@ -12,8 +12,8 @@ describe("TikTokPlatform connection recovery", () => {
 
   const fixtures: ReturnType<typeof createTikTokLifetimeFixture>[] = [];
   let current: ReturnType<typeof createTikTokLifetimeFixture>;
-  const createRouterPlatform = () => {
-    current = createTikTokLifetimeFixture();
+  const createRouterPlatform = (config: Parameters<typeof createTikTokLifetimeFixture>[0] = {}) => {
+    current = createTikTokLifetimeFixture(config);
     fixtures.push(current);
     return current.platform;
   };
@@ -114,8 +114,8 @@ describe("TikTokPlatform connection recovery", () => {
     platform.cleanupEventListeners();
   });
 
-  it.each(["error", "disconnect", "disconnected", "webcast-error"])("fences delayed old %s lifecycle effects after replacement registration", async (event) => {
-    const platform = createRouterPlatform();
+  it.each([["control error", "error", 0], ["webcast error", "error", 1], ["control disconnect", "disconnected", 0], ["webcast disconnect", "disconnected", 1]] as const)("fences delayed old %s lifecycle effects after replacement registration", async (_label, event, listenerIndex) => {
+    const platform = createRouterPlatform({ dataLoggingPath: "/tmp/synthetic-tiktok-lifetime-no-write" });
     const oldConnection = createConnection();
     const replacement = createConnection();
     let release: () => void = () => { throw new Error("Diagnostic gate not initialized"); };
@@ -129,7 +129,7 @@ describe("TikTokPlatform connection recovery", () => {
     const append = spyOn(fs, 'appendFile').mockImplementation(async () => { entered(); await held; });
     platform.connection = oldConnection;
     platform.setupEventListeners();
-    const callback = oldConnection.listeners(event)[0];
+    const callback = oldConnection.listeners(event)[listenerIndex];
     if (!callback) throw new Error("Expected old lifecycle listener");
     const pending = callback(new Error("synthetic old lifecycle event"));
     try {
@@ -157,13 +157,13 @@ describe("TikTokPlatform connection recovery", () => {
     }
   });
 
-  it.each(["error", "disconnect", "disconnected", "webcast-error"])("fences retained old %s callbacks invoked after cleanup", async (event) => {
+  it.each([["control error", "error", 0], ["webcast error", "error", 1], ["control disconnect", "disconnected", 0], ["webcast disconnect", "disconnected", 1]] as const)("fences retained old %s callbacks invoked after cleanup", async (_label, event, listenerIndex) => {
     const platform = createRouterPlatform();
     const oldConnection = createConnection();
     const replacement = createConnection();
     platform.connection = oldConnection;
     platform.setupEventListeners();
-    const callback = oldConnection.listeners(event)[0];
+    const callback = oldConnection.listeners(event)[listenerIndex];
     if (!callback) throw new Error("Expected retained lifecycle listener");
     platform.cleanupEventListeners();
     platform.connection = replacement;
@@ -239,7 +239,7 @@ describe("TikTokPlatform connection recovery", () => {
     platform.cleanupEventListeners();
   });
 
-  it("root replacement cleanup retires old connection and adopts current aliases and handlers", () => {
+  it("root replacement cleanup retires old connection and adopts current handlers", () => {
     const platform = createRouterPlatform();
     const oldConnection = createConnection();
     const replacement = createConnection();
@@ -252,19 +252,18 @@ describe("TikTokPlatform connection recovery", () => {
     platform.cleanupEventListeners();
     expect(oldConnection.listeners(oldChat)).toEqual([observer]);
     expect(oldConnection.listenerCount("rawData")).toBe(0);
-    platform.WebcastEvent = { ...platform.WebcastEvent, CHAT: "synthetic-chat", ROOM_USER: "synthetic-room" };
     replacement.on(platform.WebcastEvent.CHAT, observer);
     const counts: unknown[] = [];
     platform.handlers = { ...platform.handlers, onViewerCount: (payload: unknown) => { counts.push(payload); } };
     platform.setupEventListeners();
     platform.setupEventListeners();
-    expect(replacement.listeners(oldChat)).toEqual([]);
+    expect(replacement.listeners(oldChat)).toContain(observer);
     expect(replacement.listenerCount(platform.WebcastEvent.CHAT)).toBe(2);
-    replacement.emit("synthetic-room", { viewerCount: 0, common: { createTime: Date.parse("2024-01-01T00:00:00Z") } });
+    replacement.emit("roomUser", { viewerCount: 0, common: { createTime: Date.parse("2024-01-01T00:00:00Z") } });
     expect(counts).toEqual([{ platform: "tiktok", count: 0, timestamp: "2024-01-01T00:00:00.000Z" }]);
     platform.cleanupEventListeners();
     expect(replacement.listeners(platform.WebcastEvent.CHAT)).toEqual([observer]);
-    expect(replacement.listenerCount("synthetic-room")).toBe(0);
+    expect(replacement.listenerCount("roomUser")).toBe(0);
   });
 
   it("replaces deliberately invalid stale connecting state and removes its owned listeners", async () => {

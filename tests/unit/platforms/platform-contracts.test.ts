@@ -1,5 +1,5 @@
-import { describe, expect, test, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, test, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
@@ -30,10 +30,10 @@ class StubRawPlatformDataLoggingService {
 }
 
 const createLogger = () => ({
-  debug: createMockFn(),
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn(),
+  debug: vi.fn<(...args: unknown[]) => unknown>(),
+  info: vi.fn<(...args: unknown[]) => unknown>(),
+  warn: vi.fn<(...args: unknown[]) => unknown>(),
+  error: vi.fn<(...args: unknown[]) => unknown>(),
 });
 
 const requireEnvelope = (
@@ -58,33 +58,23 @@ const createTikTokPlatform = (): PlatformLike =>
     {
       logger: noOpLogger,
       notificationManager: {
-        emit: createMockFn(),
-        on: createMockFn(),
-        removeListener: createMockFn(),
-        handleNotification: createMockFn().mockResolvedValue(undefined),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+        handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       },
       RawPlatformDataLoggingService: StubRawPlatformDataLoggingService as never,
-      TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
-        on: createMockFn(),
-        off: createMockFn(),
-        connect: createMockFn(),
-        disconnect: createMockFn(),
+      TikTokWebSocketClient: vi.fn(() => ({
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
+        connect: vi.fn<(...args: unknown[]) => unknown>(),
+        disconnect: vi.fn<(...args: unknown[]) => unknown>(),
         isConnecting: false,
         isConnected: false,
       })),
-      WebcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        SOCIAL: "social",
-        ROOM_USER: "roomUser",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-      },
-      ControlEvent: {},
       retrySystem: {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
+        resetRetryCount: vi.fn<(platform: string) => void>(),
+        handleConnectionError: vi.fn<(platform: string, error: unknown, reconnect: () => Promise<void>, cleanup: () => Promise<void>) => void>(),
       },
     },
   ) as unknown as PlatformLike;
@@ -112,23 +102,23 @@ const createYouTubePlatform = (): PlatformLike =>
       USER_AGENTS: ["test-agent"],
       Innertube: null,
       streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
+        detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ success: true; videoIds: never[]; }>>().mockResolvedValue({
           success: true,
           videoIds: [],
         }),
       },
       RawPlatformDataLoggingService: StubRawPlatformDataLoggingService,
       notificationManager: {
-        emit: createMockFn(),
-        on: createMockFn(),
-        removeListener: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        removeListener: vi.fn<(...args: unknown[]) => unknown>(),
       },
     },
   ) as unknown as PlatformLike;
 
 describe("platform public contracts", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("pins canonical event constant strings used by platform:event envelopes", () => {

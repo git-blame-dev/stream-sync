@@ -1,8 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
@@ -35,16 +32,6 @@ type TikTokTestDependencies = {
     ) => TikTokTestConnection;
   };
   TikTokWebSocketClient: unknown;
-  WebcastEvent: {
-    CHAT: string;
-    GIFT: string;
-    FOLLOW: string;
-    SOCIAL: string;
-    ROOM_USER: string;
-    ERROR: string;
-    DISCONNECT: string;
-  };
-  ControlEvent: Record<string, string>;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -85,49 +72,36 @@ const createPlatform = (
 ) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
-    on: createMockFn<[string, (payload: unknown) => void], void>(),
-    removeListener: createMockFn<[string, (payload: unknown) => void], void>(),
-    handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+    emit: vi.fn<(...args: [string, unknown?]) => boolean>().mockReturnValue(true),
+    on: vi.fn<(...args: [string, (payload: unknown) => void]) => void>(),
+    removeListener: vi.fn<(...args: [string, (payload: unknown) => void]) => void>(),
+    handleNotification: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn<
-      [string, unknown, unknown],
-      TikTokTestConnection
+    createConnection: vi.fn<(...args: [string, unknown, unknown]) => TikTokTestConnection
     >().mockReturnValue({
-      on: createMockFn<[
+      on: vi.fn<(...args: [
         string,
         (payload: unknown) => void | Promise<void>,
-      ], void>(),
-      emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
-      removeAllListeners: createMockFn<[string?], void>(),
-      connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
-      disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      ]) => void>(),
+      emit: vi.fn<(...args: [string, unknown?]) => boolean>().mockReturnValue(true),
+      removeAllListeners: vi.fn<(...args: [string?]) => void>(),
+      connect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
     }),
   };
 
   const TikTokWebSocketClient =
     dependencyOverrides.TikTokWebSocketClient ||
-    createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
-      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+    vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => unknown>(),
+      disconnect: vi.fn<(...args: unknown[]) => unknown>(),
+      getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
-
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
-    CHAT: "chat",
-    GIFT: "gift",
-    FOLLOW: "follow",
-    SOCIAL: "social",
-    ROOM_USER: "roomUser",
-    ERROR: "error",
-    DISCONNECT: "disconnect",
-  };
-  const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
     enabled: true,
@@ -139,8 +113,6 @@ const createPlatform = (
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
-    ControlEvent,
     connectionFactory,
     ...dependencyOverrides,
   });
@@ -148,7 +120,7 @@ const createPlatform = (
 
 describe("TikTokPlatform error normalization", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("_normalizeErrorDetails", () => {

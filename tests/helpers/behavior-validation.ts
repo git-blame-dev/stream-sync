@@ -3,7 +3,6 @@ import { expect } from 'bun:test';
 import {
     createMockNotificationManager,
     createMockPlatform,
-    setupAutomatedCleanup
 } from './mock-factories';
 import testClock from './test-clock';
 import { waitForDelay } from './time-utils';
@@ -884,7 +883,6 @@ export {
     
     createMockPlatform,
     createMockNotificationManager,
-    setupAutomatedCleanup,
     
     expectValidNotification,
     expectNoTechnicalArtifacts,

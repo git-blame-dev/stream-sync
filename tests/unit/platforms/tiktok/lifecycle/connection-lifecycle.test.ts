@@ -1,26 +1,8 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
-
-type WebcastEventMap = {
-  CHAT: string;
-  GIFT: string;
-  FOLLOW: string;
-  SOCIAL: string;
-  ROOM_USER: string;
-  ENVELOPE?: string;
-  SUBSCRIBE?: string;
-  SUPER_FAN?: string;
-  ERROR: string;
-  DISCONNECT: string;
-  STREAM_END?: string;
-};
 type PlatformEventPayload = Record<string, unknown> & {
   type?: string;
   platform?: string;
@@ -28,23 +10,20 @@ type PlatformEventPayload = Record<string, unknown> & {
 };
 type EventHandler = (payload: unknown) => void | Promise<void>;
 type TikTokConnectionFake = {
-  connect: TestMockFn<[], Promise<unknown>>;
-  disconnect: TestMockFn<[], Promise<unknown>>;
-  on: TestMockFn<[eventName: string, handler: EventHandler], void>;
-  removeAllListeners: TestMockFn<[eventName?: string], void>;
+  connect: Mock<(...args: []) => Promise<unknown>>;
+  disconnect: Mock<(...args: []) => Promise<unknown>>;
+  on: Mock<(...args: [eventName: string, handler: EventHandler]) => void>;
+  removeAllListeners: Mock<(...args: [eventName?: string]) => void>;
 };
 type RetrySystemFake = {
-  resetRetryCount: TestMockFn<[platform: string], void>;
-  handleConnectionError: TestMockFn<
-    [
+  resetRetryCount: Mock<(...args: [platform: string]) => void>;
+  handleConnectionError: Mock<(...args: [
       platform: string,
       error: unknown,
       reconnect: () => Promise<void>,
       cleanup: () => Promise<void>,
-    ],
-    void
-  >;
-  isConnected: TestMockFn<[platform: string], boolean | undefined>;
+    ]) => void>;
+  isConnected: Mock<(...args: [platform: string]) => boolean | undefined>;
 };
 type DependencyOverrides = {
   logger?: typeof noOpLogger;
@@ -53,8 +32,6 @@ type DependencyOverrides = {
     createConnection: (platform: string, config: unknown, dependencies: unknown) => unknown;
   };
   TikTokWebSocketClient?: unknown;
-  WebcastEvent?: WebcastEventMap;
-  ControlEvent?: Record<string, string>;
   retrySystem?: RetrySystemFake;
 };
 
@@ -78,35 +55,23 @@ const capturePlatformEvent = (target: PlatformEventPayload[]) => (payload: unkno
 const createConnectionFake = (
   overrides: Partial<TikTokConnectionFake> = {},
 ): TikTokConnectionFake => ({
-  connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
-  disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
-  on: createMockFn<[eventName: string, handler: EventHandler], void>(),
-  removeAllListeners: createMockFn<[eventName?: string], void>(),
+  connect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
+  disconnect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
+  on: vi.fn<(...args: [eventName: string, handler: EventHandler]) => void>(),
+  removeAllListeners: vi.fn<(...args: [eventName?: string]) => void>(),
   ...overrides,
 });
 
-const defaultWebcastEvent = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies WebcastEventMap;
-
 const createRetrySystem = (): RetrySystemFake => ({
-  resetRetryCount: createMockFn<[platform: string], void>(),
-  handleConnectionError: createMockFn<
-    [
+  resetRetryCount: vi.fn<(...args: [platform: string]) => void>(),
+  handleConnectionError: vi.fn<(...args: [
       platform: string,
       error: unknown,
       reconnect: () => Promise<void>,
       cleanup: () => Promise<void>,
-    ],
-    void
+    ]) => void
   >(),
-  isConnected: createMockFn<[platform: string], boolean | undefined>(),
+  isConnected: vi.fn<(...args: [platform: string]) => boolean | undefined>(),
 });
 
 const createPlatform = (
@@ -115,32 +80,29 @@ const createPlatform = (
 ) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: vi.fn<(...args: unknown[]) => unknown>(),
+    on: vi.fn<(...args: unknown[]) => unknown>(),
+    removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+    handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      emit: createMockFn(),
+    createConnection: vi.fn<(...args: unknown[]) => { connect: Mock<(...args: []) => Promise<unknown>>; disconnect: Mock<(...args: []) => Promise<unknown>>; on: Mock<(...args: [eventName: string, handler: EventHandler]) => void>; removeAllListeners: Mock<(...args: [eventName?: string]) => void>; emit: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>().mockReturnValue({
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
       ...createConnectionFake(),
     }),
   };
 
   const TikTokWebSocketClient =
     dependencyOverrides.TikTokWebSocketClient ||
-    createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn().mockResolvedValue(undefined),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+    vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
-
-  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
-  const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
     enabled: true,
@@ -152,8 +114,6 @@ const createPlatform = (
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
-    ControlEvent,
     connectionFactory,
   };
 
@@ -166,9 +126,7 @@ const createPlatform = (
 };
 
 const replaceCreateIntervalWithMock = (platform: ReturnType<typeof createPlatform>) => {
-  const createInterval = createMockFn<
-    Parameters<typeof platform.intervalManager.createInterval>,
-    ReturnType<typeof platform.intervalManager.createInterval>
+  const createInterval = vi.fn<(...args: Parameters<typeof platform.intervalManager.createInterval>) => ReturnType<typeof platform.intervalManager.createInterval>
   >();
   platform.intervalManager.createInterval = createInterval;
   return createInterval;
@@ -193,14 +151,14 @@ const createSharePayload = (overrides: Record<string, unknown> = {}) => ({
 
 describe("TikTokPlatform connection lifecycle", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("initialize", () => {
     it("stores handlers and merges with defaults", async () => {
       const platform = createPlatform();
-      platform._connect = createMockFn().mockResolvedValue();
-      const testHandler = createMockFn();
+      platform._connect = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
+      const testHandler = vi.fn<(...args: unknown[]) => unknown>();
 
       await platform.initialize({ onChat: testHandler });
 
@@ -210,9 +168,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("keeps recovery ownership when the initial connection fails", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      platform._connect = createMockFn().mockRejectedValue(
-        new Error("connection failed"),
-      );
+      platform._connect = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("connection failed"));
 
       await expect(platform.initialize({})).resolves.toMatchObject({
         state: "recovering",
@@ -224,11 +180,9 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("schedules deferred reconnect checks for offline initialization failures", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.hasInterval = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const createInterval = replaceCreateIntervalWithMock(platform);
-      platform._connect = createMockFn().mockRejectedValue(
-        new Error("Connection closed: User is not live"),
-      );
+      platform._connect = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Connection closed: User is not live"));
 
       await expect(platform.initialize({})).resolves.toEqual({
         state: "monitoring",
@@ -395,7 +349,7 @@ describe("TikTokPlatform connection lifecycle", () => {
 
     it("schedules deferred reconnect checks for not-live disconnects", () => {
       const platform = createPlatform();
-      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.hasInterval = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const createInterval = replaceCreateIntervalWithMock(platform);
 
       const result = platform.handleRetry(
@@ -434,12 +388,8 @@ describe("TikTokPlatform connection lifecycle", () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
-      platform._connect = createMockFn().mockRejectedValue(
-        new Error("Connection closed: User is not live"),
-      );
-      const handleRetry = createMockFn<
-        [err: unknown],
-        { action: string; reason?: string }
+      platform._connect = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Connection closed: User is not live"));
+      const handleRetry = vi.fn<(...args: [err: unknown]) => { action: string; reason?: string }
       >().mockReturnValue({
         action: "skipped",
         reason: "non-recoverable",
@@ -532,7 +482,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("emits stream-status disconnects with willReconnect=true for not-live issues", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.hasInterval = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const createInterval = replaceCreateIntervalWithMock(platform);
       const emittedEvents: PlatformEventPayload[] = [];
       platform.on("platform:event", capturePlatformEvent(emittedEvents));
@@ -624,7 +574,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("skips retry when platform is disabled", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({ enabled: false }, { retrySystem });
-      platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+      platform.queueRetry = vi.fn<(...args: unknown[]) => { queued: true; }>().mockReturnValue({ queued: true });
 
       const result = await platform.handleConnectionIssue("stream ended");
 
@@ -637,7 +587,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("skips retry when disconnection is planned", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+      platform.queueRetry = vi.fn<(...args: unknown[]) => { queued: true; }>().mockReturnValue({ queued: true });
       platform.isPlannedDisconnection = true;
 
       const result = await platform.handleConnectionIssue("stream ended");
@@ -651,7 +601,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("skips retry for terminal account/config disconnect reasons", async () => {
       const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+      platform.queueRetry = vi.fn<(...args: unknown[]) => { queued: true; }>().mockReturnValue({ queued: true });
 
       const result = await platform.handleConnectionIssue("private account");
 
@@ -676,7 +626,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         },
       };
       platform.intervalManager.hasInterval =
-        createMockFn().mockReturnValue(true);
+        vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
 
       await platform._handleShare(
         createSharePayload({
@@ -702,7 +652,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("keeps stream-end reconnect polling active after an offline disconnect cycle", async () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
-        createMockFn().mockReturnValueOnce(false).mockReturnValue(true);
+        vi.fn<(...args: unknown[]) => boolean>().mockReturnValueOnce(false).mockReturnValue(true);
       const createInterval = replaceCreateIntervalWithMock(platform);
 
       await platform.handleConnectionIssue({
@@ -720,7 +670,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("starts stream-end reconnect polling for normal stream-end handling", async () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
-        createMockFn().mockReturnValue(false);
+        vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const createInterval = replaceCreateIntervalWithMock(platform);
 
       await platform._handleStreamEnd({});
@@ -734,7 +684,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("emits disconnect lifecycle with willReconnect=true for stream-not-live end", async () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
-        createMockFn().mockReturnValue(false);
+        vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const createInterval = replaceCreateIntervalWithMock(platform);
       const emittedEvents: PlatformEventPayload[] = [];
       platform.on("platform:event", capturePlatformEvent(emittedEvents));
@@ -754,7 +704,7 @@ describe("TikTokPlatform connection lifecycle", () => {
 
     it("emits terminal stream status only once", async () => {
       const platform = createPlatform();
-      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.hasInterval = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
       const emittedEvents: PlatformEventPayload[] = [];
       platform.on("platform:event", capturePlatformEvent(emittedEvents));
       await platform._handleDisconnection("network", true);

@@ -26,13 +26,6 @@ type SelfMessageConfig = ConstructorParameters<typeof SelfMessageDetectionServic
 
 type RawPlatformDataLoggingServiceCtor = typeof RawPlatformDataLoggingService;
 
-type TikTokConnectorDependencyMap = {
-    TikTokWebSocketClient?: unknown;
-    WebcastEvent?: unknown;
-    ControlEvent?: unknown;
-    WebcastPushConnection?: unknown;
-};
-
 type InnertubeInfoClient = Awaited<ReturnType<ConstructorParameters<typeof InnertubeService>[0]['createWithTimeout']>>;
 
 type InnertubeClassLike = {
@@ -47,11 +40,6 @@ type DependencyFactoryOptions = Record<string, unknown> & {
     streamDetectionService?: unknown;
     RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceCtor;
     TikTokWebSocketClient?: unknown;
-    WebcastEvent?: unknown;
-    ControlEvent?: unknown;
-    WebcastPushConnection?: unknown;
-    tiktokConnector?: TikTokConnectorDependencyMap;
-    modulePreloader?: unknown;
     twitchAuth?: unknown;
     axios?: unknown;
     WebSocketCtor?: unknown;
@@ -167,20 +155,11 @@ class DependencyFactory {
 
         try {
             const logger = options.logger || this.createValidatedLogger('tiktok');
-            const {
-                TikTokWebSocketClient,
-                WebcastEvent,
-                ControlEvent,
-                WebcastPushConnection
-            } = this._resolveTikTokConnectorDependencies(options);
-            const sanitizedOptions = { ...options };
-            delete sanitizedOptions.TikTokWebSocketClient;
-            delete sanitizedOptions.WebcastEvent;
-            delete sanitizedOptions.ControlEvent;
-            delete sanitizedOptions.WebcastPushConnection;
-            delete sanitizedOptions.tiktokConnector;
-            delete sanitizedOptions.modulePreloader;
-            
+            const { TikTokWebSocketClient: injectedClient, ...platformOptions } = options;
+            const Client = injectedClient ?? TikTokWebSocketClient;
+            if (typeof Client !== 'function') {
+                throw new Error('Missing TikTok dependencies: TikTokWebSocketClient. Provide a WebSocket client constructor.');
+            }
             const ResolvedRawPlatformDataLoggingService = options.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
             
             if (!options.config) {
@@ -191,14 +170,11 @@ class DependencyFactory {
 
             const dependencies = {
                 logger,
-                TikTokWebSocketClient,
-                WebcastEvent,
-                ControlEvent,
-                WebcastPushConnection,
+                TikTokWebSocketClient: Client,
                 connectionFactory: this._createTikTokConnectionFactory(config, logger),
                 RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
-                ...sanitizedOptions
+                ...platformOptions
             };
 
             if (!options.logger) {
@@ -305,76 +281,6 @@ class DependencyFactory {
         if (options === null || (options !== undefined && typeof options !== 'object')) {
             throw new Error('Options must be an object');
         }
-    }
-
-    _resolveTikTokConnectorDependencies(options: DependencyFactoryOptions = {}) {
-        const connectorOverrides = options.tiktokConnector || {};
-        const resolved = {
-            TikTokWebSocketClient: options.TikTokWebSocketClient || connectorOverrides.TikTokWebSocketClient,
-            WebcastEvent: options.WebcastEvent || connectorOverrides.WebcastEvent,
-            ControlEvent: options.ControlEvent || connectorOverrides.ControlEvent,
-            WebcastPushConnection: options.WebcastPushConnection || connectorOverrides.WebcastPushConnection
-        };
-
-        const fallbackEvents = () => ({
-            CHAT: 'chat',
-            GIFT: 'gift',
-            FOLLOW: 'follow',
-            SHARE: 'share',
-            ENVELOPE: 'envelope',
-            SUBSCRIBE: 'subscribe',
-            SUPER_FAN: 'superfan',
-            LIKE: 'like',
-            SOCIAL: 'social',
-            MEMBER: 'member',
-            EMOTE: 'emote',
-            QUESTION_NEW: 'questionNew',
-            ROOM_USER: 'roomUser',
-            ERROR: 'error',
-            DISCONNECT: 'disconnected',
-            STREAM_END: 'streamEnd'
-        });
-
-        const fallbackControl = () => ({
-            CONNECTED: 'connected',
-            DISCONNECTED: 'disconnected',
-            ERROR: 'error',
-            WEBSOCKET_CONNECTED: 'connected'
-        });
-
-        const needsConnectorLoad = (!resolved.TikTokWebSocketClient) ||
-            !resolved.WebcastEvent ||
-            !resolved.ControlEvent ||
-            !resolved.WebcastPushConnection;
-
-        if (needsConnectorLoad) {
-            if (!resolved.TikTokWebSocketClient) {
-                resolved.TikTokWebSocketClient = TikTokWebSocketClient;
-            }
-
-        }
-
-        const missingDependencies: string[] = [];
-        if (typeof resolved.TikTokWebSocketClient !== 'function') {
-            missingDependencies.push('TikTokWebSocketClient');
-        }
-
-        if (!resolved.WebcastEvent || typeof resolved.WebcastEvent !== 'object') {
-            resolved.WebcastEvent = fallbackEvents();
-        }
-        if (!resolved.ControlEvent || typeof resolved.ControlEvent !== 'object') {
-            resolved.ControlEvent = fallbackControl();
-        }
-        resolved.WebcastPushConnection = resolved.WebcastPushConnection || function noopPushConnection() {};
-
-        if (missingDependencies.length > 0) {
-            throw new Error(
-                `Missing TikTok dependencies: ${missingDependencies.join(', ')}. ` +
-                'Provide these via DependencyFactory options or ensure WebSocket client is available.'
-            );
-        }
-
-        return resolved;
     }
 
     _createTikTokConnectionFactory(_config: PlatformDependencyConfig, logger: AppLogger) {

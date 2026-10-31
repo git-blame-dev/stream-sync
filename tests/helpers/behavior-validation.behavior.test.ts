@@ -17,7 +17,6 @@ import {
     expectErrorRecoveryBehavior,
     createMockPlatform,
     createMockNotificationManager,
-    setupAutomatedCleanup,
     expectValidNotification,
     expectNoTechnicalArtifacts,
     expectValidUserFeedback
@@ -54,7 +53,6 @@ describe('behavior-validation helper behavior', () => {
     it('exports convenience re-exports used by downstream helper callers', () => {
         expect(typeof createMockPlatform).toBe('function');
         expect(typeof createMockNotificationManager).toBe('function');
-        expect(typeof setupAutomatedCleanup).toBe('function');
     });
 
     it('validates successful and failing gift workflow scenarios with user-impact signals', async () => {

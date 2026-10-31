@@ -7,28 +7,10 @@ import { DependencyFactory } from "../../src/utils/dependency-factory";
 import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
 
 type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
-type TikTokControlEvent = NonNullable<TikTokDependencies["ControlEvent"]>;
 type SelfMessageDetectionService = Exclude<
   TikTokDependencies["selfMessageDetectionService"],
   null | undefined
 >;
-
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
-
-const CONTROL_EVENT = {
-  CONNECTED: "connected",
-  DISCONNECTED: "disconnected",
-  ERROR: "error",
-} satisfies TikTokControlEvent;
 
 const requireRecord = (value: unknown, name: string): Record<string, unknown> => {
   if (typeof value !== "object" || value === null) {
@@ -95,8 +77,6 @@ describe("TikTokPlatform connection factory integration", () => {
             requireRecord(connectionDependencies, "connection dependencies"),
           ),
       },
-      WebcastEvent: WEBCAST_EVENT,
-      ControlEvent: CONTROL_EVENT,
       selfMessageDetectionService,
     } satisfies TikTokDependencies;
     return new TikTokPlatform(config, dependencies);

@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createConfigFixture } from "../../../../helpers/config-fixture";
 
@@ -41,8 +38,8 @@ type TestRuntime = {
   handleChatMessage: (...args: unknown[]) => void;
   handleFollowNotification: (...args: unknown[]) => void;
   handleGiftNotification: (...args: unknown[]) => void;
-  handlePaypiggyNotification: ReturnType<typeof createMockFn>;
-  handleRaidNotification: ReturnType<typeof createMockFn>;
+  handlePaypiggyNotification: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  handleRaidNotification: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
   _calls: RuntimeCalls;
 };
 
@@ -88,7 +85,7 @@ describe("TikTokPlatform unified event contract (expected behavior)", () => {
   let runtime: TestRuntime;
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
@@ -123,15 +120,15 @@ describe("TikTokPlatform unified event contract (expected behavior)", () => {
         void runtimeCalls.handleFollowNotification.push(args),
       handleGiftNotification: (...args: unknown[]) =>
         void runtimeCalls.handleGiftNotification.push(args),
-      handlePaypiggyNotification: createMockFn(),
-      handleRaidNotification: createMockFn(),
+      handlePaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      handleRaidNotification: vi.fn<(...args: unknown[]) => unknown>(),
       _calls: runtimeCalls,
     };
 
     new PlatformEventRouter({
       eventBus: mockEventBus,
       runtime,
-      notificationManager: { handleNotification: createMockFn() },
+      notificationManager: { handleNotification: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture({
         general: {
           followsEnabled: true,
@@ -145,11 +142,11 @@ describe("TikTokPlatform unified event contract (expected behavior)", () => {
     const mockDependencies = {
       logger: noOpLogger,
       connectionFactory: {
-        createConnection: createMockFn().mockReturnValue({
-          connect: createMockFn().mockResolvedValue(),
-          disconnect: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
-          removeAllListeners: createMockFn(),
+        createConnection: vi.fn<(...args: unknown[]) => { connect: import("bun:test").Mock<(..._args: unknown[]) => Promise<undefined>>; disconnect: import("bun:test").Mock<(..._args: unknown[]) => Promise<undefined>>; on: import("bun:test").Mock<(...args: unknown[]) => unknown>; removeAllListeners: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>().mockReturnValue({
+          connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+          disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+          on: vi.fn<(...args: unknown[]) => unknown>(),
+          removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
         }),
       },
       TikTokWebSocketClient: class MockConnection {
@@ -163,18 +160,8 @@ describe("TikTokPlatform unified event contract (expected behavior)", () => {
         on() {}
         removeAllListeners() {}
       },
-      WebcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        SOCIAL: "social",
-        ROOM_USER: "roomUser",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-      },
-      ControlEvent: {},
       timestampService: {
-        extractTimestamp: createMockFn(() =>
+        extractTimestamp: vi.fn(() =>
           new Date(testClock.now()).toISOString(),
         ),
       },

@@ -1,8 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach, beforeEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 const {
   useFakeTimers,
@@ -15,51 +12,38 @@ import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 type TikTokPlatformConfig = ConstructorParameters<typeof TikTokPlatform>[0];
 type TikTokPlatformDependencies = ConstructorParameters<typeof TikTokPlatform>[1];
 
-const defaultWebcastEvent = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-};
-
 const createPlatform = (
   configOverrides: Partial<TikTokPlatformConfig> = {},
   dependencyOverrides: TikTokPlatformDependencies = {},
 ) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: vi.fn<(...args: unknown[]) => unknown>(),
+    on: vi.fn<(...args: unknown[]) => unknown>(),
+    removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+    handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
-      emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn(),
+    createConnection: vi.fn<(...args: unknown[]) => { on: import("bun:test").Mock<(...args: unknown[]) => unknown>; emit: import("bun:test").Mock<(...args: unknown[]) => unknown>; removeAllListeners: import("bun:test").Mock<(...args: unknown[]) => unknown>; connect: import("bun:test").Mock<(..._args: unknown[]) => Promise<undefined>>; disconnect: import("bun:test").Mock<(...args: unknown[]) => unknown>; }>().mockReturnValue({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: unknown[]) => unknown>(),
     }),
   };
 
   const TikTokWebSocketClient =
     dependencyOverrides.TikTokWebSocketClient ||
-    createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
-      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+    vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => unknown>(),
+      disconnect: vi.fn<(...args: unknown[]) => unknown>(),
+      getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
-
-  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
-  const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
     enabled: true,
@@ -71,8 +55,6 @@ const createPlatform = (
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
-    ControlEvent,
     connectionFactory,
     ...dependencyOverrides,
   });
@@ -80,7 +62,7 @@ const createPlatform = (
 
 describe("TikTokPlatform _shouldSkipDuplicatePlatformMessage", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("basic deduplication", () => {

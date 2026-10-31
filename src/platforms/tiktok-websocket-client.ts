@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { createTikTokConnector } from './tiktok/tiktok-connector';
 import { adaptTikTokEvent } from './tiktok/tiktok-event-adapter';
+import { TIKTOK_EVENTS, TIKTOK_CONTROL_EVENTS } from './tiktok/events/transport-events';
 
 type Connector = {
     on: (name: string, handler: (...args: unknown[]) => void) => unknown;
@@ -67,7 +68,7 @@ class TikTokWebSocketClient extends EventEmitter {
                 const wasConnected = this.isConnected;
                 this.lastConnectionError = error;
                 this.retire(attempt);
-                if (wasConnected) this.emit('disconnected', { code: (error as { code?: number }).code ?? 1011, reason: error.message });
+                if (wasConnected) this.emit(TIKTOK_CONTROL_EVENTS.DISCONNECTED, { code: (error as { code?: number }).code ?? 1011, reason: error.message });
                 else reject(error);
             };
             const ready = () => {
@@ -81,7 +82,7 @@ class TikTokWebSocketClient extends EventEmitter {
                 attempt.timer = null;
                 const room = { roomId: this.roomId };
                 resolve(room);
-                this.emit('connected', room);
+                this.emit(TIKTOK_CONTROL_EVENTS.CONNECTED, room);
             };
             attempt.timer = safeSetTimeout(() => fail(Object.assign(new Error('TikTok room entry timed out'), { code: 1011 })), this.timeoutMs);
             void this.connectorFactory(this.username, this.options.apiKey ?? null, attempt.abort.signal).then(connector => {
@@ -94,9 +95,22 @@ class TikTokWebSocketClient extends EventEmitter {
                     if (!current()) return;
                     const wasConnected = this.isConnected;
                     fail(Object.assign(new Error('TikTok stream ended'), { code: 4404 }));
-                    if (wasConnected) this.emit('streamEnd', { reason: 'TikTok stream ended' });
+                    if (wasConnected) this.emit(TIKTOK_EVENTS.STREAM_END, { reason: 'TikTok stream ended' });
                 });
-                const events: Record<string, string> = { chat: 'chat', emote: 'chat', gift: 'gift', follow: 'follow', share: 'share', social: 'social', roomUser: 'roomUser', member: 'member', like: 'like', envelope: 'envelope', subNotify: 'subscribe', superFan: 'superfan' };
+                const events: Record<string, string> = {
+                    chat: TIKTOK_EVENTS.CHAT,
+                    emote: TIKTOK_EVENTS.CHAT,
+                    gift: TIKTOK_EVENTS.GIFT,
+                    follow: TIKTOK_EVENTS.FOLLOW,
+                    share: TIKTOK_EVENTS.SHARE,
+                    social: TIKTOK_EVENTS.SOCIAL,
+                    roomUser: TIKTOK_EVENTS.ROOM_USER,
+                    member: TIKTOK_EVENTS.MEMBER,
+                    like: TIKTOK_EVENTS.LIKE,
+                    envelope: TIKTOK_EVENTS.ENVELOPE,
+                    subNotify: TIKTOK_EVENTS.SUBSCRIBE,
+                    superFan: TIKTOK_EVENTS.SUPER_FAN
+                };
                 for (const [source, target] of Object.entries(events)) connector.on(source, data => {
                     if (!current() || !this.isConnected) return;
                     this.stats.messageCount++;

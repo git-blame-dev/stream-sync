@@ -1,6 +1,7 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
+import { TIKTOK_EVENTS as WebcastEvent, TIKTOK_CONTROL_EVENTS as ControlEvent } from '../../src/platforms/tiktok/events/transport-events';
 import EventEmitter from "events";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import {
   advanceTimersByTime,
   clearAllTimers,
@@ -29,21 +30,6 @@ const assertNonEmptyString = (value: unknown) => {
   }
   expect(value.trim()).not.toBe("");
 };
-
-const WebcastEvent = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} as const;
-
-const ControlEvent = {
-  DISCONNECTED: "disconnected",
-  ERROR: "error",
-} as const;
 
 class FakeTikTokConnection extends EventEmitter {
   [key: string]: unknown;
@@ -161,7 +147,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
         useRealTimers();
       }
       setSystemTime();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       if (presentation) {
         await presentation.dispose();
       }
@@ -220,8 +206,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
         logger: noOpLogger,
         eventBus: presentation.bus,
         TikTokWebSocketClient,
-        WebcastEvent,
-        ControlEvent,
       },
     );
     activePlatform = platform;

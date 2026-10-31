@@ -18,7 +18,6 @@ function setup() {
     const fixture = createTikTokLifetimeFixture({ dataLoggingPath: "/synthetic", envFileReadEnabled: false, envFileWriteEnabled: false }, () => elapsed);
     fixtures.push(fixture);
     const { platform } = fixture;
-    platform.WebcastEvent = { ...platform.WebcastEvent, SUBSCRIBE: 'subscribe', SUPER_FAN: 'superfan', ENVELOPE: 'envelope' };
     const connection = fixture.createConnection();
     platform.connection = connection;
     platform.connectionTime = epoch;

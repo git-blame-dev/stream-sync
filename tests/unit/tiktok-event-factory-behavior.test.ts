@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, describe, expect, it } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../helpers/mock-factories";
 import testClock from "../helpers/test-clock";
 import * as logging from "../../src/core/logging";
@@ -41,27 +41,25 @@ const TikTokPlatformClass =
 
 describe("TikTok eventFactory chat message behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("builds a normalized chat event from raw TikTok data", () => {
     const connectionFactory = {
       createConnection: () => ({
-        connect: createMockFn(),
-        on: createMockFn(),
-        emit: createMockFn(),
-        removeAllListeners: createMockFn(),
+        connect: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
       }),
     };
     const platform = new TikTokPlatformClass(
       { enabled: false },
       {
-        WebcastEvent: {},
-        ControlEvent: {},
         logger: noOpLogger,
         connectionFactory,
         timestampService: {
-          extractTimestamp: createMockFn(() =>
+          extractTimestamp: vi.fn(() =>
             new Date(testClock.now()).toISOString(),
           ),
         },
@@ -93,21 +91,19 @@ describe("TikTok eventFactory chat message behavior", () => {
   it("builds emote-only chat events with canonical message.parts", () => {
     const connectionFactory = {
       createConnection: () => ({
-        connect: createMockFn(),
-        on: createMockFn(),
-        emit: createMockFn(),
-        removeAllListeners: createMockFn(),
+        connect: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
       }),
     };
     const platform = new TikTokPlatformClass(
       { enabled: false },
       {
-        WebcastEvent: {},
-        ControlEvent: {},
         logger: noOpLogger,
         connectionFactory,
         timestampService: {
-          extractTimestamp: createMockFn(() =>
+          extractTimestamp: vi.fn(() =>
             new Date(testClock.now()).toISOString(),
           ),
         },
@@ -154,21 +150,19 @@ describe("TikTok eventFactory chat message behavior", () => {
   it("extracts and forwards canonical badgeImages from raw TikTok chat payload", () => {
     const connectionFactory = {
       createConnection: () => ({
-        connect: createMockFn(),
-        on: createMockFn(),
-        emit: createMockFn(),
-        removeAllListeners: createMockFn(),
+        connect: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
       }),
     };
     const platform = new TikTokPlatformClass(
       { enabled: false },
       {
-        WebcastEvent: {},
-        ControlEvent: {},
         logger: noOpLogger,
         connectionFactory,
         timestampService: {
-          extractTimestamp: createMockFn(() =>
+          extractTimestamp: vi.fn(() =>
             new Date(testClock.now()).toISOString(),
           ),
         },

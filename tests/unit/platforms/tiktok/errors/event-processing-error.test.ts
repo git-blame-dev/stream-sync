@@ -1,30 +1,16 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 
 type UnknownRecord = Record<string, unknown>;
 type EmittedPlatformEvent = { data: UnknownRecord };
-type WebcastEventMap = {
-  CHAT: string;
-  GIFT: string;
-  FOLLOW: string;
-  SOCIAL: string;
-  ROOM_USER: string;
-  ERROR: string;
-  DISCONNECT: string;
-};
 type DependencyOverrides = {
   logger?: unknown;
   notificationManager?: unknown;
   connectionFactory?: { createConnection: (...args: unknown[]) => unknown };
   TikTokWebSocketClient?: unknown;
-  WebcastEvent?: Partial<WebcastEventMap>;
-  ControlEvent?: Record<string, string>;
 };
 
 const requireFirst = <T>(items: T[]): T => {
@@ -41,49 +27,32 @@ const createPlatform = (
 ) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: vi.fn<(...args: unknown[]) => unknown>(),
+    on: vi.fn<(...args: unknown[]) => unknown>(),
+    removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+    handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
-      emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(true),
-      disconnect: createMockFn().mockResolvedValue(true),
+    createConnection: vi.fn<(...args: unknown[]) => { on: import("bun:test").Mock<(...args: unknown[]) => unknown>; emit: import("bun:test").Mock<(...args: unknown[]) => unknown>; removeAllListeners: import("bun:test").Mock<(...args: unknown[]) => unknown>; connect: import("bun:test").Mock<(..._args: unknown[]) => Promise<boolean>>; disconnect: import("bun:test").Mock<(..._args: unknown[]) => Promise<boolean>>; }>().mockReturnValue({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     }),
   };
 
   const TikTokWebSocketClient =
     dependencyOverrides.TikTokWebSocketClient ||
-    createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn().mockResolvedValue(true),
-      disconnect: createMockFn().mockResolvedValue(true),
-      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+    vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getState: vi.fn<(...args: unknown[]) => string>().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
-
-  const WebcastEvent: WebcastEventMap = {
-    CHAT: "chat",
-    GIFT: "gift",
-    FOLLOW: "follow",
-    SOCIAL: "social",
-    ROOM_USER: "roomUser",
-    ERROR: "error",
-    DISCONNECT: "disconnect",
-    ...dependencyOverrides.WebcastEvent,
-  };
-  const ControlEvent = dependencyOverrides.ControlEvent || {};
-  const {
-    WebcastEvent: _webcastEventOverride,
-    ControlEvent: _controlEventOverride,
-    ...remainingDependencyOverrides
-  } = dependencyOverrides;
 
   const config = {
     enabled: true,
@@ -95,16 +64,14 @@ const createPlatform = (
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
-    ControlEvent,
     connectionFactory,
-    ...remainingDependencyOverrides,
+    ...dependencyOverrides,
   });
 };
 
 describe("TikTokPlatform _handleEventProcessingError", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("non-monetization events", () => {

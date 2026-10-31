@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
@@ -28,7 +28,7 @@ describe("TikTokPlatform monetisation mapping", () => {
   };
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
@@ -47,16 +47,6 @@ describe("TikTokPlatform monetisation mapping", () => {
         logger: noOpLogger,
         eventBus,
         TikTokWebSocketClient: function () {},
-        WebcastEvent: {
-          CHAT: "chat",
-          GIFT: "gift",
-          FOLLOW: "follow",
-          SOCIAL: "social",
-          ROOM_USER: "roomUser",
-          ERROR: "error",
-          DISCONNECT: "disconnect",
-        },
-        ControlEvent: {},
       },
     ) as TestPlatform;
 

@@ -354,8 +354,6 @@ describe('mock-factories helper behavior', () => {
         const deps = createMockTikTokPlatformDependencies();
         const connection = deps.TikTokWebSocketClient();
         await expect(connection.connect()).resolves.toBe(true);
-        expect(deps.WebcastEvent.GIFT).toBe('WebcastGiftMessage');
-        expect(deps.ControlEvent.CONNECTED).toBe('connected');
         expect(deps.constants.GRACE_PERIODS.TIKTOK).toBe(5000);
     });
 
@@ -590,13 +588,5 @@ describe('mock-factories helper behavior', () => {
         await platformConnection.handleRapidMessages([]);
         await platformConnection.handleConcurrentOperations([]);
         expect(platformConnection._validHandlers).toContain('connect');
-
-        const deps = createMockTikTokPlatformDependencies();
-        const pushConnection = deps.WebcastPushConnection();
-        await expect(pushConnection.connect()).resolves.toBe(true);
-        expect(pushConnection.getState()).toBe('CONNECTED');
-        await expect(pushConnection.disconnect()).resolves.toBe(true);
-
-
     });
 });

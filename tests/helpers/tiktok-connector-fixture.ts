@@ -49,8 +49,6 @@ function createTikTokLifetimeFixture(
     const dependencies = {
         logger,
         TikTokWebSocketClient: AcquiredTikTokClient,
-        WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow', SOCIAL: 'social', ROOM_USER: 'roomUser', ERROR: 'webcast-error', DISCONNECT: 'disconnect', STREAM_END: 'streamEnd' },
-        ControlEvent: { CONNECTED: 'connected', DISCONNECTED: 'disconnected', ERROR: 'error' },
         retrySystem: retry,
         ...(monotonicNow ? { monotonicNow } : {}),
     };

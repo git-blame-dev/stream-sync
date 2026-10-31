@@ -41,8 +41,6 @@ function sdkPlatform(sdk: SyntheticSDK) {
     }
     const platform = new TikTokPlatform({ enabled: true, username: 'synthetic-streamer', dataLoggingEnabled: false }, {
         logger, TikTokWebSocketClient: Client,
-        WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow', SOCIAL: 'social', ROOM_USER: 'roomUser', ERROR: 'error', DISCONNECT: 'disconnected', ENVELOPE: 'envelope' },
-        ControlEvent: { CONNECTED: 'connected', DISCONNECTED: 'disconnected', ERROR: 'error' },
     });
     return { platform, get client() { if (!client) throw new Error('Expected actual client acquisition'); return client; } };
 }

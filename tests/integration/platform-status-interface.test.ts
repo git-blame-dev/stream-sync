@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../helpers/mock-factories";
 import {
   createTikTokConfigFixture,
@@ -40,29 +40,19 @@ const createTikTokPlatform = (configOverrides = {}) => {
   return new TikTokPlatform(config, {
     logger: noOpLogger,
     notificationManager: {
-      emit: createMockFn(),
-      on: createMockFn(),
-      removeListener: createMockFn(),
-      handleNotification: createMockFn().mockResolvedValue(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      removeListener: vi.fn<(...args: unknown[]) => unknown>(),
+      handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
     },
-    TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
-      on: createMockFn(),
-      off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+    TikTokWebSocketClient: vi.fn(() => ({
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
+      connect: vi.fn<(...args: unknown[]) => unknown>(),
+      disconnect: vi.fn<(...args: unknown[]) => unknown>(),
       isConnecting: false,
       isConnected: false,
     })),
-    WebcastEvent: {
-      CHAT: "chat",
-      GIFT: "gift",
-      FOLLOW: "follow",
-      SOCIAL: "social",
-      ROOM_USER: "roomUser",
-      ERROR: "error",
-      DISCONNECT: "disconnect",
-    },
-    ControlEvent: {},
   });
 };
 
@@ -84,7 +74,7 @@ const createYouTubePlatform = (configOverrides = {}) => {
     logger: noOpLogger,
     USER_AGENTS: ["test-agent"],
     streamDetectionService: {
-      detectLiveStreams: createMockFn().mockResolvedValue({
+      detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ success: true; videoIds: never[]; }>>().mockResolvedValue({
         success: true,
         videoIds: [],
       }),
@@ -94,7 +84,7 @@ const createYouTubePlatform = (configOverrides = {}) => {
 
 describe("Platform getStatus() interface standardization", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("TikTok getStatus()", () => {

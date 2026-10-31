@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { DependencyFactory } from "../../../src/utils/dependency-factory";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service";
@@ -30,7 +30,7 @@ describe("DependencyFactory behavior", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
@@ -150,9 +150,7 @@ describe("DependencyFactory behavior", () => {
 
   describe("Dependency strictness behavior", () => {
     it("lazily creates and caches Innertube for youtubei stream detection", async () => {
-      const getChannel = createMockFn<
-        [string],
-        Promise<{
+      const getChannel = vi.fn<(...args: [string]) => Promise<{
           videos: Array<{
             id: string;
             title: { text: string };
@@ -170,13 +168,13 @@ describe("DependencyFactory behavior", () => {
           },
         ],
       });
-      const createInnertube = createMockFn<[], Promise<{
+      const createInnertube = vi.fn<(...args: []) => Promise<{
         getInfo: () => Promise<Record<string, unknown>>;
         search: () => Promise<{ results: never[] }>;
         getChannel: typeof getChannel;
       }>>().mockResolvedValue({
         getInfo: async () => ({}),
-        search: createMockFn().mockResolvedValue({ results: [] }),
+        search: vi.fn<(...args: unknown[]) => Promise<{ results: never[]; }>>().mockResolvedValue({ results: [] }),
         getChannel,
       });
       const InnertubeClass = { create: createInnertube };
@@ -245,7 +243,7 @@ describe("DependencyFactory behavior", () => {
       ).toThrow(/Missing TikTok dependencies: TikTokWebSocketClient/);
     });
 
-    it("provides fallback TikTok event maps when connector enums are omitted", () => {
+    it("provides only the current client contract without manufactured connector dependencies", () => {
       function MockTikTokClient(this: Record<string, unknown>) {}
 
       const deps = factory.createTiktokDependencies(
@@ -257,12 +255,10 @@ describe("DependencyFactory behavior", () => {
         },
       );
 
-      const webcastEvent = deps.WebcastEvent as { CHAT: string };
-      const controlEvent = deps.ControlEvent as { CONNECTED: string };
-
-      expect(webcastEvent.CHAT).toBe("chat");
-      expect(controlEvent.CONNECTED).toBe("connected");
-      expect(typeof deps.WebcastPushConnection).toBe("function");
+      expect(deps.TikTokWebSocketClient).toBe(MockTikTokClient);
+      for (const obsolete of ['WebcastEvent', 'ControlEvent', 'WebcastPushConnection', 'tiktokConnector', 'modulePreloader']) {
+        expect(deps).not.toHaveProperty(obsolete);
+      }
     });
   });
 });

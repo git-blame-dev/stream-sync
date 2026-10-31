@@ -1,36 +1,24 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
 type TikTokConnection = NonNullable<InstanceType<typeof TikTokPlatform>["connection"]>;
-type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
 type MockConnection = TikTokConnection & {
-  fetchIsLive: ReturnType<typeof createMockFn<[], Promise<boolean>>>;
-  waitUntilLive: ReturnType<typeof createMockFn<[], Promise<void>>>;
-  getState: ReturnType<typeof createMockFn<[], { isConnected: boolean }>>;
+  fetchIsLive: ReturnType<typeof vi.fn<(...args: []) => Promise<boolean>>>;
+  waitUntilLive: ReturnType<typeof vi.fn<(...args: []) => Promise<void>>>;
+  getState: ReturnType<typeof vi.fn<(...args: []) => { isConnected: boolean }>>;
 };
-
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
 
 describe("TikTokPlatform Error Handling", () => {
   let mockConnection: MockConnection;
   let mockRetrySystem: {
     handleConnectionError: (err: unknown) => void;
-    handleConnectionSuccess: ReturnType<typeof createMockFn>;
-    resetRetryCount: ReturnType<typeof createMockFn>;
-    incrementRetryCount: ReturnType<typeof createMockFn>;
-    executeWithRetry: ReturnType<typeof createMockFn>;
+    handleConnectionSuccess: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+    resetRetryCount: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+    incrementRetryCount: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+    executeWithRetry: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     _calls: { handleConnectionError: unknown[] };
   };
   let baseConfig: {
@@ -43,12 +31,12 @@ describe("TikTokPlatform Error Handling", () => {
   beforeEach(() => {
 
     mockConnection = {
-      connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
-      disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
-      fetchIsLive: createMockFn<[], Promise<boolean>>().mockResolvedValue(false),
-      waitUntilLive: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
-      on: createMockFn<[string, (payload: unknown) => void | Promise<void>], void>(),
-      getState: createMockFn<[], { isConnected: boolean }>().mockReturnValue({
+      connect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
+      disconnect: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
+      fetchIsLive: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(false),
+      waitUntilLive: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
+      on: vi.fn<(...args: [string, (payload: unknown) => void | Promise<void>]) => void>(),
+      getState: vi.fn<(...args: []) => { isConnected: boolean }>().mockReturnValue({
         isConnected: false,
       }),
     };
@@ -57,10 +45,10 @@ describe("TikTokPlatform Error Handling", () => {
     mockRetrySystem = {
       handleConnectionError: (err: unknown) =>
         retrySystemCalls.handleConnectionError.push(err),
-      handleConnectionSuccess: createMockFn(),
-      resetRetryCount: createMockFn(),
-      incrementRetryCount: createMockFn(),
-      executeWithRetry: createMockFn(),
+      handleConnectionSuccess: vi.fn<(...args: unknown[]) => unknown>(),
+      resetRetryCount: vi.fn<(...args: unknown[]) => unknown>(),
+      incrementRetryCount: vi.fn<(...args: unknown[]) => unknown>(),
+      executeWithRetry: vi.fn<(...args: unknown[]) => unknown>(),
       _calls: retrySystemCalls,
     };
 
@@ -73,14 +61,12 @@ describe("TikTokPlatform Error Handling", () => {
     baseDependencies = {
       logger: noOpLogger,
       retrySystem: mockRetrySystem,
-      WebcastEvent: WEBCAST_EVENT,
-      ControlEvent: {},
-      TikTokWebSocketClient: createMockFn(() => mockConnection),
+      TikTokWebSocketClient: vi.fn(() => mockConnection),
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("rejects invalid events without exposing provider identities or content", async () => {

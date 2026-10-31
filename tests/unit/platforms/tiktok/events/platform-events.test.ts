@@ -1,6 +1,7 @@
-import { describe, expect, it, afterEach } from "bun:test";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+import { TIKTOK_EVENTS as webcastEvent } from '../../../../../src/platforms/tiktok/events/transport-events';
 import { spawnSync } from "node:child_process";
-import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
+
 
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
@@ -66,7 +67,7 @@ describe("TikTokPlatform event emissions", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -82,20 +83,6 @@ describe("TikTokPlatform event emissions", () => {
   const fallbackAvatarUrl = DEFAULT_AVATAR_URL;
 
   const createPlatformUnderTest = (logger = noOpLogger) => {
-    const webcastEvent = {
-      CHAT: "chat",
-      GIFT: "gift",
-      FOLLOW: "follow",
-      ROOM_USER: "roomUser",
-      ENVELOPE: "envelope",
-      SUBSCRIBE: "subscribe",
-      SUPER_FAN: "superfan",
-      SOCIAL: "social",
-      ERROR: "error",
-      DISCONNECT: "disconnect",
-      STREAM_END: "streamEnd",
-    } as const;
-
     const fixture = createTikTokLifetimeFixture(baseConfig);
     cleanups.push(() => fixture.cleanup());
 
@@ -106,15 +93,11 @@ describe("TikTokPlatform event emissions", () => {
             logger,
             TikTokWebSocketClient:
               fixture.platform.TikTokWebSocketClient as never,
-            WebcastEvent: webcastEvent,
-            ControlEvent: fixture.platform.ControlEvent as never,
             retrySystem: fixture.retry as never,
           });
     if (platform !== fixture.platform) {
       cleanups.push(() => platform.cleanup());
     }
-
-    platform.WebcastEvent = webcastEvent;
     const connection = fixture.createConnection();
     platform.connection = connection;
 

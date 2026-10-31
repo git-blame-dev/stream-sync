@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
@@ -21,7 +18,7 @@ describe("TikTok gift processing", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const buildGift = (overrides: Record<string, unknown> = {}) => ({
@@ -47,17 +44,7 @@ describe("TikTok gift processing", () => {
         giftAggregationEnabled: options.aggregationEnabled ?? false,
       },
       {
-        TikTokWebSocketClient: createMockFn(() => ({})),
-        WebcastEvent: {
-          CHAT: "chat",
-          GIFT: "gift",
-          FOLLOW: "follow",
-          SOCIAL: "social",
-          ROOM_USER: "roomUser",
-          ERROR: "error",
-          DISCONNECT: "disconnect",
-        },
-        ControlEvent: {},
+        TikTokWebSocketClient: vi.fn(() => ({})),
         logger: noOpLogger,
       },
     );
@@ -95,9 +82,9 @@ describe("TikTok gift processing", () => {
   it("handles gift processing via aggregator without throwing", async () => {
     const { platform } = createPlatform({ aggregationEnabled: false });
     const errorHandler = {
-      handleEventProcessingError: createMockFn(),
-      handleConnectionError: createMockFn(),
-      handleCleanupError: createMockFn(),
+      handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
     };
     platform.errorHandler = errorHandler;
 
@@ -121,9 +108,9 @@ describe("TikTok gift processing", () => {
   it("handles gift aggregation mode without throwing", async () => {
     const { platform } = createPlatform({ aggregationEnabled: true });
     const errorHandler = {
-      handleEventProcessingError: createMockFn(),
-      handleConnectionError: createMockFn(),
-      handleCleanupError: createMockFn(),
+      handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
     };
     platform.errorHandler = errorHandler;
 
@@ -147,9 +134,9 @@ describe("TikTok gift processing", () => {
   it("processes gifts through platform handleStandardGift method", async () => {
     const { platform } = createPlatform({ aggregationEnabled: false });
     const errorHandler = {
-      handleEventProcessingError: createMockFn(),
-      handleConnectionError: createMockFn(),
-      handleCleanupError: createMockFn(),
+      handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
     };
     platform.errorHandler = errorHandler;
 
