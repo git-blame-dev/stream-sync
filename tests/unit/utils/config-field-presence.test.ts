@@ -485,9 +485,8 @@ describe("Config field presence - all normalizers return expected fields", () =>
   describe("_normalizeStreamElementsSection", () => {
     const EXPECTED_FIELDS = [
       "enabled",
-      "youtubeChannelId",
-      "twitchChannelId",
       "dataLoggingEnabled",
+      "dataLoggingPath",
     ];
 
     it("returns all expected fields", () => {

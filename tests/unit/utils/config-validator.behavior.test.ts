@@ -890,8 +890,15 @@ describe("ConfigValidator._normalizeStreamElementsSection()", () => {
     const result = ConfigValidator._normalizeStreamElementsSection({});
 
     expect(result.enabled).toBe(false);
-    expect(result.youtubeChannelId).toBe("");
-    expect(result.twitchChannelId).toBe("");
+    expect(result.dataLoggingEnabled).toBe(false);
+    expect(result.dataLoggingPath).toBe("./logs");
+  });
+
+  it("normalizes optional logging and defaults an empty path", () => {
+    expect(ConfigValidator._normalizeStreamElementsSection({
+      enabled: "true", dataLoggingEnabled: "true", dataLoggingPath: " ./test-logs "
+    })).toEqual({ enabled: true, dataLoggingEnabled: true, dataLoggingPath: "./test-logs" });
+    expect(ConfigValidator._normalizeStreamElementsSection({ dataLoggingPath: " " }).dataLoggingPath).toBe("./logs");
   });
 });
 
@@ -1089,7 +1096,7 @@ describe("ConfigValidator.validate()", () => {
     tiktok: { enabled: false, username: "" },
     twitch: { enabled: false, username: "", channel: "", clientId: "" },
     youtube: { enabled: false, username: "" },
-    streamelements: { enabled: false, youtubeChannelId: "", twitchChannelId: "" },
+    streamelements: { enabled: false },
     cooldowns: {
       defaultCooldown: 60,
       heavyCommandCooldown: 120,
@@ -1214,46 +1221,11 @@ describe("ConfigValidator.validate()", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("returns error when StreamElements enabled without channel ID", () => {
+  it("passes when StreamElements is enabled without channel configuration", () => {
     const config = createMinimalValidConfig();
-    config.streamelements = {
-      enabled: true,
-      youtubeChannelId: "",
-      twitchChannelId: "",
-    };
+    config.streamelements = { enabled: true };
 
-    const result = ConfigValidator.validate(config);
-
-    expect(result.isValid).toBe(false);
-    expect(result.errors).toContain(
-      "Missing required configuration: StreamElements channel ID (YouTube or Twitch)",
-    );
-  });
-
-  it("passes when StreamElements has YouTube channel ID", () => {
-    const config = createMinimalValidConfig();
-    config.streamelements = {
-      enabled: true,
-      youtubeChannelId: "test-channel",
-      twitchChannelId: "",
-    };
-
-    const result = ConfigValidator.validate(config);
-
-    expect(result.isValid).toBe(true);
-  });
-
-  it("passes when StreamElements has Twitch channel ID", () => {
-    const config = createMinimalValidConfig();
-    config.streamelements = {
-      enabled: true,
-      youtubeChannelId: "",
-      twitchChannelId: "test-channel",
-    };
-
-    const result = ConfigValidator.validate(config);
-
-    expect(result.isValid).toBe(true);
+    expect(ConfigValidator.validate(config)).toEqual({ isValid: true, errors: [] });
   });
 });
 

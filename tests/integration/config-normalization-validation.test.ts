@@ -171,41 +171,18 @@ describe("ConfigValidator normalize + validate integration", () => {
     }
   });
 
-  it("StreamElements validation requires channel ID when enabled", () => {
-    const rawConfig = {
+  it("StreamElements accepts enabled plus optional logging", () => {
+    const normalized = ConfigValidator.normalize({
       general: {},
-      obs: {},
-      commands: {},
-      streamelements: {
-        enabled: "true",
-        youtubeChannelId: "",
-        twitchChannelId: "",
-      },
-    };
+      streamelements: { enabled: "true", dataLoggingEnabled: "true", dataLoggingPath: "./test-logs" },
+    });
 
-    const normalized = ConfigValidator.normalize(rawConfig);
-    const validation = ConfigValidator.validate(normalized);
-
-    expect(validation.isValid).toBe(false);
-    expect(validation.errors).toContain(
-      "Missing required configuration: StreamElements channel ID (YouTube or Twitch)",
-    );
-  });
-
-  it("StreamElements passes with YouTube channel ID", () => {
-    const rawConfig = {
-      general: {},
-      obs: {},
-      commands: {},
-      streamelements: { enabled: "true", youtubeChannelId: "UC123456" },
-    };
-
-    const normalized = ConfigValidator.normalize(rawConfig);
-    const validation = ConfigValidator.validate(normalized);
-
-    expect(validation.isValid).toBe(true);
-    expect(normalized.streamelements.enabled).toBe(true);
-    expect(normalized.streamelements.youtubeChannelId).toBe("UC123456");
+    expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
+    expect(normalized.streamelements).toEqual({
+      enabled: true,
+      dataLoggingEnabled: true,
+      dataLoggingPath: "./test-logs",
+    });
   });
 
   it("out-of-range values replaced with defaults during normalization", () => {

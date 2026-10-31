@@ -118,10 +118,8 @@ function buildStreamElementsConfig(normalized: Pick<NormalizedConfig, 'streamele
 
     return {
         enabled: se.enabled,
-        youtubeChannelId: se.youtubeChannelId,
-        twitchChannelId: se.twitchChannelId,
         dataLoggingEnabled: se.dataLoggingEnabled,
-        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
+        dataLoggingPath: se.dataLoggingPath
     };
 }
 

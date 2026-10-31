@@ -12,8 +12,6 @@ import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
 
 type StreamElementsConfigSnapshot = {
   enabled: boolean;
-  youtubeChannelId?: string;
-  twitchChannelId?: string;
   jwtToken?: string;
   dataLoggingEnabled: boolean;
   dataLoggingPath?: string;
@@ -104,13 +102,11 @@ describe("platform config parsing behavior", () => {
     expect(config.dataLoggingEnabled).toBe(false);
   });
 
-  test("StreamElementsPlatform uses provided channel IDs and paths", () => {
+  test("StreamElementsPlatform uses the secret-managed JWT and provided logging path", () => {
     const jwtToken = "test-jwt-token";
     secrets.streamelements.jwtToken = jwtToken;
     const platform = new StreamElementsPlatform(
       createStreamElementsConfigFixture({
-        youtubeChannelId: "test-youtube-channel",
-        twitchChannelId: "test-twitch-channel",
         dataLoggingPath: "./custom-logs",
       }),
       { logger: noOpLogger },
@@ -119,8 +115,6 @@ describe("platform config parsing behavior", () => {
     const config = readStreamElementsConfig(platform);
 
     expect(config.jwtToken).toBe(jwtToken);
-    expect(config.youtubeChannelId).toBe("test-youtube-channel");
-    expect(config.twitchChannelId).toBe("test-twitch-channel");
     expect(config.dataLoggingPath).toBe("./custom-logs");
   });
 });

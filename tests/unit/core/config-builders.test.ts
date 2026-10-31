@@ -217,48 +217,24 @@ describe('config-builders', () => {
     });
 
     describe('buildStreamElementsConfig', () => {
-        it('passes through empty channel IDs from normalizer', () => {
-            const normalized = {
-                streamelements: {
-                    enabled: true,
-                    youtubeChannelId: '',
-                    twitchChannelId: '',
-                    dataLoggingEnabled: false
-                }
-            };
-            const result = buildStreamElementsConfig(normalized);
-
-            expect(result.youtubeChannelId).toBe('');
-            expect(result.twitchChannelId).toBe('');
+        it('builds enabled StreamElements with optional logging only', () => {
+            const normalized = ConfigValidator.normalize({ streamelements: { enabled: true } });
+            expect(buildStreamElementsConfig(normalized)).toEqual({
+                enabled: true,
+                dataLoggingEnabled: false,
+                dataLoggingPath: './logs'
+            });
         });
 
-        it('preserves truthy channel IDs', () => {
-            const normalized = {
-                streamelements: {
-                    enabled: true,
-                    youtubeChannelId: 'test-yt-channel',
-                    twitchChannelId: 'test-tw-channel',
-                    dataLoggingEnabled: true
-                }
-            };
-            const result = buildStreamElementsConfig(normalized);
-
-            expect(result.youtubeChannelId).toBe('test-yt-channel');
-            expect(result.twitchChannelId).toBe('test-tw-channel');
-        });
-
-        it('sets dataLoggingPath from DEFAULTS', () => {
-            const normalized = {
-                streamelements: {
-                    enabled: false,
-                    youtubeChannelId: '',
-                    twitchChannelId: '',
-                    dataLoggingEnabled: false
-                }
-            };
-            const result = buildStreamElementsConfig(normalized);
-
-            expect(result.dataLoggingPath).toBe('./logs');
+        it('preserves configured logging options', () => {
+            const normalized = ConfigValidator.normalize({
+                streamelements: { enabled: true, dataLoggingEnabled: true, dataLoggingPath: './test-logs' }
+            });
+            expect(buildStreamElementsConfig(normalized)).toEqual({
+                enabled: true,
+                dataLoggingEnabled: true,
+                dataLoggingPath: './test-logs'
+            });
         });
     });
 

@@ -3,6 +3,14 @@ import { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, buildDefaultsFromSchema, D
 import type { ConfigDefaultSectionName, ConfigDefaults, ConfigSchema } from '../../../src/core/types/config-types';
 import { ConfigValidator } from '../../../src/utils/config-validator';
 
+describe('StreamElements config schema', () => {
+    it('exposes enablement and optional logging only', () => {
+        expect(Object.keys(CONFIG_SCHEMA.streamelements ?? {})).toEqual([
+            'enabled', 'dataLoggingEnabled', 'dataLoggingPath'
+        ]);
+    });
+});
+
 describe('HTTP schema numeric policy', () => {
     it('applies the same positive integer policy through schema and runtime normalization', () => {
         for (const value of [0, -1, 1.5, NaN, Infinity, -Infinity, 1, 2345, '6789']) {

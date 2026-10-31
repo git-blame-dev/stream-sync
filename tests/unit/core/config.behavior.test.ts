@@ -297,14 +297,14 @@ enabled = true
         expect(currentConfig.cooldowns.maxEntries).toBe(1000);
     });
 
-    it('throws error when StreamElements enabled without channel IDs', () => {
+    it('loads enabled StreamElements without channel configuration', () => {
         const content = buildConfig({
             streamelementsSection: `enabled = true`
         });
         setupConfigMocks(content);
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-        expect(() => loadFreshConfig()).toThrow(/StreamElements channel ID/);
+        expect(configModule.loadConfig().streamelements.enabled).toBe(true);
     });
 
     for (const selection of [
@@ -532,7 +532,7 @@ viewerCountMethod = youtubei`
     });
 
     it('surfaces configuration validation errors through loadConfig', () => {
-        const invalidConfig = buildConfig({ streamelementsSection: 'enabled = true' });
+        const invalidConfig = buildConfig({ youtubeSection: 'enabled = true' });
         setupConfigMocks(invalidConfig);
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
