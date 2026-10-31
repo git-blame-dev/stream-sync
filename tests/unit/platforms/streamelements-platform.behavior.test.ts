@@ -1,791 +1,315 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { EventEmitter } from "events";
-import {
-  type TestMockFn,
-  createMockFn,
-  restoreAllMocks,
-  spyOn,
-} from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { createRecordingLogger } from "../../helpers/recording-logger";
-import { createStreamElementsConfigFixture } from "../../helpers/config-fixture";
-import {
-  useFakeTimers,
-  useRealTimers,
-  advanceTimersByTime,
-} from "../../helpers/bun-timers";
-import {
-  safeSetInterval,
-  safeSetTimeout,
-} from "../../../src/utils/timeout-validator";
-import { promises as fs } from "fs";
-import * as path from "path";
-import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
-import {
-  secrets,
-  _resetForTesting,
-  initializeStaticSecrets,
-} from "../../../src/core/secrets";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import type { AppLogger } from '../../../src/core/logger/types';
+import { StreamElementsPlatform } from '../../../src/platforms/streamelements';
+import { noOpLogger } from '../../helpers/mock-factories';
+import { createRecordingLogger } from '../../helpers/recording-logger';
+import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../../helpers/bun-timers';
 
-type RetrySystemFixture = {
-  incrementRetryCount: TestMockFn<[string], number>;
-  resetRetryCount: TestMockFn<unknown[], unknown>;
-  handleConnectionError: TestMockFn<unknown[], unknown>;
-  handleConnectionSuccess: TestMockFn<unknown[], unknown>;
-};
-
-type PlatformEventEnvelope = {
-  platform: string;
-  type: string;
-  data: {
-    username?: string;
-    userId?: string | null;
-  };
-};
-
-type SentMessage = {
-  type?: string;
-  topic?: string;
-};
-
-type StreamElementsDependencyOverrides = {
-  retrySystem?: RetrySystemFixture;
-  logger?: unknown;
-  eventBus?: unknown;
-} & Record<string, unknown>;
-
-type FileSystemPromisesFixture = {
-  mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-  appendFile: (path: string, data: string) => Promise<void>;
-};
-
-type SpyResult<Args extends unknown[]> = {
-  mock: { calls: Args[] };
-  mockResolvedValue: (value: unknown) => SpyResult<Args>;
-  mockRejectedValue: (error: unknown) => SpyResult<Args>;
-};
-
-const fileSystem = fs as unknown as FileSystemPromisesFixture;
-const typedSpyOn = spyOn as unknown as <Target, Key extends keyof Target>(
-  target: Target,
-  key: Key,
-) => SpyResult<Target[Key] extends (...args: infer Args) => unknown ? Args : never>;
-
-const asMock = <Args extends unknown[], Return>(
-  fn: (...args: Args) => Return,
-): TestMockFn<Args, Return> => fn as TestMockFn<Args, Return>;
-
-const getPrivateField = <Value>(target: object, key: string): Value =>
-  Reflect.get(target, key) as Value;
-
-const setPrivateField = (target: object, key: string, value: unknown): void => {
-  Reflect.set(target, key, value);
-};
-
-class MockWebSocket extends EventEmitter {
-  static instances: MockWebSocket[] = [];
-  static CONNECTING = 0;
+class TestWebSocket extends EventEmitter {
   static OPEN = 1;
-  static CLOSED = 3;
-
-  url: string;
-  readyState: number;
-  sent: string[];
-
-  constructor(url: string) {
+  static instances: TestWebSocket[] = [];
+  readyState = 0;
+  sent: string[] = [];
+  constructor(readonly url: string) {
     super();
-    this.url = url;
-    this.readyState = MockWebSocket.CONNECTING;
-    this.sent = [];
-    MockWebSocket.instances.push(this);
+    TestWebSocket.instances.push(this);
   }
-
-  send(payload: string): void {
-    this.sent.push(payload);
+  send(frame: string) { this.sent.push(frame); }
+  close() { this.readyState = 3; this.emit('close', 1000); }
+  open() { this.readyState = 1; this.emit('open'); }
+  receive(frame: unknown) { this.emit('message', Buffer.from(JSON.stringify(frame))); }
+  acknowledge(error: unknown = null, nonce = this.subscription().nonce) {
+    this.receive({ type: 'response', nonce, error, data: { message: 'Successfully subscribed to topic', room: 'test-room' } });
   }
-
-  close(): void {
-    this.readyState = MockWebSocket.CLOSED;
+  subscription(): { type: string; nonce: string; data: Record<string, unknown> } {
+    return JSON.parse(this.sent[0]!);
   }
 }
 
-const createPlatform = (
-  configOverrides: Parameters<typeof createStreamElementsConfigFixture>[0] = {},
-  dependencyOverrides: StreamElementsDependencyOverrides = {},
-) => {
-  const retrySystem = dependencyOverrides.retrySystem || {
-    incrementRetryCount: createMockFn<[string], number>(() => 10),
-    resetRetryCount: createMockFn(),
-    handleConnectionError: createMockFn(),
-    handleConnectionSuccess: createMockFn(),
-  };
-
-  secrets.streamelements.jwtToken = "test-jwt-token";
-  const platform = new StreamElementsPlatform(
-    createStreamElementsConfigFixture({
-      enabled: true,
-      youtubeChannelId: "test-youtube-channel",
-      twitchChannelId: "test-twitch-channel",
-      dataLoggingEnabled: true,
-      ...configOverrides,
-    }),
-    {
-      logger: noOpLogger,
-      WebSocketCtor: MockWebSocket,
-      retrySystem,
-      ...dependencyOverrides,
-    } as ConstructorParameters<typeof StreamElementsPlatform>[1],
-  );
-
-  return { platform, retrySystem };
+const platforms: StreamElementsPlatform[] = [];
+const createPlatform = (config: { enabled?: boolean; jwtToken?: string; dataLoggingEnabled?: boolean; dataLoggingPath?: string } = {}, logger: Pick<AppLogger, 'debug' | 'info' | 'warn' | 'error'> = noOpLogger) => {
+  const retries: string[] = [];
+  const resets: string[] = [];
+  const events: unknown[] = [];
+  const rawEvents: unknown[] = [];
+  const platform = new StreamElementsPlatform({ enabled: true, jwtToken: 'test-only-jwt', dataLoggingEnabled: false, ...config }, {
+    logger,
+    WebSocketCtor: TestWebSocket,
+    retrySystem: {
+      incrementRetryCount: (name) => { retries.push(name); return 10; },
+      resetRetryCount: (name) => { resets.push(name); },
+    },
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    rawEventLogWriter: { writeRawEvent: async (entry) => { rawEvents.push(entry); return { fileName: 'test-only.ndjson', filePath: '/tmp/test-only.ndjson' }; } },
+  });
+  platforms.push(platform);
+  return { platform, retries, resets, events, rawEvents };
 };
+const socket = () => TestWebSocket.instances.at(-1)!;
+const activity = (data: Record<string, unknown> = {}, fields: Record<string, unknown> = {}, envelope: Record<string, unknown> = {}) => ({
+  type: 'message', topic: 'channel.activities', room: 'test-room',
+  data: { type: 'follow', provider: 'youtube', createdAt: '2026-01-01T00:00:00.000Z', data: { displayName: ' Test Viewer ', providerId: ' test-provider-id ', ...data }, ...fields }, ...envelope,
+});
+async function ready(config: Parameters<typeof createPlatform>[0] = {}) {
+  const fixture = createPlatform(config);
+  const pending = fixture.platform.initialize();
+  socket().open();
+  socket().acknowledge();
+  await pending;
+  return fixture;
+}
 
-describe("StreamElementsPlatform behavior", () => {
-  beforeEach(() => {
-    MockWebSocket.instances = [];
-  });
+beforeEach(() => { TestWebSocket.instances = []; });
+afterEach(async () => {
+  for (const platform of platforms.splice(0)) await platform.disconnect();
+  useRealTimers();
+});
 
-  afterEach(() => {
-    useRealTimers();
-    restoreAllMocks();
-    _resetForTesting();
-    initializeStaticSecrets();
-  });
-
-  it("initializes disabled platform and fails prerequisites", async () => {
-    const platform = new StreamElementsPlatform(
-      createStreamElementsConfigFixture({ enabled: false }),
-      { logger: noOpLogger },
-    );
-
-    const initialized = await platform.initialize({});
-
-    expect(initialized).toEqual({ state: "monitoring" });
-    expect(platform.checkConnectionPrerequisites()).toBe(false);
+describe('StreamElements Astro protocol', () => {
+  it('reports confirmed readiness once and keeps healthy delivery and raw capture quiet', async () => {
+    const logger = createRecordingLogger();
+    const { platform, events, rawEvents } = createPlatform({ dataLoggingEnabled: true, dataLoggingPath: '/tmp/test-only-subscriber-capture' }, logger);
+    const pending = platform.initialize();
+    const ws = socket();
+    ws.open();
+    ws.receive({ type: 'welcome' });
     expect(platform.isConnected()).toBe(false);
-  });
-
-  it("initialize calls connect when platform is enabled", async () => {
-    const { platform } = createPlatform();
-    platform.connect = createMockFn().mockResolvedValue(true);
-
-    const initialized = await platform.initialize({});
-
-    expect(initialized).toEqual({ state: "ready" });
-    expect(asMock(platform.connect).mock.calls).toHaveLength(1);
-  });
-
-  it("initialize skips connect when already connected", async () => {
-    const { platform } = createPlatform();
-    platform.isConnected = createMockFn(() => true);
-    platform.connect = createMockFn().mockResolvedValue(true);
-
-    const initialized = await platform.initialize({});
-
-    expect(initialized).toEqual({ state: "ready" });
-    expect(asMock(platform.connect).mock.calls).toHaveLength(0);
-  });
-
-  it("reports transient connection failure while recovery remains enabled", async () => {
-    const { platform } = createPlatform();
-    platform.connect = createMockFn().mockResolvedValue(false);
-    platform.isConnected = createMockFn(() => false);
-
-    await expect(platform.initialize({})).resolves.toMatchObject({
-      state: "recovering",
-      error: expect.any(Error),
-    });
-  });
-
-  it("rejects unknown setup failures instead of retrying indefinitely", async () => {
-    const setupError = new Error("StreamElements WebSocket constructor is incompatible");
-    const { platform } = createPlatform();
-    platform.connect = createMockFn<[], Promise<boolean>>(async () => {
-      setPrivateField(platform, "lastConnectionError", setupError);
-      return false;
-    });
-    platform.isConnected = createMockFn(() => false);
-
-    await expect(platform.initialize({})).rejects.toBe(setupError);
-  });
-
-  it("skips connect when already connecting", async () => {
-    const { platform } = createPlatform();
-
-    setPrivateField(platform, "isConnecting", true);
-
-    const result = await platform.connect();
-
-    expect(result).toBe(false);
-  });
-
-  it("returns false when prerequisites fail", async () => {
-    const platform = new StreamElementsPlatform(
-      createStreamElementsConfigFixture(),
-      { logger: noOpLogger },
-    );
-
-    const result = await platform.connect();
-
-    expect(result).toBe(false);
-  });
-
-  it("connectToWebSocket resolves when the socket opens", async () => {
-    const { platform } = createPlatform();
-
-    const promise = platform.connectToWebSocket();
-    const connection = MockWebSocket.instances[0]!;
-    connection.readyState = MockWebSocket.OPEN;
-    connection.emit("open");
-
-    await expect(promise).resolves.toBeUndefined();
-    expect(getPrivateField<MockWebSocket | null>(platform, "connection")).toBe(connection);
-  });
-
-  it("connectToWebSocket rejects when the socket errors", async () => {
-    const { platform } = createPlatform();
-
-    const promise = platform.connectToWebSocket();
-    const connection = MockWebSocket.instances[0]!;
-    const error = new Error("test websocket error");
-    connection.emit("error", error);
-
-    await expect(promise).rejects.toThrow("test websocket error");
-  });
-
-  it("connect opens websocket when prerequisites pass", async () => {
-    const { platform } = createPlatform();
-    platform.checkConnectionPrerequisites = createMockFn(() => true);
-    platform.connectToWebSocket = createMockFn().mockResolvedValue();
-
-    const connected = await platform.connect();
-
-    expect(connected).toBe(true);
-    expect(asMock(platform.connectToWebSocket).mock.calls).toHaveLength(1);
-  });
-
-  it("connect delegates websocket errors to connection error handler", async () => {
-    const { platform } = createPlatform();
-    platform.checkConnectionPrerequisites = createMockFn(() => true);
-    platform.connectToWebSocket = createMockFn().mockRejectedValue(
-      new Error("socket failed"),
-    );
-    platform.handleConnectionError = createMockFn();
-
-    const connected = await platform.connect();
-
-    expect(connected).toBe(false);
-    expect(asMock(platform.handleConnectionError).mock.calls).toHaveLength(1);
-  });
-
-  it("setupEventListeners throws when connection is missing", () => {
-    const { platform } = createPlatform();
-    const errorHandler = { handleConnectionError: createMockFn() };
-    setPrivateField(platform, "errorHandler", errorHandler);
-    setPrivateField(platform, "connection", null);
-
-    expect(() => platform.setupEventListeners()).toThrow(
-      "StreamElements connection missing connection object",
-    );
-    expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
-  });
-
-  it("routes message types to the correct handlers", () => {
-    const { platform } = createPlatform();
-    platform.handleAuthResponse = createMockFn();
-    platform.handleFollowEvent = createMockFn();
-    platform.handlePing = createMockFn();
-
-    platform.handleMessage(
-      Buffer.from(JSON.stringify({ type: "auth", success: true })),
-    );
-    platform.handleMessage(
-      Buffer.from(JSON.stringify({ type: "event", data: {} })),
-    );
-    platform.handleMessage(Buffer.from(JSON.stringify({ type: "ping" })));
-    platform.handleMessage(Buffer.from(JSON.stringify({ type: "unknown" })));
-
-    expect(asMock(platform.handleAuthResponse).mock.calls).toHaveLength(1);
-    expect(asMock(platform.handleFollowEvent).mock.calls).toHaveLength(1);
-    expect(asMock(platform.handlePing).mock.calls).toHaveLength(1);
-  });
-
-  it("reports authentication only after confirmation and keeps healthy heartbeat traffic silent", () => {
-    useFakeTimers();
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
-    const socket = new MockWebSocket("wss://synthetic.invalid");
-    socket.readyState = MockWebSocket.OPEN;
-    setPrivateField(platform, "connection", socket);
+    expect(logger.entries.filter(entry => entry.level === 'info')).toHaveLength(0);
+    ws.acknowledge();
+    await pending;
+    expect(platform.isConnected()).toBe(true);
+    expect(logger.entries.filter(entry => entry.level === 'info')).toHaveLength(1);
     logger.entries.length = 0;
-    try {
-      platform.handleConnectionOpen();
-      expect(socket.sent.map(payload => JSON.parse(payload).type)).toEqual(["auth"]);
-      expect(logger.entries.filter(entry => entry.level === "info")).toEqual([]);
-      platform.handleMessage(Buffer.from(JSON.stringify({ type: "auth", success: true })));
-      expect(logger.entries.filter(entry => entry.level === "info")).toHaveLength(1);
-      expect(socket.sent.map(payload => JSON.parse(payload).type)).toEqual(["auth", "subscribe", "subscribe"]);
-      logger.entries.length = 0;
-      platform.handleMessage(Buffer.from(JSON.stringify({ type: "ping" })));
-      platform.handlePong();
-      advanceTimersByTime(30000);
-      expect(socket.sent.map(payload => JSON.parse(payload).type)).toContain("pong");
-      expect(socket.sent.map(payload => JSON.parse(payload).type)).toContain("ping");
-      expect(logger.entries).toEqual([]);
-    } finally {
-      platform.disconnect();
-    }
-  });
-
-  it("routes inbound websocket messages without routine payload narration", () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({}, { logger });
-    platform.handleFollowEvent = createMockFn().mockResolvedValue();
-    const inboundPayload = {
-      type: "event",
-      success: true,
-      data: {
-        platform: "youtube",
-        displayName: "test-private-follower",
-        userId: "test-user-id",
-        rawText: "test-private-raw-payload",
-      },
-    };
-
-    logger.entries.length = 0;
-    platform.handleMessage(Buffer.from(JSON.stringify(inboundPayload)));
-    expect(asMock(platform.handleFollowEvent).mock.calls).toHaveLength(1);
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(logger.entries).toEqual([]);
-    expect(serializedLogs).not.toContain("test-private-follower");
-    expect(serializedLogs).not.toContain("test-private-raw-payload");
-  });
-
-  it("summarizes unknown websocket message types without logging provider values", () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({}, { logger });
-
-    platform.handleMessage(Buffer.from(JSON.stringify({
-      type: "test-private-chat-text test-access-token",
-      data: { rawText: "test-private-raw-payload" },
-    })));
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("hasType");
-    expect(serializedLogs).not.toContain("test-private-chat-text");
-    expect(serializedLogs).not.toContain("test-access-token");
-    expect(serializedLogs).not.toContain("test-private-raw-payload");
-  });
-
-  it("summarizes auth failures without logging provider error text", () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({}, { logger });
-    platform.disconnect = createMockFn().mockResolvedValue();
-
-    platform.handleAuthResponse({
-      success: false,
-      error: "test-private-auth-error test-jwt-token",
-    });
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("authentication failed");
-    expect(serializedLogs).not.toContain("test-private-auth-error");
-    expect(serializedLogs).not.toContain("test-jwt-token");
-  });
-
-  it("summarizes unknown follow platforms without logging provider values", async () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "test-private-platform test-access-token",
-        displayName: "test-private-follower",
-      },
-    });
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("hasPlatform");
-    expect(serializedLogs).not.toContain("test-private-platform");
-    expect(serializedLogs).not.toContain("test-access-token");
-    expect(serializedLogs).not.toContain("test-private-follower");
-  });
-
-  it("does not log raw follower display names in routine logs", async () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
-    const emitted: PlatformEventEnvelope[] = [];
-    platform.on("platform:event", (payload: PlatformEventEnvelope) => emitted.push(payload));
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "youtube",
-        displayName: "test-private-follower",
-        userId: "test-user-id",
-      },
-    });
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(emitted[0]!.data.username).toBe("test-private-follower");
-    expect(serializedLogs).toContain("hasUsername");
-    expect(serializedLogs).not.toContain("test-private-follower");
-  });
-
-  it("summarizes missing username follow events without provider payload logging", async () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({}, { logger });
-    const followMessage = {
-      data: {
-        platform: "youtube",
-        displayName: "",
-        userId: "test-user-id",
-        rawText: "test-private-raw-payload",
-      },
-    };
-
-    await platform.handleFollowEvent(followMessage);
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("hasDisplayName");
-    expect(serializedLogs).toContain("hasUserId");
-    expect(serializedLogs).not.toContain("test-private-raw-payload");
-  });
-
-  it("handles auth responses for success and failure", () => {
-    const { platform } = createPlatform();
-    const errorHandler = { handleAuthenticationError: createMockFn() };
-    setPrivateField(platform, "errorHandler", errorHandler);
-    platform.subscribeToFollowEvents = createMockFn();
-    platform.disconnect = createMockFn();
-
-    platform.handleAuthResponse({ success: true });
-    platform.handleAuthResponse({ success: false, error: "denied" });
-
-    expect(asMock(platform.subscribeToFollowEvents).mock.calls).toHaveLength(1);
-    expect(errorHandler.handleAuthenticationError.mock.calls).toHaveLength(1);
-    expect(asMock(platform.disconnect).mock.calls).toHaveLength(1);
-  });
-
-  it("subscribes to configured follow topics after authentication", () => {
-    const { platform } = createPlatform({
-      youtubeChannelId: "test-youtube-channel",
-      twitchChannelId: "test-twitch-channel",
-    });
-    const sentMessages: SentMessage[] = [];
-    platform.sendMessage = createMockFn<[SentMessage], void>((message) =>
-      sentMessages.push(message),
-    );
-
-    platform.subscribeToFollowEvents();
-
-    expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[0]!.topic).toBe("channel.follow.test-youtube-channel");
-    expect(sentMessages[1]!.topic).toBe("channel.follow.test-twitch-channel");
-  });
-
-  it("emits follow events for supported platforms", async () => {
-    const { platform } = createPlatform();
-    platform.logRawPlatformData = createMockFn().mockResolvedValue();
-    const emitted: PlatformEventEnvelope[] = [];
-    platform.on("platform:event", (payload: PlatformEventEnvelope) => emitted.push(payload));
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "twitch",
-        displayName: "TestFollower",
-        userId: "test-user-1",
-      },
-    });
-
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]!.platform).toBe("twitch");
-    expect(emitted[0]!.type).toBe("platform:follow");
-    expect(emitted[0]!.data.username).toBe("TestFollower");
-    expect(emitted[0]!.data.userId).toBe("test-user-1");
-  });
-
-  it("forwards follow events through injected onFollow handlers", async () => {
-    const { platform } = createPlatform();
-    platform.connect = createMockFn().mockResolvedValue(true);
-    platform.logRawPlatformData = createMockFn().mockResolvedValue();
-    const onFollow = createMockFn();
-
-    await platform.initialize({ onFollow });
-    await platform.handleFollowEvent({
-      data: {
-        platform: "youtube",
-        displayName: "TestFollower",
-        userId: "test-user-1",
-      },
-    });
-
-    expect(onFollow.mock.calls).toHaveLength(1);
-    expect(onFollow.mock.calls[0]![0]).toMatchObject({
-      platform: "youtube",
-      username: "TestFollower",
-      source: "streamelements",
-    });
-  });
-
-  it("routes follow events to event bus through default handlers", async () => {
-    const eventBus = { emit: createMockFn<[string, PlatformEventEnvelope], unknown>() };
-    const { platform } = createPlatform(
-      { dataLoggingEnabled: false },
-      { eventBus },
-    );
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "twitch",
-        displayName: "BusFollower",
-        userId: "bus-user",
-      },
-    });
-
-    expect(eventBus.emit.mock.calls).toHaveLength(1);
-    const [eventName, payload] = eventBus.emit.mock.calls[0]!;
-    expect(eventName).toBe("platform:event");
-    expect(payload.platform).toBe("twitch");
-    expect(payload.type).toBe("platform:follow");
-    expect(payload.data.username).toBe("BusFollower");
-  });
-
-  it("skips follow events with unknown platforms or missing usernames", async () => {
-    const { platform } = createPlatform();
-    platform.logRawPlatformData = createMockFn().mockResolvedValue();
-    const emitted: PlatformEventEnvelope[] = [];
-    platform.on("platform:event", (payload: PlatformEventEnvelope) => emitted.push(payload));
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "unknown",
-        displayName: "TestUser",
-        userId: "test-user-2",
-      },
-    });
-
-    await platform.handleFollowEvent({
-      data: {
-        platform: "youtube",
-        displayName: "",
-        userId: "test-user-3",
-      },
-    });
-
-    expect(emitted).toHaveLength(0);
-  });
-
-  it("logs raw platform data as NDJSON", async () => {
-    const { platform } = createPlatform({ dataLoggingEnabled: true });
-    const mkdirSpy = typedSpyOn(fileSystem, "mkdir").mockResolvedValue(undefined);
-    const appendSpy = typedSpyOn(fileSystem, "appendFile").mockResolvedValue(undefined);
-    const payload = { type: "follow", data: { id: "test-follow" } };
-
-    await platform.logRawPlatformData("follow", payload);
-
-    expect(mkdirSpy.mock.calls).toHaveLength(1);
-    expect(appendSpy.mock.calls).toHaveLength(1);
-
-    const [filePath, logLine] = appendSpy.mock.calls[0]!;
-    expect(filePath).toBe(
-      path.join("./logs", "streamelements-data-log.ndjson"),
-    );
-
-    const entry = JSON.parse(logLine as string);
-    expect(entry).toMatchObject({
-      platform: "streamelements",
-      eventType: "follow",
-      payload,
-    });
-    expect(typeof entry.ingestTimestamp).toBe("string");
-  });
-
-  it("routes log errors through the error handler", async () => {
-    const { platform } = createPlatform({ dataLoggingEnabled: true });
-    const errorHandler = { handleDataLoggingError: createMockFn() };
-    setPrivateField(platform, "errorHandler", errorHandler);
-    typedSpyOn(fileSystem, "mkdir").mockResolvedValue(undefined);
-    typedSpyOn(fileSystem, "appendFile").mockRejectedValue(new Error("disk full"));
-
-    await platform.logRawPlatformData("follow", { id: "test-follow" });
-
-    expect(errorHandler.handleDataLoggingError.mock.calls).toHaveLength(1);
-  });
-
-  it("summarizes websocket close reasons without logging provider text", () => {
-    const logger = createRecordingLogger();
-    const { platform } = createPlatform({}, { logger });
-    platform.stopKeepAlive = createMockFn();
-    platform.cleanup = createMockFn();
-    platform.scheduleReconnection = createMockFn();
-
-    platform.handleConnectionClose(4000, "test-private-close-reason test-access-token");
-
-    const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("hasReason");
-    expect(serializedLogs).not.toContain("test-private-close-reason");
-    expect(serializedLogs).not.toContain("test-access-token");
-  });
-
-  it("sends auth and ping messages when connected", () => {
-    useFakeTimers();
-    const { platform } = createPlatform();
-    const connection = new MockWebSocket("ws://test");
-    connection.readyState = MockWebSocket.OPEN;
-    setPrivateField(platform, "connection", connection);
-
-    platform.handleConnectionOpen();
-    advanceTimersByTime(30000);
-
-    const sentPayloads = connection.sent.map((payload: string) => JSON.parse(payload) as SentMessage);
-    expect(sentPayloads[0]!.type).toBe("auth");
-    expect(sentPayloads[1]!.type).toBe("ping");
-    expect(getPrivateField<boolean>(platform, "isReady")).toBe(true);
-  });
-
-  it("reports connection recovery transitions", () => {
-    useFakeTimers();
-    const { platform } = createPlatform();
-    const onConnection = createMockFn<[Record<string, unknown>], void>();
-    setPrivateField(platform, "handlers", { onConnection });
-    const connection = new MockWebSocket("ws://test");
-    connection.readyState = MockWebSocket.OPEN;
-    setPrivateField(platform, "connection", connection);
-
-    platform.handleConnectionError(new Error("network unavailable"));
-    platform.handleConnectionOpen();
-
-    expect(onConnection.mock.calls[0]?.[0]).toMatchObject({
-      platform: "streamelements",
-      status: "reconnecting",
-      willReconnect: true,
-    });
-    expect(onConnection.mock.calls[1]?.[0]).toMatchObject({
-      platform: "streamelements",
-      status: "connected",
-      willReconnect: false,
-    });
-  });
-
-  it("schedules reconnection attempts when requested", () => {
-    useFakeTimers();
-    const { platform } = createPlatform();
-    setPrivateField(platform, "incrementRetryCount", createMockFn(() => 10));
-    platform.connect = createMockFn();
-    platform.isConnected = createMockFn(() => false);
-
-    platform.scheduleReconnection();
-    advanceTimersByTime(10);
-
-    expect(asMock(platform.connect).mock.calls).toHaveLength(1);
-  });
-
-  it("continues recovery after an initial connection timeout", async () => {
-    useFakeTimers();
-    const { platform } = createPlatform();
-
-    const initialization = platform.initialize({});
-    expect(MockWebSocket.instances).toHaveLength(1);
-
-    advanceTimersByTime(15000);
-    await expect(initialization).resolves.toMatchObject({
-      state: "recovering",
-      error: expect.any(Error),
-    });
-    const timedOutConnection = MockWebSocket.instances[0]!;
-    expect(timedOutConnection.readyState).toBe(MockWebSocket.CLOSED);
-    expect(timedOutConnection.listenerCount("open")).toBe(0);
-    expect(timedOutConnection.listenerCount("close")).toBe(0);
-    expect(timedOutConnection.listenerCount("error")).toBe(0);
-
-    advanceTimersByTime(10);
+    ws.receive({ type: 'welcome' });
+    ws.receive(activity());
     await Promise.resolve();
-
-    expect(MockWebSocket.instances).toHaveLength(2);
-    const replacementConnection = MockWebSocket.instances[1]!;
-    timedOutConnection.emit("open");
-    timedOutConnection.emit("close", 1006, "late close");
-    expect(getPrivateField<MockWebSocket | null>(platform, "connection")).toBe(
-      replacementConnection,
-    );
-    expect(getPrivateField<boolean>(platform, "isReady")).toBe(false);
-    platform.cleanup();
+    expect(events).toHaveLength(1);
+    expect(rawEvents).toHaveLength(1);
+    expect(logger.entries).toHaveLength(0);
   });
 
-  it("cancels a pending connection attempt without scheduling stale recovery", async () => {
+  it('stays pending until its subscription is acknowledged and forwards normalized YouTube subscribers', async () => {
+    const { platform, resets, events } = createPlatform();
+    const statuses: unknown[] = [];
+    let settled = false;
+    const pending = platform.initialize({ onConnection: (event) => statuses.push(event) }).then((result) => { settled = true; return result; });
+    const ws = socket();
+    expect(ws.url).toBe('wss://astro.streamelements.com');
+    ws.open();
+    const subscription = ws.subscription();
+    expect(subscription).toMatchObject({ type: 'subscribe', nonce: expect.any(String), data: { topic: 'channel.activities', token: 'test-only-jwt', token_type: 'jwt' } });
+    expect(platform.isConnected()).toBe(false);
+    ws.receive({ type: 'welcome' });
+    ws.acknowledge(null, 'test-wrong-nonce');
+    ws.receive(activity());
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(statuses).toHaveLength(0);
+    expect(events).toHaveLength(0);
+    expect(resets).toHaveLength(0);
+    ws.acknowledge();
+    expect(await pending).toEqual({ state: 'ready' });
+    expect(platform.isConnected()).toBe(true);
+    expect(resets).toEqual(['StreamElements']);
+    expect(statuses).toEqual([expect.objectContaining({ status: 'connected', willReconnect: false })]);
+    ws.receive(activity());
+    expect(events).toEqual([{ name: 'platform:event', payload: { platform: 'youtube', type: 'platform:follow', data: { platform: 'youtube', username: 'Test Viewer', userId: 'test-provider-id', timestamp: '2026-01-01T00:00:00.000Z', source: 'streamelements', sourceType: 'streamelements:follow' } } }]);
+  });
+
+  it('rejects subscription errors immediately without provider text or retries', async () => {
+    useFakeTimers();
+    const logger = createRecordingLogger();
+    const { platform, retries } = createPlatform({}, logger);
+    const pending = platform.initialize();
+    const rejection = pending.catch((error: unknown) => error);
+    socket().open();
+    socket().acknowledge({ message: 'test-private-provider-error test-only-jwt' });
+    expect(await rejection).toMatchObject({ message: expect.stringContaining('subscription') });
+    expect(platform.isConnected()).toBe(false);
+    expect(socket().readyState).toBe(3);
+    advanceTimersByTime(60000);
+    expect(retries).toHaveLength(0);
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(JSON.stringify(logger.entries)).not.toContain('test-private-provider-error');
+    expect(JSON.stringify(logger.entries)).not.toContain('test-only-jwt');
+  });
+
+  it.each(['callback', 'listener'])('contains a throwing subscriber %s and processes the next frame', async (target) => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, logger);
+    let calls = 0;
+    const handler = () => { if (++calls === 1) throw new Error('test-private-handler-error'); };
+    if (target === 'listener') platform.on('platform:event', handler);
+    const pending = platform.initialize(target === 'callback' ? { onFollow: handler } : {});
+    socket().open(); socket().acknowledge(); await pending;
+    expect(() => socket().receive(activity())).not.toThrow();
+    expect(() => socket().receive(activity())).not.toThrow();
+    expect(calls).toBe(2);
+    expect(platform.isConnected()).toBe(true);
+    expect(JSON.stringify(logger.entries)).not.toContain('test-private-handler-error');
+    expect(logger.entries.some((entry) => entry.level === 'error')).toBe(true);
+  });
+
+  it.each(['err_deadline_exceeded', 'err_internal_error', 'rate_limit_exceeded'])('recovers from transient subscription error %s', async (errorCode) => {
+    useFakeTimers();
+    const { platform, retries } = createPlatform();
+    const pending = platform.initialize(); socket().open(); socket().acknowledge(errorCode);
+    expect(await pending).toMatchObject({ state: 'recovering' });
+    expect(retries).toEqual(['StreamElements']);
+    advanceTimersByTime(10);
+    socket().open(); socket().acknowledge();
+    await Promise.resolve();
+    expect(platform.isConnected()).toBe(true);
+    expect(TestWebSocket.instances).toHaveLength(2);
+  });
+
+  it('backs off on a nonce-less rate limit response while subscribing', async () => {
+    useFakeTimers();
+    const { platform, retries } = createPlatform();
+    const pending = platform.initialize(); socket().open();
+    socket().receive({ type: 'response', error: 'rate_limit_exceeded' });
+    expect(await pending).toMatchObject({ state: 'recovering' });
+    expect(retries).toEqual(['StreamElements']);
+    advanceTimersByTime(10);
+    expect(TestWebSocket.instances).toHaveLength(2);
+  });
+
+  it('ignores incomplete responses and accepts documented success without an error field', async () => {
+    const { platform } = createPlatform();
+    const pending = platform.initialize();
+    socket().open();
+    socket().receive({ type: 'response', nonce: socket().subscription().nonce });
+    expect(platform.isConnected()).toBe(false);
+    socket().receive({ type: 'response', nonce: socket().subscription().nonce, data: { topic: 'channel.activities', message: 'successfully subscribed to topic', room: 'test-room' } });
+    expect(await pending).toEqual({ state: 'ready' });
+  });
+
+  it('filters other providers, activity types, topics and malformed payloads', async () => {
+    const { events } = await ready();
+    for (const frame of [
+      activity({}, { provider: 'twitch' }), activity({}, { type: 'subscriber' }),
+      activity({}, {}, { topic: 'channel.tips' }), activity({}, {}, { type: 'event' }),
+      activity({}, { data: null }), activity({}, { data: { displayName: 123 } }),
+      activity({ displayName: '  ', username: '' }), null, [], 'test-string',
+      { type: 'message', topic: 'channel.activities', data: 'test-invalid' },
+    ]) socket().receive(frame);
+    expect(events).toHaveLength(0);
+  });
+
+  it('uses username, userId and timestamp fallbacks and the injected follow handler', async () => {
+    const { platform, events } = createPlatform();
+    const follows: unknown[] = [];
+    const pending = platform.initialize({ onFollow: (event) => follows.push(event) });
+    socket().open(); socket().acknowledge(); await pending;
+    socket().receive(activity({ displayName: '', username: ' test-handle ', providerId: '', userId: ' test-user-id ' }, { provider: 'YouTube', createdAt: undefined }));
+    socket().receive(activity({ displayName: 'test-fallback', providerId: '', userId: '' }));
+    expect(follows).toEqual([
+      expect.objectContaining({ username: 'test-handle', userId: 'test-user-id', timestamp: expect.any(String) }),
+      expect.objectContaining({ username: 'test-fallback', userId: 'test-fallback' }),
+    ]);
+    expect(Number.isNaN(Date.parse((follows[0] as { timestamp: string }).timestamp))).toBe(false);
+    expect(events).toHaveLength(0);
+  });
+
+  it('keeps routine logs free of incoming identities, payloads and unknown frame types', async () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, logger);
+    const pending = platform.initialize(); socket().open(); socket().acknowledge(); await pending;
+    socket().receive(activity({ displayName: 'test-private-name', providerId: 'test-private-id' }));
+    socket().receive({ type: 'test-private-type', data: 'test-private-text' });
+    socket().receive(activity({ displayName: '', username: '', raw: 'test-private-raw' }));
+    expect(JSON.stringify(logger.entries)).not.toContain('test-private');
+  });
+
+  it('optionally writes accepted raw activity through the external log writer', async () => {
+    const { rawEvents } = await ready({ dataLoggingEnabled: true, dataLoggingPath: '/tmp/test-only-stream-elements' });
+    socket().receive(activity());
+    await Promise.resolve();
+    expect(rawEvents).toEqual([expect.objectContaining({ platform: 'streamelements', eventType: 'follow', payload: activity() })]);
+  });
+
+  it('does not connect when disabled and rejects a missing token', async () => {
+    const disabled = createPlatform({ enabled: false }).platform;
+    expect(await disabled.initialize()).toEqual({ state: 'monitoring' });
+    const missing = createPlatform({ jwtToken: '' }).platform;
+    await expect(missing.initialize()).rejects.toThrow('invalid configuration');
+    expect(TestWebSocket.instances).toHaveLength(0);
+  });
+
+  it('returns ready without creating a second socket when initialized again', async () => {
+    const { platform } = await ready();
+    expect(await platform.initialize()).toEqual({ state: 'ready' });
+    expect(TestWebSocket.instances).toHaveLength(1);
+  });
+});
+
+describe('StreamElements connection ownership', () => {
+  it.each(['opening', 'subscribing'])('bounds the %s attempt and recovers using a new nonce', async (phase) => {
+    useFakeTimers();
+    const { platform, retries } = createPlatform();
+    const pending = platform.initialize();
+    const expired = socket();
+    if (phase === 'subscribing') expired.open();
+    advanceTimersByTime(15000);
+    expect(await pending).toMatchObject({ state: 'recovering' });
+    expect(expired.readyState).toBe(3);
+    expect(expired.eventNames()).toHaveLength(0);
+    expect(retries).toEqual(['StreamElements']);
+    advanceTimersByTime(10);
+    const replacement = socket();
+    expect(replacement).not.toBe(expired);
+    expired.emit('open'); expired.emit('close', 1006, 'test-stale-close');
+    replacement.open();
+    if (phase === 'subscribing') expect(replacement.subscription().nonce).not.toBe(expired.subscription().nonce);
+    replacement.acknowledge();
+    await Promise.resolve();
+    expect(platform.isConnected()).toBe(true);
+  });
+
+  it.each(['opening', 'subscribing'])('cancels %s without stale recovery', async (phase) => {
     useFakeTimers();
     const { platform } = createPlatform();
-    const onConnection = createMockFn<[Record<string, unknown>], void>();
-
-    const initialization = platform.initialize({ onConnection });
-    const pendingConnection = MockWebSocket.instances[0]!;
-    platform.cleanup();
-
-    await expect(initialization).rejects.toThrow("connection attempt cancelled");
+    const pending = platform.initialize();
+    const rejection = pending.catch((error: unknown) => error);
+    if (phase === 'subscribing') socket().open();
+    await platform.disconnect(); expect(await rejection).toMatchObject({ message: expect.stringContaining('cancelled') });
+    expect(socket().eventNames()).toHaveLength(0);
     advanceTimersByTime(60000);
-
-    expect(pendingConnection.readyState).toBe(MockWebSocket.CLOSED);
-    expect(MockWebSocket.instances).toHaveLength(1);
-    expect(onConnection).not.toHaveBeenCalled();
+    expect(TestWebSocket.instances).toHaveLength(1);
+    expect(platform.getStatus()).toMatchObject({ isReady: false, hasConnection: false, connectionTime: null });
   });
 
-  it("cleans up connections when disconnecting", async () => {
-    const { platform } = createPlatform();
-    const removeAllListeners = createMockFn();
-    const close = createMockFn();
-    setPrivateField(platform, "connection", {
-      readyState: MockWebSocket.OPEN,
-      on: createMockFn(),
-      once: createMockFn(),
-      send: createMockFn(),
-      close,
-      removeAllListeners,
-    });
-    setPrivateField(platform, "pingInterval", safeSetInterval(() => {}, 1000));
-    setPrivateField(platform, "reconnectTimeout", safeSetTimeout(() => {}, 1000));
-
-    await platform.disconnect();
-
-    expect(getPrivateField<unknown>(platform, "connection")).toBe(null);
-    expect(getPrivateField<unknown>(platform, "reconnectTimeout")).toBe(null);
-    expect(getPrivateField<unknown>(platform, "pingInterval")).toBe(null);
-    expect(close).toHaveBeenCalledTimes(1);
+  it('rejects an early close promptly and schedules only one recovery', async () => {
+    useFakeTimers();
+    const { platform, retries } = createPlatform();
+    const pending = platform.initialize();
+    socket().open(); socket().emit('close', 1006, 'test-close');
+    expect(await pending).toMatchObject({ state: 'recovering' });
+    expect(retries).toEqual(['StreamElements']);
+    advanceTimersByTime(10);
+    expect(TestWebSocket.instances).toHaveLength(2);
   });
 
-  it("clears connections during cleanup even when listeners throw", () => {
-    const { platform } = createPlatform();
-    setPrivateField(platform, "connection", {
-      readyState: MockWebSocket.OPEN,
-      on: createMockFn(),
-      once: createMockFn(),
-      send: createMockFn(),
-      close: createMockFn(),
-      removeAllListeners: () => {
-        throw new Error("cleanup failed");
-      },
-    });
-
-    platform.cleanup();
-
-    expect(getPrivateField<unknown>(platform, "connection")).toBe(null);
-    expect(getPrivateField<unknown>(platform, "connectionTime")).toBe(null);
+  it('retires a ready socket on an error and recovers even without a close event', async () => {
+    useFakeTimers();
+    const { platform, retries } = await ready();
+    const expired = socket();
+    expired.emit('error', new Error('test-network-failure'));
+    expect(platform.isConnected()).toBe(false);
+    expect(expired.readyState).toBe(3);
+    expect(retries).toEqual(['StreamElements']);
+    advanceTimersByTime(10);
+    expect(TestWebSocket.instances).toHaveLength(2);
   });
 
-  it("does not send messages when the socket is closed", () => {
-    const { platform } = createPlatform();
-    const send = createMockFn();
-    setPrivateField(platform, "connection", {
-      readyState: MockWebSocket.CONNECTING,
-      on: createMockFn(),
-      once: createMockFn(),
-      send,
-      close: createMockFn(),
-      removeAllListeners: createMockFn(),
-    });
-
-    platform.sendMessage({ type: "ping" });
-
-    expect(send.mock.calls).toHaveLength(0);
+  it('handles transport errors during subscription and keeps a single reconnect timer', async () => {
+    useFakeTimers();
+    const { platform, retries } = createPlatform();
+    const pending = platform.initialize(); socket().open();
+    socket().emit('error', new Error('connection failed'));
+    expect(await pending).toMatchObject({ state: 'recovering' });
+    expect(retries).toEqual(['StreamElements']);
+    expect(socket().eventNames()).toHaveLength(0);
   });
 });

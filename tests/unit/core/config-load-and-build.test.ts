@@ -57,6 +57,17 @@ describe('config load and build behavior', () => {
         configModule = configModuleRef;
     });
 
+    it('loads the checked-in example through the production parser and validator', () => {
+        const raw = ini.parse(fs.readFileSync(path.resolve('config.example.ini'), 'utf8'));
+        const normalized = ConfigValidator.normalize(raw);
+        expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
+        expect(normalized.streamelements).toEqual({
+            enabled: false,
+            dataLoggingEnabled: false,
+            dataLoggingPath: './logs'
+        });
+    });
+
     it('loads and builds configuration from ini file with debug enabled', async () => {
         const stdoutCapture = captureStdout();
         try {
@@ -84,9 +95,7 @@ configModule = configModuleRef;
             };
             rawConfig.streamelements = {
                 enabled: 'false',
-                youtubeChannelId: 'test-yt-channel',
-                twitchChannelId: 'test-twitch-channel',
-                jwtToken: 'test-jwt'
+                dataLoggingEnabled: 'false'
             };
             rawConfig.logging = {
                 consoleLevel: 'debug',

@@ -444,9 +444,8 @@ class ConfigValidator {
     static _normalizeStreamElementsSection(raw: RawConfigSection) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.streamelements.enabled),
-            youtubeChannelId: ConfigValidator.parseString(raw.youtubeChannelId, ''),
-            twitchChannelId: ConfigValidator.parseString(raw.twitchChannelId, ''),
-            dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.streamelements.dataLoggingEnabled)
+            dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.streamelements.dataLoggingEnabled),
+            dataLoggingPath: ConfigValidator.parseString(raw.dataLoggingPath, DEFAULTS.LOG_DIRECTORY) || DEFAULTS.LOG_DIRECTORY
         };
     }
 
@@ -562,7 +561,6 @@ class ConfigValidator {
         errors.push(...getYouTubeCapabilityErrors(config.youtube));
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator.validateRequiredFields(config, errors);
-        ConfigValidator._validateStreamElements(config, errors);
 
         return {
             isValid: errors.length === 0,
@@ -596,20 +594,6 @@ class ConfigValidator {
             errors.push('Missing required configuration section: general');
         }
     }
-
-    static _validateStreamElements(config: RawConfig, errors: string[]): void {
-        if (config.streamelements && config.streamelements.enabled) {
-            const youtubeChannelId = config.streamelements.youtubeChannelId;
-            const twitchChannelId = config.streamelements.twitchChannelId;
-            const hasYoutubeChannel = typeof youtubeChannelId === 'string' && youtubeChannelId.trim().length > 0;
-            const hasTwitchChannel = typeof twitchChannelId === 'string' && twitchChannelId.trim().length > 0;
-
-            if (!hasYoutubeChannel && !hasTwitchChannel) {
-                errors.push('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
-            }
-        }
-    }
-
 }
 
 export { ConfigValidator };

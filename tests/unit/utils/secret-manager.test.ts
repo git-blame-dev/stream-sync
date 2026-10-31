@@ -124,8 +124,6 @@ describe("secret-manager", () => {
       obs: { enabled: true },
       streamelements: {
         enabled: true,
-        youtubeChannelId: "test-yt-channel",
-        twitchChannelId: "test-twitch-channel",
       },
       youtube: { enabled: false },
     };

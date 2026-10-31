@@ -1,40 +1,15 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { createStreamElementsConfigFixture } from "../../helpers/config-fixture";
-import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
+import { describe, it, expect } from 'bun:test';
+import { StreamElementsPlatform } from '../../../src/platforms/streamelements';
+import { createRecordingLogger } from '../../helpers/recording-logger';
 
-type EventProcessingCall = [Error, string];
-type StreamElementsPlatformHarness = Omit<StreamElementsPlatform, "errorHandler"> & {
-  errorHandler: {
-    handleEventProcessingError: (...args: EventProcessingCall) => void;
-  };
-};
-
-afterEach(() => {
-  restoreAllMocks();
-});
-
-describe("StreamElementsPlatform message parsing", () => {
-  it("routes invalid JSON messages through the error handler without throwing", () => {
-    const platform = new StreamElementsPlatform(
-      createStreamElementsConfigFixture(),
-      { logger: noOpLogger },
-    );
-
-    const errorHandlerCalls: EventProcessingCall[] = [];
-    const errorHandler = {
-      handleEventProcessingError: (...args: EventProcessingCall) => {
-        errorHandlerCalls.push(args);
-      },
-    };
-    (platform as unknown as StreamElementsPlatformHarness).errorHandler = errorHandler;
-
-    expect(() => platform.handleMessage(Buffer.from("not-json"))).not.toThrow();
-    expect(errorHandlerCalls).toHaveLength(1);
-
-    const [errorArg, eventType] = errorHandlerCalls[0]!;
-    expect(errorArg).toBeInstanceOf(Error);
-    expect(eventType).toBe("message");
-  });
+describe('StreamElementsPlatform message parsing', () => {
+    it('reports invalid JSON without throwing or exposing parser input', () => {
+        const logger = createRecordingLogger();
+        const platform = new StreamElementsPlatform({ enabled: false }, { logger });
+        expect(() => platform.handleMessage(Buffer.from('test-private-invalid-json'))).not.toThrow();
+        expect(logger.entries.filter((entry) => entry.level === 'error')).toEqual([expect.objectContaining({ level: 'error' })]);
+        const serialized = JSON.stringify(logger.entries);
+        expect(serialized).toContain('Invalid StreamElements JSON frame');
+        expect(serialized).not.toContain('test-private-invalid-json');
+    });
 });

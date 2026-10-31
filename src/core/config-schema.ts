@@ -103,9 +103,8 @@ const CONFIG_SCHEMA = {
 
     streamelements: {
         enabled: { type: 'boolean', default: false },
-        youtubeChannelId: { type: 'string', userDefined: true },
-        twitchChannelId: { type: 'string', userDefined: true },
-        dataLoggingEnabled: { type: 'boolean', default: false }
+        dataLoggingEnabled: { type: 'boolean', default: false },
+        dataLoggingPath: { type: 'string', userDefined: true }
     },
 
     spam: {

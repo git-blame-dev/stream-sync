@@ -1,7 +1,9 @@
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 import { STREAMELEMENTS } from '../core/endpoints';
+import type { AppLogger } from '../core/logger/types';
 import { getUnifiedLogger } from '../core/logging';
 import { secrets } from '../core/secrets';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
@@ -10,12 +12,10 @@ import { RawEventLogWriter } from '../services/RawEventLogWriter';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createRetrySystem } from '../utils/retry-system';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import { safeSetInterval, safeSetTimeout } from '../utils/timeout-validator';
+import { safeSetTimeout } from '../utils/timeout-validator';
 
 type StreamElementsConfig = {
     enabled?: boolean;
-    youtubeChannelId?: string;
-    twitchChannelId?: string;
     jwtToken?: string;
     dataLoggingEnabled?: boolean;
     dataLoggingPath?: string;
@@ -23,18 +23,12 @@ type StreamElementsConfig = {
 
 interface ResolvedStreamElementsConfig {
     enabled: boolean | undefined;
-    youtubeChannelId: string | undefined;
-    twitchChannelId: string | undefined;
     jwtToken: string | undefined;
     dataLoggingEnabled: boolean | undefined;
     dataLoggingPath: string | undefined;
 }
 
-interface StreamElementsLogger {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-}
+type StreamElementsLogger = Pick<AppLogger, 'debug' | 'info' | 'warn' | 'error'>;
 
 type ResolvedStreamElementsLogger = StreamElementsLogger | ReturnType<typeof getUnifiedLogger>;
 
@@ -50,6 +44,7 @@ interface StreamElementsConnection {
     removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
     send: (payload: string) => void;
     close: () => void;
+    terminate?: () => void;
     removeAllListeners: () => void;
 }
 
@@ -85,19 +80,6 @@ type StreamElementsDependencies = {
     WebSocketCtor?: StreamElementsWebSocketConstructor;
 };
 
-type StreamElementsMessageData = {
-    platform?: string;
-    displayName?: string;
-    userId?: string;
-};
-
-type StreamElementsMessage = {
-    type?: string;
-    success?: boolean;
-    error?: string;
-    data?: StreamElementsMessageData;
-};
-
 type StreamElementsEventPayload = {
     platform?: string;
     username?: string;
@@ -107,11 +89,8 @@ type StreamElementsEventPayload = {
     sourceType?: string;
 };
 
-const nodeRequire = createRequire(__filename);
-const wsModule = nodeRequire('ws') as unknown;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isWebSocketConstructor(value: unknown): value is StreamElementsWebSocketConstructor {
@@ -157,27 +136,24 @@ function getErrorLogValue(error: unknown): unknown {
     return error instanceof Error && error.message ? error.message : error;
 }
 
+
 class StreamElementsPlatform extends EventEmitter {
     private readonly errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     private readonly logger: ResolvedStreamElementsLogger;
-    private readonly platformLogger: ResolvedStreamElementsLogger;
     private readonly eventBus: StreamElementsEventBus | null;
     private readonly rawEventLogWriter: Pick<RawEventLogWriter, 'writeRawEvent'>;
     private readonly WebSocketCtor: StreamElementsWebSocketConstructor;
     private readonly incrementRetryCount: (platform: string) => number;
     private readonly resetRetryCount: (platform: string) => void;
-    private readonly retryHandleConnectionSuccess:
-        | RetrySystemLike['handleConnectionSuccess']
-        | ReturnType<typeof createRetrySystem>['handleConnectionSuccess']
-        | undefined;
     private readonly config: ResolvedStreamElementsConfig;
     private connection: StreamElementsConnection | null;
     private isConnecting: boolean;
     private isReady: boolean;
     private connectionTime: number | null;
-    private pingInterval: ReturnType<typeof safeSetInterval> | null;
     private reconnectTimeout: ReturnType<typeof safeSetTimeout> | null;
     private connectionTimeout: ReturnType<typeof safeSetTimeout> | null;
+    private subscriptionNonce: string | null = null;
+    private resolveConnectionAttempt: (() => void) | null = null;
     private rejectConnectionAttempt: ((error: Error) => void) | null;
     private recoveryGeneration: number;
     private recoveryEnabled: boolean;
@@ -192,18 +168,14 @@ class StreamElementsPlatform extends EventEmitter {
         
         this.errorHandler = createPlatformErrorHandler(logger, 'streamelements');
         this.logger = logger;
-        this.platformLogger = logger;
         this.eventBus = dependencies.eventBus || null;
         this.rawEventLogWriter = dependencies.rawEventLogWriter || new RawEventLogWriter();
-        this.WebSocketCtor = dependencies.WebSocketCtor || resolveWebSocketConstructor(wsModule);
+        this.WebSocketCtor = dependencies.WebSocketCtor || resolveWebSocketConstructor(createRequire(__filename)('ws') as unknown);
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);
-        this.retryHandleConnectionSuccess = retrySystem.handleConnectionSuccess?.bind(retrySystem);
         
         this.config = {
             enabled: config.enabled,
-            youtubeChannelId: config.youtubeChannelId,
-            twitchChannelId: config.twitchChannelId,
             jwtToken: config.jwtToken === undefined
                 ? (secrets.streamelements.jwtToken ?? undefined)
                 : config.jwtToken,
@@ -215,7 +187,6 @@ class StreamElementsPlatform extends EventEmitter {
         this.isConnecting = false;
         this.isReady = false;
         this.connectionTime = null;
-        this.pingInterval = null;
         this.reconnectTimeout = null;
         this.connectionTimeout = null;
         this.rejectConnectionAttempt = null;
@@ -223,11 +194,6 @@ class StreamElementsPlatform extends EventEmitter {
         this.recoveryEnabled = this.config.enabled === true;
         this.handlers = this._createDefaultHandlers();
         this.lastConnectionError = null;
-        
-        if (this.config.enabled) {
-            this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version.', 'StreamElements');
-            this.logger.info('Keep the standalone [streamelements] config only if you still need StreamElements follow events.', 'StreamElements');
-        }
         
     }
     async initialize(handlers: StreamElementsHandlers = {}): Promise<PlatformInitializationOutcome> {
@@ -278,12 +244,7 @@ class StreamElementsPlatform extends EventEmitter {
         }
         
         if (!this.config.jwtToken) {
-            this.logger.warn('[StreamElements] JWT token not configured - follow notifications will not work');
-            return false;
-        }
-        
-        if (!this.config.youtubeChannelId && !this.config.twitchChannelId) {
-            this.logger.warn('[StreamElements] No channel IDs configured - follow notifications will not work');
+            this.logger.warn('StreamElements JWT is not configured; subscriber alerts are unavailable', 'streamelements');
             return false;
         }
         
@@ -307,7 +268,7 @@ class StreamElementsPlatform extends EventEmitter {
         const recoveryGeneration = this.recoveryGeneration;
         
         try {
-            this.logger.info('[StreamElements] Connecting to StreamElements for real-time follow notifications');
+            this.logger.debug('Connecting to StreamElements subscriber stream', 'streamelements');
             
             await this.connectToWebSocket();
             this.lastConnectionError = null;
@@ -324,245 +285,121 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     async connectToWebSocket(): Promise<void> {
-        const wsUrl = STREAMELEMENTS.WEBSOCKET;
-        
-        const connection = new this.WebSocketCtor(wsUrl);
+        const connection = new this.WebSocketCtor(STREAMELEMENTS.WEBSOCKET);
         this.connection = connection;
-        this.setupEventListeners(connection);
-        if (!connection) {
-            throw new Error('StreamElements connection missing after WebSocket setup');
-        }
-        
         return new Promise((resolve, reject) => {
+            this.resolveConnectionAttempt = resolve;
             this.rejectConnectionAttempt = reject;
-            let timeout: ReturnType<typeof safeSetTimeout> | null = null;
-            const clearConnectionAttempt = () => {
-                if (timeout) {
-                    clearTimeout(timeout);
-                    if (this.connectionTimeout === timeout) {
-                        this.connectionTimeout = null;
-                    }
-                    timeout = null;
-                }
-                if (this.rejectConnectionAttempt === reject) {
-                    this.rejectConnectionAttempt = null;
-                }
-            };
-            const removeAttemptListeners = () => {
-                if (typeof connection.off === 'function') {
-                    connection.off('open', handleOpen);
-                    connection.off('error', handleError);
-                } else if (typeof connection.removeListener === 'function') {
-                    connection.removeListener('open', handleOpen);
-                    connection.removeListener('error', handleError);
-                }
-            };
-            const disposeFailedConnection = () => {
-                if (this.connection !== connection) {
-                    return;
-                }
-                try {
-                    connection.removeAllListeners();
-                } finally {
-                    this.connection = null;
-                }
-                try {
-                    connection.close();
-                } catch (cleanupError) {
-                    this.logger.debug('[StreamElements] Error closing failed connection:', 'streamelements', getErrorLogValue(cleanupError));
-                }
-            };
-            const handleOpen = () => {
-                clearConnectionAttempt();
-                removeAttemptListeners();
-                resolve();
-            };
-            const handleError = (err: unknown) => {
-                clearConnectionAttempt();
-                disposeFailedConnection();
-                reject(err);
-            };
-
-            timeout = safeSetTimeout(() => {
-                clearConnectionAttempt();
-                disposeFailedConnection();
-                reject(new Error('StreamElements connection timeout'));
+            this.connectionTimeout = safeSetTimeout(() => {
+                this.failConnection(new Error('StreamElements connection timeout'));
             }, 15000);
-            this.connectionTimeout = timeout;
-            
-            connection.once('open', handleOpen);
-            connection.once('error', handleError);
+            connection.on('open', () => {
+                if (this.connection !== connection) return;
+                this.subscriptionNonce = randomUUID();
+                try {
+                    connection.send(JSON.stringify({
+                        type: 'subscribe',
+                        nonce: this.subscriptionNonce,
+                        data: { topic: 'channel.activities', token: this.config.jwtToken, token_type: 'jwt' }
+                    }));
+                } catch {
+                    this.failConnection(new Error('StreamElements connection failed while sending subscription'));
+                }
+            });
+            connection.on('message', (data) => {
+                if (this.connection === connection) this.handleMessage(data);
+            });
+            connection.on('close', (code, reason) => {
+                if (this.connection === connection) this.handleConnectionClose(Number(code), reason);
+            });
+            connection.on('error', (error) => {
+                if (this.connection === connection) this.failConnection(error);
+            });
         });
     }
 
-    setupEventListeners(connection = this.connection): void {
-        if (!connection) {
-            const error = new Error('StreamElements connection missing connection object');
-            this.errorHandler.handleConnectionError(error, 'connection', error.message);
-            throw error;
-        }
-        if (typeof connection.on !== 'function') {
-            const error = new Error('StreamElements connection missing event emitter interface (on/removeAllListeners)');
-            this.errorHandler.handleConnectionError(
-                error,
-                'connection',
-                'StreamElements connection is missing required event emitter methods'
-            );
-            throw error;
-        }
-
-        const ifCurrentConnection = (handler: (...args: unknown[]) => void) => (...args: unknown[]) => {
-            if (this.connection === connection) {
-                handler(...args);
-            }
-        };
-
-        connection.on('open', ifCurrentConnection(() => this.handleConnectionOpen()));
-        connection.on('message', ifCurrentConnection((data: unknown) => this.handleMessage(data)));
-        connection.on('close', ifCurrentConnection((code: unknown, reason: unknown) => this.handleConnectionClose(Number(code), reason)));
-        connection.on('error', ifCurrentConnection((err: unknown) => this.handleConnectionError(err)));
-        connection.on('pong', ifCurrentConnection(() => this.handlePong()));
-    }
-
-    handleConnectionOpen(): void {
-
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-            this.reconnectTimeout = null;
-        }
-        
-        this.authenticate();
-        
-        this.startKeepAlive();
-        
-        this.connectionTime = Date.now();
-        this.isConnecting = false;
-        this.isReady = true;
-        
-        this.resetRetryCount('StreamElements');
-        this.emitConnectionStatus('connected', false);
-    }
-
-    authenticate(): void {
-        const authMessage = {
-            type: 'auth',
-            token: this.config.jwtToken
-        };
-        
-        this.sendMessage(authMessage);
-    }
-
-    subscribeToFollowEvents(): void {
-        if (this.config.youtubeChannelId) {
-            const youtubeSubscription = {
-                type: 'subscribe',
-                topic: `channel.follow.${this.config.youtubeChannelId}`
-            };
-            this.sendMessage(youtubeSubscription);
-        }
-        
-        if (this.config.twitchChannelId) {
-            const twitchSubscription = {
-                type: 'subscribe',
-                topic: `channel.follow.${this.config.twitchChannelId}`
-            };
-            this.sendMessage(twitchSubscription);
-        }
+    private failConnection(error: unknown): void {
+        const pending = this.rejectConnectionAttempt !== null;
+        this.cleanup(false, error instanceof Error ? error : new Error('StreamElements connection failed'));
+        // The pending connect() owns its failure and recovery; ready connections have no awaiting caller.
+        if (!pending) this.handleConnectionError(error);
     }
 
     handleMessage(data: unknown): void {
-        let message: StreamElementsMessage | undefined;
+        let message: unknown;
         try {
-            const messageText = data !== null && data !== undefined && typeof data.toString === 'function'
-                ? data.toString()
-                : String(data);
-            message = JSON.parse(messageText) as StreamElementsMessage;
-            
-            switch (message.type) {
-                case 'auth':
-                    this.handleAuthResponse(message);
-                    break;
-                case 'event':
-                    this.handleFollowEvent(message);
-                    break;
-                case 'ping':
-                    this.handlePing();
-                    break;
-                default:
-                    this.logger.debug('[StreamElements] Unknown message type', 'streamelements', {
-                        hasType: typeof message.type === 'string',
-                        hasData: !!message.data
-                    });
-            }
-        } catch (err) {
-            this.errorHandler.handleEventProcessingError(err, 'message', message);
+            message = JSON.parse(String(data)) as unknown;
+        } catch {
+            // JSON parser diagnostics can contain provider payload text.
+            this.errorHandler.handleEventProcessingError(new Error('Invalid StreamElements JSON frame'), 'message');
+            return;
+        }
+        try {
+            this.handleParsedMessage(message);
+        } catch {
+            this.errorHandler.handleEventProcessingError(new Error('StreamElements message processing failed'), 'message');
         }
     }
 
-    handleAuthResponse(message: StreamElementsMessage): void {
-        if (message.success) {
-            this.logger.info('[StreamElements] Authentication confirmed', 'streamelements');
-            this.subscribeToFollowEvents();
-        } else {
-            this.errorHandler.handleAuthenticationError('failed');
-            this.disconnect();
-        }
-    }
-
-    async handleFollowEvent(message: StreamElementsMessage): Promise<void> {
-        if (this.config.dataLoggingEnabled) {
-                this.logRawPlatformData('follow', message).catch((err: unknown) => {
-                    this.errorHandler.handleDataLoggingError(err, 'follow');
-                });
-        }
-        
-        try {
-            const eventData = message.data || {};
-            const platform = this.mapStreamElementsPlatform(eventData.platform);
-            
-            if (!platform) {
-                this.logger.debug('[StreamElements] Unknown platform in follow event', 'streamelements', {
-                    hasPlatform: typeof eventData.platform === 'string' && eventData.platform.trim().length > 0
-                });
-                return;
+    private handleParsedMessage(message: unknown): void {
+        if (!isRecord(message)) return;
+        if (message.type === 'response' && this.subscriptionNonce && (message.nonce === this.subscriptionNonce
+            || (message.nonce === undefined && message.error === 'rate_limit_exceeded'))) {
+            if (message.error !== undefined && message.error !== null) {
+                const retryable = ['err_deadline_exceeded', 'err_internal_error', 'rate_limit_exceeded'].includes(String(message.error));
+                if (!retryable) {
+                    this.recoveryEnabled = false;
+                    this.errorHandler.handleAuthenticationError('or subscription failed');
+                }
+                this.failConnection(new Error(retryable
+                    ? 'StreamElements connection failed: subscription temporarily unavailable'
+                    : 'StreamElements authentication or subscription failed'));
+            } else if (message.error === null || (message.error === undefined && isRecord(message.data)
+                && message.data.topic === 'channel.activities'
+                && typeof message.data.message === 'string'
+                && message.data.message.toLowerCase() === 'successfully subscribed to topic')) {
+                const resolve = this.resolveConnectionAttempt;
+                this.resolveConnectionAttempt = null;
+                this.rejectConnectionAttempt = null;
+                this.subscriptionNonce = null;
+                if (this.connectionTimeout) clearTimeout(this.connectionTimeout);
+                this.connectionTimeout = null;
+                if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+                this.reconnectTimeout = null;
+                this.connectionTime = Date.now();
+                this.isConnecting = false;
+                this.isReady = true;
+                this.resetRetryCount('StreamElements');
+                this.logger.info('YouTube subscriber stream ready', 'streamelements');
+                resolve?.();
+                this.emitConnectionStatus('connected', false);
             }
-            
-            const username = typeof eventData.displayName === 'string' ? eventData.displayName.trim() : '';
-            const userId = typeof eventData.userId === 'string' ? eventData.userId.trim() : null;
-            if (!username) {
-                this.logger.warn('[StreamElements] Follow event missing username; skipping', 'streamelements', {
-                    platform,
-                    hasDisplayName: typeof eventData.displayName === 'string',
-                    hasUserId: typeof eventData.userId === 'string'
-                });
-                return;
-            }
-
-            const followData = {
-                username,
-                platform: platform,
-                timestamp: Date.now(),
-                source: 'StreamElements'
-            };
-
-            this._emitPlatformEvent(PlatformEvents.FOLLOW, {
-                platform,
-                username: followData.username,
-                userId,
-                timestamp: new Date(followData.timestamp).toISOString(),
-                source: 'streamelements',
-                sourceType: 'streamelements:follow'
-            });
-            
-            this.platformLogger.info('New follower from StreamElements', platform, {
-                platform,
-                hasUsername: true,
-                hasUserId: !!userId
-            });
-
-        } catch (error) {
-            this.errorHandler.handleEventProcessingError(error, 'follow', message?.data);
+            return;
         }
+        if (!this.isReady || message.type !== 'message' || message.topic !== 'channel.activities'
+            || !isRecord(message.data) || message.data.type !== 'follow'
+            || typeof message.data.provider !== 'string' || message.data.provider.toLowerCase() !== 'youtube'
+            || !isRecord(message.data.data)) return;
+
+        const activity = message.data;
+        const identity = message.data.data;
+        const usernameValue = identity.displayName || identity.username || '';
+        const username = typeof usernameValue === 'string' ? usernameValue.trim() : '';
+        if (!username) {
+            this.logger.warn('[StreamElements] Subscriber event missing username; skipping', 'streamelements', {
+                hasDisplayName: typeof identity.displayName === 'string',
+                hasUserId: typeof identity.providerId === 'string' || typeof identity.userId === 'string'
+            });
+            return;
+        }
+        const userIdValue = identity.providerId || identity.userId || username;
+        const userId = typeof userIdValue === 'string' ? userIdValue.trim() : username;
+        if (this.config.dataLoggingEnabled) void this.logRawPlatformData('follow', message);
+        this._emitPlatformEvent(PlatformEvents.FOLLOW, {
+            platform: 'youtube', username, userId,
+            timestamp: typeof activity.createdAt === 'string' && activity.createdAt ? activity.createdAt : getSystemTimestampISO(),
+            source: 'streamelements', sourceType: 'streamelements:follow'
+        });
     }
 
     _createDefaultHandlers(): { onFollow: (data: StreamElementsEventPayload) => void } {
@@ -599,68 +436,23 @@ class StreamElementsPlatform extends EventEmitter {
         });
     }
 
-    mapStreamElementsPlatform(sePlatform: string | undefined): string | null {
-        const platformMap: Record<string, string> = {
-            'youtube': 'youtube',
-            'twitch': 'twitch'
-        };
-
-        return sePlatform ? (platformMap[sePlatform.toLowerCase()] || null) : null;
-    }
-
-    handlePing(): void {
-        this.sendMessage({ type: 'pong' });
-    }
-
-    handlePong(): void {
-    }
-
-    startKeepAlive(): void {
-        this.pingInterval = safeSetInterval(() => {
-            if (this.isConnected()) {
-                this.sendMessage({ type: 'ping' });
-            }
-        }, 30000);
-    }
-
-    stopKeepAlive(): void {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
-    }
-
-    sendMessage(message: Record<string, unknown>): void {
-        if (this.connection && this.connection.readyState === this.WebSocketCtor.OPEN) {
-            this.connection.send(JSON.stringify(message));
-        } else {
-            this.logger.debug('[StreamElements] Cannot send message - WebSocket not connected', 'streamelements');
-        }
-    }
-
     handleConnectionClose(code: number, reason: unknown): void {
         this.logger.info('[StreamElements] Connection closed', 'streamelements', {
             code,
             hasReason: reason !== null && reason !== undefined && String(reason).length > 0
         });
         
-        this.isConnecting = false;
-        this.isReady = false;
-        this.stopKeepAlive();
-        this.cleanup(false);
-        this.emitConnectionStatus(this.recoveryEnabled ? 'reconnecting' : 'disconnected', this.recoveryEnabled);
-        this.scheduleReconnection();
+        this.failConnection(new Error('StreamElements connection closed'));
     }
 
     handleConnectionError(err: unknown, recoveryGeneration = this.recoveryGeneration): void {
         const connectionError = err as { message?: string; toString?: () => string };
         const errorMessage = connectionError?.message || connectionError?.toString?.() || 'Unknown error';
-        this.errorHandler.handleConnectionError(err, 'connection', errorMessage);
-
         if (recoveryGeneration !== this.recoveryGeneration) {
             return;
         }
 
+        this.errorHandler.handleConnectionError(err, 'connection', errorMessage);
         this.emitConnectionStatus(this.recoveryEnabled ? 'reconnecting' : 'disconnected', this.recoveryEnabled, err);
         this.scheduleReconnection(recoveryGeneration);
     }
@@ -701,7 +493,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.cleanup();
     }
 
-    cleanup(cancelRecovery = true): void {
+    cleanup(cancelRecovery = true, failure = new Error('StreamElements connection attempt cancelled')): void {
         if (cancelRecovery) {
             this.recoveryEnabled = false;
             this.recoveryGeneration += 1;
@@ -716,11 +508,12 @@ class StreamElementsPlatform extends EventEmitter {
         }
         const rejectConnectionAttempt = this.rejectConnectionAttempt;
         this.rejectConnectionAttempt = null;
-        rejectConnectionAttempt?.(new Error('StreamElements connection attempt cancelled'));
+        this.resolveConnectionAttempt = null;
+        this.subscriptionNonce = null;
+        rejectConnectionAttempt?.(failure);
 
         this.isConnecting = false;
         this.isReady = false;
-        this.stopKeepAlive();
 
         if (this.connection) {
             const connection = this.connection;
@@ -731,7 +524,12 @@ class StreamElementsPlatform extends EventEmitter {
             }
             this.connection = null;
             try {
-                connection.close();
+                // ws emits an asynchronous error when an opening handshake is aborted.
+                // Keep it handled until close, without retaining the adapter's listeners.
+                connection.on('error', () => {});
+                connection.once('close', () => connection.removeAllListeners());
+                if (connection.readyState !== 0 && connection.terminate) connection.terminate();
+                else connection.close();
             } catch (cleanupError) {
                 this.logger.debug('[StreamElements] Error closing connection during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
             }
@@ -756,6 +554,7 @@ class StreamElementsPlatform extends EventEmitter {
                 eventType,
                 payload: data
             });
+
         } catch (error) {
             this.errorHandler.handleDataLoggingError(error, 'platform');
         }
@@ -764,8 +563,6 @@ class StreamElementsPlatform extends EventEmitter {
     getStatus(): {
         platform: string;
         enabled: boolean | undefined;
-        youtubeChannelId: string;
-        twitchChannelId: string;
         hasJwtToken: boolean;
         isConnecting: boolean;
         isReady: boolean;
@@ -776,8 +573,6 @@ class StreamElementsPlatform extends EventEmitter {
         return {
             platform: 'StreamElements',
             enabled: this.config.enabled,
-            youtubeChannelId: this.config.youtubeChannelId || 'not configured',
-            twitchChannelId: this.config.twitchChannelId || 'not configured',
             hasJwtToken: !!this.config.jwtToken,
             isConnecting: this.isConnecting,
             isReady: this.isReady,

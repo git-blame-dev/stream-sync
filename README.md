@@ -85,6 +85,14 @@ cp .env.example .env
 
 Edit `config.ini` from [`config.example.ini`](config.example.ini) and `.env` from [`.env.example`](.env.example) before starting. Keep secrets in `.env`; do not commit local credentials, logs, token stores, or generated data files.
 
+To receive YouTube subscriber alerts through StreamElements, set `enabled = true`
+in `[streamelements]` and supply `STREAMELEMENTS_JWT_TOKEN` in `.env`. The JWT
+scopes the account; copy it while the YouTube account is selected in the
+StreamElements dashboard. No channel IDs are needed. StreamElements handles only YouTube
+subscriber alerts; Twitch follows use the native Twitch integration. Optional
+`dataLoggingEnabled` and `dataLoggingPath` configure local raw-event logging
+(disabled by default, with `./logs` as the default directory).
+
 Prompted credentials are persisted only when their representation roundtrips through the supported env-file loaders. Values with dollar expansion, backslashes, control characters or all three quoting delimiters remain available for the current process, with a notice that they were not persisted. Supply those values through your process environment for subsequent launches.
 
 ```bash
