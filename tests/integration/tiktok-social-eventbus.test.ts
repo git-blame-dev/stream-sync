@@ -11,7 +11,6 @@ for (const action of ['follow', 'share', 'direct-share'] as const) {
     h.config.tiktok.followsEnabled = true;
     h.config.tiktok.sharesEnabled = true;
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     let platform: TikTokPlatform | undefined;
     let lifecycle: PlatformLifecycleService | undefined;
     let unsubscribe = () => {};

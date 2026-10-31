@@ -9,7 +9,6 @@ for (const [bits, formatted] of [
   test(`${bits} bits credit the real presented goal exactly once at the original amount`, async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
       await h.start();
       const initialWrites = h.socket.writes.length;

@@ -172,7 +172,6 @@ describe("Paypiggy platform flows (smoke)", () => {
     presentation.config.general.giftsEnabled = true;
     presentation.config.general.paypiggiesEnabled = true;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
 
     presentation.config.twitch.enabled = false;
     presentation.config.twitch.dataLoggingEnabled = false;

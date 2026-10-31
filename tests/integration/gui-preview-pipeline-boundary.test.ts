@@ -38,7 +38,6 @@ function isolatedConfig() {
     expect(config.general.envFileReadEnabled).toBe(false);
     expect(config.general.envFileWriteEnabled).toBe(false);
     config.logging.file.enabled = false;
-    config.logging.chat.enabled = false;
     config.gui.port = 0;
     config.gui.enableOperator = false;
     return config;

@@ -112,7 +112,6 @@ describe("DependencyFactory", () => {
     it("should preserve supplied real root dependencies across platform factories", async () => {
       const root = await createMainPresentationFixture();
       root.config.logging.file.enabled = false;
-      root.config.logging.chat.enabled = false;
       root.config.general.logChatMessages = false;
       try {
         expect(await root.start()).toMatchObject({ success: true });

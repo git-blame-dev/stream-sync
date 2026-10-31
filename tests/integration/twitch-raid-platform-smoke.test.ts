@@ -107,7 +107,6 @@ describe("Twitch raid platform flow (smoke)", () => {
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.general.raidsEnabled = true;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.twitch.enabled = false;
     presentation.config.twitch.dataLoggingEnabled = false;
     presentation.config.twitch.raidsEnabled = true;

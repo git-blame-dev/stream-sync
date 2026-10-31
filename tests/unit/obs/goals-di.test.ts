@@ -22,7 +22,6 @@ describe('OBS goals concrete dependency injection', () => {
     it(`${kind} preserves the supplied concrete tracker and source projection`, async () => {
       const h = await createMainPresentationFixture();
       h.config.logging.file.enabled = false;
-      h.config.logging.chat.enabled = false;
       Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalTarget: 500,
         tiktokGoalCurrency: 'coins', tiktokGoalSource: `synthetic-${kind}-goal` });
       try {
@@ -50,7 +49,6 @@ describe('OBS goals concrete dependency injection', () => {
   it('resetting the default manager acquires a different actual owner', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
       await h.start();
       const dependencies = { config: h.config, obsManager: h.obs,

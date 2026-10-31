@@ -2,14 +2,14 @@ import type { BuiltConfig } from './core/types/config-types';
 import { createEventBus } from './core/EventBus';
 import { buildLoggingConfig } from './core/config-builders';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from './core/constants';
-import { config as defaultConfig, loadConfig } from './core/config';
+import { config as defaultConfig } from './core/config';
 import {
     normalizeRowEffects,
     normalizeRowTheme,
     type RowTheme,
     type RowVisualEffectId
 } from './core/row-presentation';
-import { getOperatorLogSource, getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
+import { getOperatorLogSource, getUnifiedLogger, logger, initializeLoggingConfig } from './core/logging';
 import { InnertubeFactory } from './factories/innertube-factory';
 import NotificationManagerModule from './notifications/NotificationManager';
 import { getOBSConnectionManager } from './obs/connection';
@@ -100,18 +100,6 @@ type TwitchHttpClient = ConstructorParameters<typeof TwitchAuth>[0]['httpClient'
 type YoutubeOwnerOptions = NonNullable<Parameters<InstanceType<typeof DependencyFactory>['createYoutubeInnertubeService']>[0]>;
 type PlatformLifecycleDependencyFactory = NonNullable<NonNullable<ConstructorParameters<typeof PlatformLifecycleService>[0]>['dependencyFactory']> & {
     createYoutubeInnertubeService?: InstanceType<typeof DependencyFactory>['createYoutubeInnertubeService'];
-};
-type InitializeLoggingConfig = Parameters<typeof initializeLoggingConfig>[0];
-type MainLoggingConfig = NonNullable<InitializeLoggingConfig['logging']>;
-type LogOutputConfig = NonNullable<MainLoggingConfig['console']>;
-type LogLevelConfigValue = NonNullable<LogOutputConfig['level']>;
-type MainLoggingOutputCandidate = {
-    enabled?: boolean;
-    level?: string;
-    directory?: string;
-    filename?: string;
-    maxBytes?: number;
-    maxQueueBytes?: number;
 };
 type MainConfigChangePayload = {
     section?: string;
@@ -268,57 +256,6 @@ function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
     };
 }
 
-function isLogLevelConfigValue(value: unknown): value is LogLevelConfigValue {
-    return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';
-}
-
-function normalizeLogOutputConfig(output: MainLoggingOutputCandidate | undefined): LogOutputConfig | undefined {
-    if (!output) {
-        return undefined;
-    }
-
-    const normalized: LogOutputConfig = {};
-    if (typeof output.enabled === 'boolean') {
-        normalized.enabled = output.enabled;
-    }
-    if (isLogLevelConfigValue(output.level)) {
-        normalized.level = output.level;
-    }
-    if (typeof output.directory === 'string') {
-        normalized.directory = output.directory;
-    }
-    if (typeof output.filename === 'string') {
-        normalized.filename = output.filename;
-    }
-
-    if (typeof output.maxBytes === 'number') normalized.maxBytes = output.maxBytes;
-    if (typeof output.maxQueueBytes === 'number') normalized.maxQueueBytes = output.maxQueueBytes;
-    return normalized;
-}
-
-function createLoggingInitializerConfig(loggingConfig: MainConfig['logging']): InitializeLoggingConfig {
-    if (!loggingConfig) {
-        return {};
-    }
-
-    const logging: MainLoggingConfig = {};
-    for (const [key, value] of Object.entries(loggingConfig)) {
-        if (key !== 'console' && key !== 'file') {
-            logging[key] = value;
-        }
-    }
-    const consoleConfig = normalizeLogOutputConfig(loggingConfig.console);
-    const fileConfig = normalizeLogOutputConfig(loggingConfig.file);
-    if (consoleConfig) {
-        logging.console = consoleConfig;
-    }
-    if (fileConfig) {
-        logging.file = fileConfig;
-    }
-
-    return { logging };
-}
-
 function toGracefulExitConfig(candidate: unknown): MainGracefulExitConfig | undefined {
     return candidate && typeof candidate === 'object'
         ? candidate
@@ -414,25 +351,7 @@ Examples:
     process.exit(0);
 }
 
-if (cliArgs.debug) {
-    setDebugMode(true);
-}
-
 let config = defaultConfig as MainConfig;
-
-if (cliArgs.debug) {
-    const normalizedConfig = loadConfig() as Record<string, Record<string, unknown>>;
-    config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
-}
-
-initializeLoggingConfig(createLoggingInitializerConfig(config.logging), {
-    operatorCaptureEnabled: config.gui?.enableOperator === true
-});
-
-const logger = getUnifiedLogger();
-if (!logger || typeof logger.debug !== 'function') {
-    throw new Error('Logger missing required methods');
-}
 
 let mainErrorHandler: ReturnType<typeof createPlatformErrorHandler> | null = null;
 
@@ -593,6 +512,7 @@ function createProductionDependencies(
         goalsManager: unknown;
     } | null = null
 ) {
+    const logger = getUnifiedLogger();
     validateLoggerInterface(logger);
 
     const resolvedOverrides = overrides || {};
@@ -630,8 +550,6 @@ function createAppRuntime(config: AppRuntimeConfig, dependencies: AppRuntimeDepe
         throw new Error('createAppRuntime requires dependencies');
     }
 
-    logger.info('Creating AppRuntime', 'system');
-
     return new AppRuntime(config, dependencies);
 }
 
@@ -650,11 +568,13 @@ async function main(overrides: MainOverrides = {}) {
     if (runtimeConfig !== config) {
         config = runtimeConfig;
     }
-    initializeLoggingConfig(createLoggingInitializerConfig(config.logging), {
+    initializeLoggingConfig({ logging: { ...config.logging,
+        console: { ...config.logging?.console, level: runtimeCliArgs.debug || config.general.debugEnabled ? 'debug' : config.logging?.console?.level ?? 'warn' }
+    } }, {
         operatorCaptureEnabled: config.gui?.enableOperator === true
     });
+    const logger = getUnifiedLogger();
     if (!runtimeCliArgs.debug && config.general.debugEnabled) {
-        setDebugMode(true);
         logger.info('Debug mode enabled via config.ini', 'system');
     } else if (runtimeCliArgs.debug) {
         logger.info('Debug mode enabled via command line argument', 'system');
@@ -686,9 +606,6 @@ async function main(overrides: MainOverrides = {}) {
     const construction: Array<() => void | Promise<unknown>> = [];
     try {
         logger.info('Starting main application...', 'main');
-        logger.info('Main application started, beginning initialization...', 'Main');
-        logger.debug('About to set up display queue configuration...', 'Main');
-        logger.info('Setting up display queue configuration...', 'Main');
 
         singleInstanceGuard = await createSingleInstanceGuardFn({ logger });
 
@@ -892,7 +809,6 @@ async function main(overrides: MainOverrides = {}) {
         logger.debug('OBSEventService created', 'Main');
 
         logger.debug('About to create notification manager...', 'Main');
-        logger.info('Creating notification manager...', 'Main');
         const notificationManager = new NotificationManagerCtor({
             displayQueue: displayQueue,
             eventBus: eventBus,
@@ -1009,9 +925,7 @@ async function main(overrides: MainOverrides = {}) {
         );
         dependencies.gracefulExitService = gracefulExitService;
 
-        logger.info('Starting AppRuntime application...', 'Main');
         await app.start();
-        logger.info('AppRuntime started successfully', 'Main');
 
         if (process.env.CHAT_BOT_STARTUP_ONLY === 'true') {
             logger.info('Startup-only mode enabled; shutting down after initialization', 'Main');

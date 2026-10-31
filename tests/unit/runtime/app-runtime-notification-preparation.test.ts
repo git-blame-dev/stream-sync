@@ -9,7 +9,6 @@ beforeEach(async () => {
   stdout = captureStdout(); stderr = captureStderr();
   h = await createMainPresentationFixture();
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   h.config.farewell.command = '!bye';
   await h.start();
 });

@@ -102,7 +102,6 @@ describe("TikTok share platform flow (smoke)", () => {
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.general.sharesEnabled = true;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.tiktok.enabled = false;
     presentation.config.tiktok.dataLoggingEnabled = false;
     presentation.config.tiktok.sharesEnabled = true;

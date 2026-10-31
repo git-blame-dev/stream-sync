@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
-import { getDebugMode, getLoggingConfig, getUnifiedLogger, initializeLoggingConfig, setDebugMode } from "../../src/core/logging";
+import { getLoggingConfig, getUnifiedLogger, initializeLoggingConfig } from "../../src/core/logging";
 import { buildLoggingConfig } from "../../src/core/config-builders";
 const load = createRequire(import.meta.url);
 const configModulePath = load.resolve("../../src/core/config");
@@ -108,7 +108,6 @@ describe("Startup wiring smoke", () => {
     const originalEntry = load.cache[configModulePath];
     const originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
     const originalLogging = getLoggingConfig();
-    const originalDebug = getDebugMode();
     const existsSync = fs.existsSync;
     const defaultLogAccess: string[] = [];
     const existsSpy = spyOn(fs, "existsSync").mockImplementation(file => {
@@ -133,29 +132,20 @@ describe("Startup wiring smoke", () => {
       initializeLoggingConfig({ logging: loggingConfig });
       expect(builtLoggingConfig.file.enabled).toBe(false);
       expect(defaultLogAccess).toEqual([]);
-      setDebugMode(true);
       expect(getLoggingConfig()).toBe(loggingConfig);
-      expect(getDebugMode()).toBe(true);
+      expect(getLoggingConfig().console?.level).toBe("debug");
     } finally {
       try {
         initializeLoggingConfig({ logging: originalLogging });
       } finally {
-        try {
-          setDebugMode(originalDebug);
-        } finally {
-          try {
-            if (originalEntry) load.cache[configModulePath] = originalEntry;
-            else delete load.cache[configModulePath];
-          } finally {
-            existsSpy.mockRestore();
-            if (originalConfigPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
-            else process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
-          }
-        }
+        if (originalEntry) load.cache[configModulePath] = originalEntry;
+        else delete load.cache[configModulePath];
+        existsSpy.mockRestore();
+        if (originalConfigPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
+        else process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
       }
     }
     expect(getLoggingConfig()).toBe(originalLogging);
-    expect(getDebugMode()).toBe(originalDebug);
     expect(load.cache[configModulePath]).toBe(originalEntry);
     expect(process.env.CHAT_BOT_CONFIG_PATH).toBe(originalConfigPath);
   });

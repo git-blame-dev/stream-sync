@@ -333,7 +333,6 @@ configModule = configModuleRef;
         expect(config.console.level).toBe('debug');
         expect(config.file.level).toBe('debug');
         expect(config.file.enabled).toBe(false);
-        expect(config.chat.enabled).toBe(false);
 
         const debugConfig = buildLoggingConfig(
             { general: { debugEnabled: false }, logging: {} },

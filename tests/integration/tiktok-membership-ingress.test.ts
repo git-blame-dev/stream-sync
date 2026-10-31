@@ -90,7 +90,6 @@ test('logs routed chat and membership payloads once per incoming delivery', asyn
 test('SDK room entries create no speech row or goal credit; a purchase and its alias create one', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalSource: 'synthetic-member-goal',
         tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins' });
     Object.assign(h.config.monetizationValues, { tiktokMembershipUsd: 4.2, tiktokGiftUnitUsd: 0.01 });

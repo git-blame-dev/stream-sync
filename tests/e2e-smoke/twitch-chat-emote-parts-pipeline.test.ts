@@ -66,7 +66,6 @@ describe("Twitch emote chat parts pipeline (smoke E2E)", () => {
     presentation.config.general.envFileReadEnabled = false;
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.general.messagesEnabled = true;
     presentation.config.general.logChatMessages = false;
     presentation.config.general.greetingsEnabled = false;

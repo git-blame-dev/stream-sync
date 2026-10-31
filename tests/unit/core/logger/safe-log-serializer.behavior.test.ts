@@ -339,3 +339,20 @@ describe("safe log serializer behavior", () => {
         expect(() => JSON.stringify(data)).not.toThrow();
     });
 });
+
+test('sanitizes hostile top-level proxies without retrying unsafe inspection', () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    expect(safeObjectStringify(proxy)).toBe('[Unserializable]');
+    expect(sanitizeLogData(proxy)).toBe('[Unserializable]');
+});
+
+test('bounds and sanitizes keys while preserving own __proto__ data safely', () => {
+    const input = JSON.parse('{"__proto__":{"synthetic":"safe"}}');
+    input['https://example.invalid/path?opaque=synthetic-secret'] = 'safe';
+    input['x'.repeat(10_000)] = 'safe';
+    const text = safeObjectStringify(input);
+    expect(text).not.toContain('synthetic-secret');
+    expect(text.length).toBeLessThan(5000);
+    expect(JSON.parse(text).__proto__).toEqual({ synthetic: 'safe' });
+});

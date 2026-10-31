@@ -384,8 +384,6 @@ describe('config-builders', () => {
             expect(result.file.enabled).toBe(true);
             expect(result.file.level).toBe('debug');
             expect(result.file.directory).toBe('./logs');
-            expect(result.platforms.twitch.enabled).toBe(true);
-            expect(result.chat.enabled).toBe(true);
         });
 
         it('sets console level to debug when debugEnabled is true', () => {
@@ -431,7 +429,6 @@ describe('config-builders', () => {
             });
 
             expect(result.file.enabled).toBe(false);
-            expect(result.chat.enabled).toBe(false);
         });
 
     it('rejects invalid console level and falls back to warn', () => {

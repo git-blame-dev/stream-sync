@@ -19,7 +19,6 @@ for (const { method, handler, type, fields } of [
   test(`${method} uses the actual ${handler} lifecycle callback and produces its canonical row`, async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     let auth: TwitchAuth | undefined;
     let platform: TwitchPlatform | undefined;
     let lifecycle: PlatformLifecycleService | undefined;

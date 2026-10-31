@@ -33,7 +33,6 @@ beforeEach(async () => {
   stdout = captureStdout(); stderr = captureStderr(); exitCode = process.exitCode;
   h = await createMainPresentationFixture();
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   expect(h.config.general.envFileReadEnabled).toBe(false);
   expect(h.config.general.envFileWriteEnabled).toBe(false);
   await h.start();

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm, stat, utimes, appendFile, mkdir, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -85,6 +85,27 @@ describe('bounded runtime file writer', () => {
             expect(capture.output[1]).toContain('dropped 2');
         } finally { release(); await writer.flush(); capture.restore(); }
         expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('1234567890\n');
+    });
+
+    it('contains simultaneous file and stderr failures and accepts later records', async () => {
+        const root = await directory();
+        let fail = true;
+        const writer = new LineFileAppender({ logDir: root }, {
+            appendFile: async (file, data) => {
+                if (fail) throw new Error('synthetic disk failure');
+                await appendFile(file, data);
+            }
+        });
+        const stderr = spyOn(process.stderr, 'write').mockImplementation(() => { throw new Error('synthetic stderr failure'); });
+        try {
+            expect(writer.log('synthetic lost record')).toBe(true);
+            await expect(writer.flush()).resolves.toBeUndefined();
+            expect(writer.write('../synthetic-invalid', 'rejected')).toBe(false);
+            fail = false;
+            expect(writer.log('synthetic recovered')).toBe(true);
+            await writer.flush();
+            expect(await readFile(path.join(root, 'runtime.log'), 'utf8')).toBe('synthetic recovered\n');
+        } finally { stderr.mockRestore(); await writer.flush(); }
     });
 
     it('preserves the original archive and accepts later records after compression I/O failure', async () => {

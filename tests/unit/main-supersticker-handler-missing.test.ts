@@ -4,7 +4,6 @@ import { createMainPresentationFixture } from '../helpers/main-presentation-fixt
 test('Super Sticker reaches actual runtime notification, queue and display owners', async () => {
   const h = await createMainPresentationFixture();
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   try {
     await h.start();
     expect(await h.runtime.handleGiftNotification('youtube', 'Synthetic Sticker Viewer', {

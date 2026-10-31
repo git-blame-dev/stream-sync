@@ -87,7 +87,6 @@ test('real Twitch ingress drives offline and online store recovery and retires c
         const auth = owners.auth = createSyntheticAuth(dir);
         const h = owners.main = await createMainPresentationFixture();
         h.config.twitch.viewerCountEnabled = true;
-        h.config.logging.file.enabled = false; h.config.logging.chat.enabled = false;
         let attempts = 0;
         const http = new EnhancedHttpClient({ logger: noOpLogger, axios: {
             get: async () => { attempts++; return { data: { data: [{ viewer_count: 17 }] } }; },
@@ -161,7 +160,6 @@ test('partial ingress acquisition restores secrets and removes roots after exter
         expect(await owners.auth.refreshTokens()).toBe(true);
         acquired.main = owners.main = await createMainPresentationFixture();
         owners.main.config.logging.file.enabled = false;
-        owners.main.config.logging.chat.enabled = false;
         try { await readFile(join(owners.dir, 'synthetic-missing-setup.json')); }
         catch (error) { setupError = error; throw error; }
     });
@@ -189,7 +187,6 @@ test('ingress retirement reports external disposal and setup failures while reti
         expect(await owners.auth.refreshTokens()).toBe(true);
         acquired.main = owners.main = await createMainPresentationFixture();
         owners.main.config.logging.file.enabled = false;
-        owners.main.config.logging.chat.enabled = false;
         await owners.main.start();
         // The simulated external SDK fails; the actual main/OBS owners are intact.
         owners.main.socket.disconnect = async () => { disconnectAttempts++; throw disconnectError; };
@@ -236,7 +233,6 @@ test('raw EventSub chat and follow reach actual display owners, preserving emoji
         h.config.twitch.messagesEnabled = true;
         h.config.twitch.followsEnabled = true;
         h.config.logging.file.enabled = false;
-        h.config.logging.chat.enabled = false;
         const axios = { get: async () => ({ data: { data: [] } }),
             post: async () => ({ data: { data: [{ id: 'synthetic-chat-subscription', status: 'enabled' }] } }),
             delete: async () => ({ data: {} }) };

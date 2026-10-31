@@ -20,6 +20,11 @@ type Destination = { logDir: string; filename: string; maxBytes: number; maxQueu
 type Batch = { destination: Destination; day: string; lines: string[]; bytes: number };
 const MAX_ENTRY_BYTES = 64 * 1024;
 
+function report(message: string): void {
+    try { process.stderr.write(message); }
+    catch { /* Emergency output failure must not reject background writes. */ }
+}
+
 function safeFilename(filename: string): boolean {
     return !!filename && filename !== '.' && filename !== '..'
         && !/[\\/\x00-\x1f<>:"|?*]/.test(filename) && !/[. ]$/.test(filename)
@@ -61,7 +66,7 @@ export class LineFileAppender {
 
     write(filename: string, content: string): boolean {
         if (!safeFilename(filename)) {
-            process.stderr.write('[LineFileAppender] Rejected unsafe log filename\n');
+            report('[LineFileAppender] Rejected unsafe log filename\n');
             return false;
         }
         const destination = filename === this.destination.filename ? this.destination : { ...this.destination, filename };
@@ -105,7 +110,7 @@ export class LineFileAppender {
             } catch {
                 this.current = null;
                 if (!this.writeFailureReported) {
-                    process.stderr.write('[LineFileAppender] File write failed; entries in this batch were not confirmed written\n');
+                    report('[LineFileAppender] File write failed; entries in this batch were not confirmed written\n');
                     this.writeFailureReported = true;
                 }
             } finally { this.queuedBytes -= batch.bytes; }
@@ -116,7 +121,7 @@ export class LineFileAppender {
 
     private reportDrops(force = false): void {
         if (!this.dropped || (!force && this.now() - this.lastDropReport < 1000)) return;
-        process.stderr.write(`[LineFileAppender] dropped ${this.dropped} log entries (entry or queue byte limit)\n`);
+        report(`[LineFileAppender] dropped ${this.dropped} log entries (entry or queue byte limit)\n`);
         this.dropped = 0;
         this.lastDropReport = this.now();
     }
@@ -154,7 +159,7 @@ export class LineFileAppender {
             await asyncFs.unlink(archive);
         } catch {
             // The renamed original remains recoverable if compression fails.
-            process.stderr.write('[LineFileAppender] Archive compression failed; original archive preserved\n');
+            report('[LineFileAppender] Archive compression failed; original archive preserved\n');
         }
     }
 }

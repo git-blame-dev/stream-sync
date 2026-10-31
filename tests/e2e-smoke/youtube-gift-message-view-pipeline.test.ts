@@ -112,7 +112,6 @@ describe("YouTube GiftMessageView pipeline (smoke E2E)", () => {
     presentation.config.general.envFileReadEnabled = false;
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.general.giftsEnabled = true;
     presentation.config.general.greetingsEnabled = false;
     presentation.config.general.logChatMessages = false;

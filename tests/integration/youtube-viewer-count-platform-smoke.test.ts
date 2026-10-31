@@ -53,7 +53,6 @@ describe("YouTube viewer count platform flow (smoke)", () => {
     presentation.config.general.envFileReadEnabled = false;
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.youtube.enabled = false;
     presentation.config.youtube.viewerCountEnabled = true;
     presentation.config.youtube.username = "test-channel";

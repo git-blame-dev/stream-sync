@@ -168,7 +168,6 @@ describe("YouTube data flow integrity", () => {
     const presentation = await createMainPresentationFixture();
     cleanups.push(() => presentation.dispose());
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.general.debugEnabled = false;
     presentation.config.general.giftsEnabled = true;
     presentation.config.vfx.filePath = "/synthetic-only";

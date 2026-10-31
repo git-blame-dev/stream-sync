@@ -141,7 +141,6 @@ describe("Twitch giftpaypiggy platform flow (smoke)", () => {
     presentation.config.general.giftsEnabled = true;
     presentation.config.general.paypiggiesEnabled = true;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.twitch.enabled = false;
     presentation.config.twitch.dataLoggingEnabled = false;
     presentation.config.twitch.giftsEnabled = true;

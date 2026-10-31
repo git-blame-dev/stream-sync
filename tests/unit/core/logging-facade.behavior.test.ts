@@ -4,23 +4,7 @@ import * as logging from "../../../src/core/logging.ts";
 
 describe("logging facade compatibility", () => {
     beforeEach(() => {
-        logging.setDebugMode(false);
         logging.initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
-    });
-
-    test("keeps the public logging facade exports stable", () => {
-        expect(logging.logger).toBeDefined();
-        expect(typeof logging.getUnifiedLogger).toBe("function");
-        expect(typeof logging.initializeLoggingConfig).toBe("function");
-        expect(typeof logging.getLoggingConfig).toBe("function");
-        expect(typeof logging.getDebugMode).toBe("function");
-        expect(typeof logging.setDebugMode).toBe("function");
-        expect(typeof logging.logger.debug).toBe("function");
-        expect(typeof logging.logger.info).toBe("function");
-        expect(typeof logging.logger.warn).toBe("function");
-        expect(typeof logging.logger.error).toBe("function");
-        expect(typeof logging.logger.console).toBe("function");
-        expect(typeof logging.logger.emergency).toBe("function");
     });
 
     test("routes facade logger calls through the active runtime configuration", () => {
@@ -80,4 +64,17 @@ expect(stderrCapture.output.join("")).toBe("");
 stderrCapture.restore();
         }
     });
+});
+
+test('keeps previously bound facade methods live after configuration changes', () => {
+    const capture = captureStdout();
+    const info = logging.logger.info;
+    try {
+        logging.initializeLoggingConfig({ logging: {} }, { operatorCaptureEnabled: false });
+        info('synthetic hidden');
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true } } });
+        info('synthetic visible');
+        expect(capture.output.join('')).not.toContain('synthetic hidden');
+        expect(capture.output.join('')).toContain('synthetic visible');
+    } finally { capture.restore(); }
 });

@@ -73,7 +73,6 @@ describe("TikTok follow/share routing", () => {
     const presentation = await createMainPresentationFixture();
     activeFixtures.push(presentation);
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.general.followsEnabled = true;
     presentation.config.general.giftsEnabled = true;
     presentation.config.general.messagesEnabled = true;

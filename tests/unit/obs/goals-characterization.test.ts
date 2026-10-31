@@ -7,7 +7,6 @@ import { createGoalTracker } from '../../../src/utils/goal-tracker';
 test('an explicitly supplied real tracker owns goal state and OBS projections', async () => {
   const h = await createMainPresentationFixture();
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   Object.assign(h.config.goals, {
     tiktokGoalEnabled: true, tiktokGoalTarget: 1000,
     tiktokGoalCurrency: 'coins', tiktokGoalSource: 'synthetic-tiktok-goal',
@@ -43,7 +42,6 @@ test('an explicitly supplied real tracker owns goal state and OBS projections', 
 test('five memberships update the real tracker without output while OBS is disconnected', async () => {
   const h = await createMainPresentationFixture();
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   Object.assign(h.config.goals, {
     tiktokGoalEnabled: true, tiktokGoalTarget: 1000,
     tiktokGoalCurrency: 'coins', tiktokGoalSource: 'synthetic-tiktok-goal',

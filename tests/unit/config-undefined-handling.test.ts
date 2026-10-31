@@ -8,7 +8,6 @@ for (const mode of ['missing config', 'incomplete gift'] as const) {
   test(`actual runtime rejects ${mode} before admission and processes a healthy following gift`, async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
       await h.start();
       const originalConfig = h.runtime.config;

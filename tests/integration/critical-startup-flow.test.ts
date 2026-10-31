@@ -91,14 +91,6 @@ describe("Critical Startup Flow", () => {
     }
   });
 
-  test("logging system exports required initialization functions", () => {
-    const logging = load("../../src/core/logging");
-
-    expect(typeof logging.setDebugMode).toBe("function");
-    expect(typeof logging.initializeLoggingConfig).toBe("function");
-    expect(typeof logging.getUnifiedLogger).toBe("function");
-  });
-
   test("config-builders exports buildLoggingConfig", () => {
     const { buildLoggingConfig } = load("../../src/core/config-builders");
 

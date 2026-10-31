@@ -3,7 +3,7 @@ import { describe, it, expect } from "bun:test";
 import { buildLoggingConfig } from "../../../src/core/config-builders.ts";
 
 describe("logging config behavior", () => {
-  it("forces log directories and chat logging when file logging enabled", () => {
+  it("builds the configured output thresholds and file destination", () => {
     const config = buildLoggingConfig({
       general: { debugEnabled: false },
       logging: {
@@ -17,12 +17,9 @@ describe("logging config behavior", () => {
     expect(config.file.level).toBe("error");
     expect(config.file.enabled).toBe(true);
     expect(config.file.directory).toBe("./logs");
-    expect(config.chat.enabled).toBe(true);
-    expect(config.chat.separateFiles).toBe(true);
-    expect(config.chat.directory).toBe("./logs");
   });
 
-  it("disables chat logging when file logging is disabled", () => {
+  it("honors disabled file logging", () => {
     const config = buildLoggingConfig({
       general: { debugEnabled: false },
       logging: {
@@ -31,10 +28,7 @@ describe("logging config behavior", () => {
     });
 
     expect(config.file.enabled).toBe(false);
-    expect(config.chat.enabled).toBe(false);
-    expect(config.chat.separateFiles).toBe(true);
     expect(config.file.directory).toBe("./logs");
-    expect(config.chat.directory).toBe("./logs");
   });
 
   it("uses severity thresholds only for configured log levels", () => {

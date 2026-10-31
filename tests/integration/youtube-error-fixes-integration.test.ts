@@ -64,7 +64,6 @@ describe('YouTube Super Chat platform conversion', () => {
         const f = fixture();
         const h = await createMainPresentationFixture();
         h.config.logging.file.enabled = false;
-        h.config.logging.chat.enabled = false;
         const events: Array<{ type: string; data: Record<string, unknown> }> = [];
         f.platform.on('platform:event', event => { if (event.type === 'platform:gift') events.push(event); });
         try {

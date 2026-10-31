@@ -15,7 +15,6 @@ beforeEach(async () => {
   h.config.general.envFileWriteEnabled = false;
   h.config.general.logChatMessages = false;
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   h.config.vfx.filePath = "/synthetic-only";
   h.config.spam.enabled = true;
   h.config.spam.detectionWindow = 60;

@@ -13,7 +13,6 @@ async function fixture() {
     const h = await createMainPresentationFixture();
     h.config.general.logChatMessages = false;
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try { await h.start(); return h; }
     catch (error) { await h.dispose(); throw error; }
 }

@@ -7,7 +7,6 @@ import * as logging from "../../../../src/core/logging.ts";
 
 describe("logger sink behavior", () => {
     beforeEach(() => {
-        logging.setDebugMode(false);
         logging.initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
     });
 

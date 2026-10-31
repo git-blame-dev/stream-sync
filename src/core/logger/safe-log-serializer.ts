@@ -92,9 +92,9 @@ function sanitizeLogText(value: string): string {
 type SanitizationBudget = { nodes: number; stringChars: number };
 function sanitizeLogValue(value: unknown, key = '', depth = 0, ancestors: WeakSet<object> = new WeakSet(), maxDepth = 3, budget?: SanitizationBudget): unknown {
     if (budget && budget.nodes-- <= 0) return '[Traversal budget exceeded]';
-if (isSensitiveLogKey(key)) {
-return '[REDACTED]';
-}
+    if (isSensitiveLogKey(key)) {
+        return '[REDACTED]';
+    }
     if (RAW_PROVIDER_PAYLOAD_KEY_PATTERN.test(key)) {
         return '[REDACTED_RAW_PAYLOAD]';
     }
@@ -167,8 +167,11 @@ return '[REDACTED]';
         let keys: string[];
         try { keys = Object.keys(value as object).sort(); } catch { return '[Un readable object]'; }
         for (const entryKey of keys.slice(0, MAX_ENTRIES)) {
-            try { result[entryKey] = sanitizeLogValue((value as Record<string, unknown>)[entryKey], entryKey, depth + 1, ancestors, maxDepth, budget); }
-            catch { result[entryKey] = '[Unreadable]'; }
+            const safeKey = String(sanitizeLogValue(entryKey, '', depth + 1, ancestors, maxDepth, budget));
+            let entryValue: unknown;
+            try { entryValue = sanitizeLogValue((value as Record<string, unknown>)[entryKey], entryKey, depth + 1, ancestors, maxDepth, budget); }
+            catch { entryValue = '[Unreadable]'; }
+            Object.defineProperty(result, safeKey, { value: entryValue, enumerable: true, configurable: true, writable: true });
         }
         if (keys.length > MAX_ENTRIES) result.__more = keys.length - MAX_ENTRIES;
         return result;
@@ -178,21 +181,10 @@ return '[REDACTED]';
 }
 
 function safeObjectStringify(obj: unknown, maxDepth = 3): string {
-    const budget = { nodes: MAX_TOTAL_NODES, stringChars: MAX_TOTAL_STRING_CHARS };
-    const sanitized = sanitizeLogValue(obj, '', 0, new WeakSet(), maxDepth, budget);
-    if (obj === null) return 'null';
-    if (obj === undefined) return 'undefined';
+    const sanitized = sanitizeLogData(obj, maxDepth);
+    if (sanitized === null || sanitized === undefined) return String(sanitized);
     if (typeof sanitized === 'string') return sanitized;
-    if (typeof sanitized === 'number' || typeof sanitized === 'boolean') return String(sanitized);
-
-    try {
-        return JSON.stringify(sanitized);
-    } catch (_err) {
-        const constructorName = typeof obj === 'object' && obj !== null && 'constructor' in obj && typeof (obj as { constructor?: { name?: unknown } }).constructor?.name === 'string'
-            ? (obj as { constructor: { name: string } }).constructor.name
-            : 'Unknown';
-        return `[Object: ${constructorName} - stringify failed]`;
-    }
+    return JSON.stringify(sanitized);
 }
 
 function sanitizeLogData(value: unknown, maxDepth = 3): unknown {

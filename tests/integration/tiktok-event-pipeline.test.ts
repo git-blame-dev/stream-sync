@@ -166,7 +166,6 @@ describe("TikTok event pipeline (integration)", () => {
     presentation.config.general.envFileReadEnabled = false;
     presentation.config.general.envFileWriteEnabled = false;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
     presentation.config.general.messagesEnabled =
       options.messagesEnabled ?? false;
     presentation.config.general.giftsEnabled = options.giftsEnabled ?? false;

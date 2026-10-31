@@ -55,7 +55,6 @@ async function presentation() {
     const h = await createMainPresentationFixture();
     h.config.general.logChatMessages = false;
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalSource: 'synthetic-envelope-goal',
         tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins' });
     Object.assign(h.config.gui, { showEnvelopes: true, messageCharacterLimit: 0 });

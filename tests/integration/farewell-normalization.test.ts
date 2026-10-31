@@ -15,7 +15,6 @@ for (const [message, matching] of [
     fixture.config.twitch.farewellsEnabled = true;
     fixture.config.farewell.command = '!synthetic-bye';
     fixture.config.logging.file.enabled = false;
-    fixture.config.logging.chat.enabled = false;
     try {
       await fixture.start();
       await fixture.runtime.platformEventRouter.routeEvent({ platform: 'twitch', type: 'platform:chat-message', data: {

@@ -17,7 +17,6 @@ beforeEach(async () => {
   h.config.general.envFileWriteEnabled = false;
   h.config.general.logChatMessages = false;
   h.config.logging.file.enabled = false;
-  h.config.logging.chat.enabled = false;
   h.config.vfx.filePath = "/synthetic-only";
   await h.start();
   const owner = h.runtime.notificationManager;

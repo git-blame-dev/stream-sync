@@ -8,7 +8,6 @@ import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../helpers/bu
 test('repeated single and all-goal updates join exact real tracker projections', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalSource: 'synthetic-tiktok-goal', tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins', youtubeGoalEnabled: true, youtubeGoalSource: 'synthetic-youtube-goal', youtubeGoalTarget: 100, youtubeGoalCurrency: 'USD' });
     try {
         await h.start();
@@ -36,7 +35,6 @@ test('repeated single and all-goal updates join exact real tracker projections',
 test('greeting waits for both matching external media ends before TTS', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     h.config.obs.ttsNotificationsEnabled = true;
     h.config.displayQueue.rowIntervalMs = 1000;
 
@@ -138,7 +136,6 @@ test('greeting waits for both matching external media ends before TTS', async ()
 test('100-bit presentation credits the real native goal once, including re-admission', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
         await h.start();
         h.socket.writes.length = 0;
@@ -163,7 +160,6 @@ for (const outcome of ['timeout', 'restart failure', 'retirement'] as const) {
     test(`sequential VFX ${outcome} follows existing fallback and retirement policy`, async () => {
         const h = await createMainPresentationFixture();
         h.config.logging.file.enabled = false;
-        h.config.logging.chat.enabled = false;
         h.config.obs.ttsNotificationsEnabled = true;
         h.config.vfx.filePath = '/synthetic-only';
         h.config.commands.a = '!a,Synthetic A,,5000';
@@ -228,7 +224,6 @@ for (const mode of ['no VFX', 'partial VFX', 'two speech stages', 'gift VFX', 's
     test(`real effects preserve ${mode} staging`, async () => {
         const h = await createMainPresentationFixture();
         h.config.logging.file.enabled = false;
-        h.config.logging.chat.enabled = false;
         h.config.obs.ttsNotificationsEnabled = true;
         h.config.vfx.filePath = '/synthetic-only';
         h.config.commands.a = '!a,Synthetic A,,5000';
@@ -286,7 +281,6 @@ for (const mode of ['no VFX', 'partial VFX', 'two speech stages', 'gift VFX', 's
 test('real goal tracker handles mutation, invalid inputs, disconnection and external write recovery', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalSource: 'synthetic-tiktok-goal', tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins' });
     try {
         await h.start();
@@ -324,7 +318,6 @@ test('real goal tracker handles mutation, invalid inputs, disconnection and exte
 test('real goal membership, enablement and source policies produce exact output', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalSource: 'synthetic-tiktok-goal', tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins', youtubeGoalEnabled: false });
     try {
         await h.start();
@@ -351,7 +344,6 @@ test('real goal membership, enablement and source policies produce exact output'
 test('disabled real goal system rejects donation and membership without output', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     h.config.goals.enabled = false;
     try {
         await h.start();
@@ -367,7 +359,6 @@ test('disabled real goal system rejects donation and membership without output',
 test('real goal initialization writes connected state, skips disconnected output, and recovers from invalid target', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
         await h.start();
         const goals = h.runtime.dependencies.obs?.goalsManager as ReturnType<typeof createOBSGoalsManager>;
@@ -391,7 +382,6 @@ test('real goal initialization writes connected state, skips disconnected output
 test('default goal manager owns a real tracker and source projection', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
         await h.start();
         resetDefaultGoalsManager();
@@ -408,7 +398,6 @@ test('default goal manager owns a real tracker and source projection', async () 
 test('default goal singleton uses the supplied concrete tracker', async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
         await h.start();
         resetDefaultGoalsManager();

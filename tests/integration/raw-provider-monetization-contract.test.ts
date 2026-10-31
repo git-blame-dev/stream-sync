@@ -83,7 +83,6 @@ describe("Raw provider monetization contract smokes", () => {
     presentation.config.general.giftsEnabled = true;
     presentation.config.general.paypiggiesEnabled = true;
     presentation.config.logging.file.enabled = false;
-    presentation.config.logging.chat.enabled = false;
 
     presentation.config.tiktok.enabled = false;
     presentation.config.tiktok.dataLoggingEnabled = false;

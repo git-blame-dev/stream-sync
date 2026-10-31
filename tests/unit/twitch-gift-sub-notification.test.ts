@@ -6,7 +6,6 @@ for (const complete of [true, false]) {
   it(`presents ${complete ? 'complete' : 'minimal'} gifted subscriptions through actual notification and queue owners`, async () => {
     const h = await createMainPresentationFixture();
     h.config.logging.file.enabled = false;
-    h.config.logging.chat.enabled = false;
     try {
       await h.start();
       const count = complete ? 5 : 2;

@@ -8,7 +8,6 @@ describe('actual greeting admission and canonical notification copy', () => {
     const fixture = await createMainPresentationFixture();
     fixture.config.twitch.greetingsEnabled = true;
     fixture.config.logging.file.enabled = false;
-    fixture.config.logging.chat.enabled = false;
     try {
       await fixture.start();
       await fixture.runtime.platformEventRouter.routeEvent({ type: 'platform:chat-message', platform: 'twitch', data: {

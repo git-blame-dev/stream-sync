@@ -107,63 +107,27 @@ describe("Platform Error Handler - User Experience Behavior", () => {
   });
 
   describe("Error Recovery Behavior", () => {
-    test("maintains system stability during initialization failures", () => {
-      const initError = new Error("Network connection failed");
-      let systemCrashed = false;
-
-      try {
-        errorHandler.handleInitializationError(initError, "startup");
-      } catch (error: unknown) {
-        expect(error).toBeInstanceOf(Error);
-        if (!(error instanceof Error)) {
-          throw new Error("Expected initialization error");
-        }
-        expect(error).toBe(initError);
-        expect(error.message).toBe("Network connection failed");
-        expect(error.message).not.toContain("undefined");
-        expect(error.message).not.toContain("null");
-      }
-
-      expect(systemCrashed).toBe(false);
+    test("rethrows the original initialization failure", () => {
+      const failure = new Error("test initialization failure");
+      expect(() => errorHandler.handleInitializationError(failure, "startup")).toThrow(failure);
     });
 
-    test("prevents chat processing pipeline disruption during event errors", () => {
-      const eventError = new Error("Failed to parse gift data");
-      const eventType = "platform:gift";
-      const eventData = {
-        id: "gift_123",
-        type: "platform:gift",
-        username: "TestUser",
-      };
-      let chatProcessingStopped = false;
-
-      try {
-        errorHandler.handleEventProcessingError(
-          eventError,
-          eventType,
-          eventData,
-        );
-        chatProcessingStopped = false;
-      } catch {
-        chatProcessingStopped = true;
-      }
-
-      expect(chatProcessingStopped).toBe(false);
+    test("reports an event failure without throwing", () => {
+      const logger = createRecordingLogger();
+      const handler = new PlatformErrorHandler(logger, "test-platform");
+      expect(() => handler.handleEventProcessingError(new Error("test parse failure"), "test:event", {
+        id: "test-event", type: "test:event"
+      })).not.toThrow();
+      expect(logger.entries).toHaveLength(1);
+      expect(logger.entries[0]).toMatchObject({ level: "error" });
     });
 
-    test("maintains user experience during service unavailability", () => {
-      const serviceError = new Error("Authentication service timeout");
-      const serviceName = "AuthenticationService";
-      let userExperienceDisrupted = false;
-
-      try {
-        errorHandler.handleServiceUnavailableError(serviceName, serviceError);
-        userExperienceDisrupted = false;
-      } catch {
-        userExperienceDisrupted = true;
-      }
-
-      expect(userExperienceDisrupted).toBe(false);
+    test("reports service unavailability without throwing", () => {
+      const logger = createRecordingLogger();
+      const handler = new PlatformErrorHandler(logger, "test-platform");
+      expect(() => handler.handleServiceUnavailableError("test-service", new Error("test unavailable"))).not.toThrow();
+      expect(logger.entries).toHaveLength(1);
+      expect(logger.entries[0]).toMatchObject({ level: "warn" });
     });
 
     test("provides consistent error recovery across different error types", () => {

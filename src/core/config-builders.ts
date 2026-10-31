@@ -5,13 +5,7 @@ import { isLogThreshold } from './logger/levels';
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'warn' as LogThreshold },
-    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY, maxBytes: 20971520, maxQueueBytes: 2097152 },
-    platforms: {
-        twitch: { enabled: true, fileLogging: true },
-        youtube: { enabled: true, fileLogging: true },
-        tiktok: { enabled: true, fileLogging: true }
-    },
-    chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
+    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY, maxBytes: 20971520, maxQueueBytes: 2097152 }
 };
 
 function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null; fileMaxBytes?: number; fileQueueMaxBytes?: number }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
@@ -36,9 +30,6 @@ function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | nu
     }
 
     config.file.directory = DEFAULTS.LOG_DIRECTORY;
-    config.chat.enabled = config.file.enabled;
-    config.chat.separateFiles = true;
-    config.chat.directory = DEFAULTS.LOG_DIRECTORY;
 
     return config;
 }

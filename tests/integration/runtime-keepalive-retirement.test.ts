@@ -7,7 +7,6 @@ for (const chatLimit of [null, 1]) {
     const trackedTimers = installTimerTracking().activeTimers;
     const fixture = await createMainPresentationFixture({ chatLimit });
     fixture.config.logging.file.enabled = false;
-    fixture.config.logging.chat.enabled = false;
     try {
       const result = await fixture.start();
       expect(result).toMatchObject({ success: true, appStarted: true });
