@@ -1,8 +1,9 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { realpathSync, promises as fs } from 'node:fs';
+import { RAW_RETENTION } from '../core/logger/file-policy';
 import { types } from 'node:util';
 
-import { ensureLogDirectory } from '../utils/log-directory';
+import { LineFileAppender } from '../utils/line-file-appender';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { LOG_TEXT_SPAN_SOURCE, WEB_URL_SPAN_SOURCE } from '../core/logger/web-url-pattern';
 
@@ -218,31 +219,97 @@ type RawEventLogWriteResult = {
     fileName: string;
 };
 
+const RAW_FILENAMES = [...RAW_PLATFORMS].map(platform => `${platform}-data-log.ndjson`).concat('youtube-unknown-renderer-log.ndjson');
+type RawCaptureConfig = { directories: readonly string[]; archiveMaxBytes?: number; archiveMaxAgeDays?: number };
+
+// Resolve existing ancestors once at composition, including aliases to not-yet-created roots.
+function canonicalDirectory(directory: string): string {
+    try { return realpathSync(directory); }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || path.dirname(directory) === directory) throw error;
+        return path.join(canonicalDirectory(path.dirname(directory)), path.basename(directory));
+    }
+}
+
+async function recoverDirectory(directory: string): Promise<string> {
+    try { return await fs.realpath(directory); }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || path.dirname(directory) === directory) throw error;
+        return path.join(await recoverDirectory(path.dirname(directory)), path.basename(directory));
+    }
+}
+
 class RawEventLogWriter {
+    private readonly writers = new Map<string, LineFileAppender | null>();
+    private readonly owners = new Map<string, LineFileAppender>();
+    private readonly recovering = new Map<string, Promise<LineFileAppender>>();
+    private readonly retention: { archiveMaxBytes: number; archiveMaxAgeDays: number };
+    private closed = false;
+
+    constructor(config: RawCaptureConfig) {
+        this.retention = { archiveMaxBytes: config.archiveMaxBytes ?? RAW_RETENTION.archiveMaxBytes,
+            archiveMaxAgeDays: config.archiveMaxAgeDays ?? RAW_RETENTION.archiveMaxAgeDays };
+        for (const directory of config.directories) {
+            const configuredRoot = path.resolve(directory);
+            this.writers.set(configuredRoot, null);
+            let root: string;
+            try { root = canonicalDirectory(configuredRoot); }
+            catch { continue; } // Optional capture failures are reported at the capture boundary.
+            this.writers.set(configuredRoot, this.owner(root));
+        }
+    }
+
+    private owner(root: string): LineFileAppender {
+        let writer = this.owners.get(root);
+        if (!writer) {
+            writer = new LineFileAppender({ logDir: root, archiveFilenames: RAW_FILENAMES, ...this.retention });
+            this.owners.set(root, writer);
+        }
+        return writer;
+    }
+
+    private recover(configuredRoot: string): Promise<LineFileAppender> {
+        // Only one caller can probe a broken root; other events fail promptly rather than queueing payloads.
+        if (this.recovering.has(configuredRoot)) return Promise.reject(new Error('Raw capture recovery in progress'));
+        const pending = recoverDirectory(configuredRoot).then(root => {
+            if (this.closed) throw new Error('Raw capture is closed');
+            const writer = this.owner(root);
+            this.writers.set(configuredRoot, writer);
+            return writer;
+        }).finally(() => { this.recovering.delete(configuredRoot); });
+        this.recovering.set(configuredRoot, pending);
+        return pending;
+    }
+
+    async close(): Promise<void> {
+        this.closed = true;
+        await Promise.allSettled(this.recovering.values());
+        await Promise.all([...this.owners.values()].map(writer => writer.flush()));
+    }
+
     async writeRawEvent(options: RawEventLogWriterOptions): Promise<RawEventLogWriteResult> {
         const fileName = this.resolveLogFileName(options.platform, options.eventType);
         const filePath = path.join(options.dataLoggingPath, fileName);
-        const logEntry = {
-            ingestTimestamp: getSystemTimestampISO(),
-            platform: options.platform,
-            eventType: rawText(options.eventType),
-            payload: captureRaw(options.payload)
-        };
-
-        let serialized = JSON.stringify(logEntry);
-        // Include wrapper, escaped text and newline in the hard per-entry byte ceiling.
-        if (Buffer.byteLength(serialized) >= 65_536) {
-            serialized = JSON.stringify({ ...logEntry, payload: LIMITED });
-        }
-
         try {
-            await ensureLogDirectory(options.dataLoggingPath);
-            await fs.appendFile(filePath, `${serialized}\n`, { encoding: 'utf8', mode: 0o600 });
+            const configuredRoot = path.resolve(options.dataLoggingPath);
+            let writer = this.writers.get(configuredRoot);
+            if (this.closed || writer === undefined) throw new Error('Raw capture destination is not active');
+            writer ??= await this.recover(configuredRoot);
+            if (this.closed) throw new Error('Raw capture is closed');
+            const logEntry = {
+                ingestTimestamp: getSystemTimestampISO(),
+                platform: options.platform,
+                eventType: rawText(options.eventType),
+                payload: captureRaw(options.payload)
+            };
+            let serialized = JSON.stringify(logEntry);
+            // Include wrapper, escaped text and newline in the hard per-entry byte ceiling.
+            if (Buffer.byteLength(serialized) >= 65_536) serialized = JSON.stringify({ ...logEntry, payload: LIMITED });
+            await writer.writeConfirmed(fileName, serialized);
         } catch {
             // Direct callers must not accidentally forward filesystem/provider details.
             throw new Error('Raw event capture write failed');
         }
-
         return { filePath, fileName };
     }
 

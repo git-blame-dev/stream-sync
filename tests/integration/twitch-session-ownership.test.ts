@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { RawEventLogWriter } from '../../src/services/RawEventLogWriter';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -55,6 +59,55 @@ beforeEach(() => { useFakeTimers(); setSystemTime(new Date('2026-01-01T00:00:00.
 afterEach(async () => { await Promise.all(instances.splice(0).map(instance => instance.cleanup())); secrets.twitch.accessToken = originalToken; useRealTimers(); });
 
 describe('Twitch session ownership through real EventSub and subscription manager', () => {
+    test('constructed EventSub capture is joined by the shared raw writer close', async () => {
+        const root = await fs.mkdtemp(join(tmpdir(), 'synthetic-twitch-raw-owner-'));
+        const writer = new RawEventLogWriter({ directories: [root] });
+        const auth = { isReady: () => true, getUserId: () => 'synthetic-user', refreshTokens: async () => true };
+        const platform = new TwitchPlatform({ enabled: true, channel: 'synthetic-channel', clientId: 'synthetic-client', dataLoggingEnabled: true, dataLoggingPath: root }, {
+            logger: noOpLogger, rawEventLogWriter: writer, WebSocketCtor: TestSocket,
+            twitchAuth: auth,
+            axios: { get: async () => ({ data: { data: [] } }), post: async () => ({ data: { data: [] } }), delete: async () => ({ data: {} }) },
+        });
+        const starting = platform.initializeEventSub('synthetic-broadcaster').catch(error => error);
+        const nativeAppend = fs.appendFile;
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        let entered!: () => void;
+        const appending = new Promise<void>(resolve => { entered = resolve; });
+        const append = spyOn(fs, 'appendFile').mockImplementation(async (...args) => {
+            if (String(args[0]) === join(root, 'twitch-data-log.ndjson')) { entered(); await gate; }
+            return nativeAppend(...args);
+        });
+        let capture: Promise<void> | undefined;
+        try {
+            await flush();
+            expect(TestSocket.sockets).toHaveLength(1);
+            const eventSub = platform.eventSub;
+            if (!(eventSub instanceof TwitchEventSub)) throw new Error('Expected production EventSub');
+            capture = eventSub.logRawPlatformData('synthetic-event', { message: 'synthetic capture' });
+            await appending;
+            let closed = false;
+            const closing = writer.close().then(() => { closed = true; });
+            await flush();
+            expect(closed).toBe(false);
+            release();
+            await capture;
+            await closing;
+            expect(closed).toBe(true);
+            const record = JSON.parse((await fs.readFile(join(root, 'twitch-data-log.ndjson'), 'utf8')).trim());
+            expect(record).toMatchObject({ platform: 'twitch', eventType: 'synthetic-event', payload: { message: 'synthetic capture' } });
+        } finally {
+            release();
+            await capture;
+            await platform.cleanup();
+            expect(await starting).toBeInstanceOf(Error);
+            await writer.close();
+            append.mockRestore();
+            await fs.rm(root, { recursive: true, force: true });
+        }
+        expect(TestSocket.sockets.every(socket => socket.readyState === 3)).toBe(true);
+        expect(getTimerCount()).toBe(0);
+    });
     for (const status of [429, 403]) test(`later terminal ${status} overrides an earlier transient startup failure`, async () => {
         let posts = 0;
         const eventSub = fixture(async () => {

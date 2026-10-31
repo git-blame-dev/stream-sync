@@ -6,7 +6,7 @@ import { isYouTubeVideoId } from '../services/youtube-live-stream-service';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
-import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
+import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
 import { extractYouTubeBadgeImages, normalizeYouTubeMessage } from '../utils/message-normalization';
 import { getValidMessageParts } from '../utils/message-parts';
@@ -75,7 +75,7 @@ type RawPlatformDataLoggingServiceLike = {
   logRawPlatformData: (platform: string, eventType: string, data: unknown, config: UnknownMap) => Promise<void>;
 };
 
-type RawPlatformDataLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap }) => RawPlatformDataLoggingServiceLike;
+type RawPlatformDataLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap; rawEventLogWriter?: RawEventSink | undefined }) => RawPlatformDataLoggingServiceLike;
 
 type ViewerServiceLike = {
   _activeStream?: { videoId?: string };
@@ -145,6 +145,7 @@ type YouTubeMultiStreamManagerLike = ReturnType<typeof createYouTubeMultiStreamM
 type HandlerMap = Record<string, (payload: unknown) => unknown>;
 
 type YouTubeDependencies = UnknownMap & {
+  rawEventLogWriter?: RawEventSink | undefined;
   logger: LoggerLike;
   USER_AGENTS?: string[] | undefined;
   timestampService?: unknown;
@@ -281,11 +282,12 @@ class YouTubePlatform extends EventEmitter {
         this.viewerService = dependencies.viewerService || null;
 
         const defaultRawPlatformDataLoggingDependencies = {
+            rawEventLogWriter: dependencies.rawEventLogWriter,
             logger: this.logger,
             config: this.config
         } as ConstructorParameters<typeof RawPlatformDataLoggingService>[0];
         this.rawPlatformDataLoggingService = dependencies.rawPlatformDataLoggingService || (dependencies.RawPlatformDataLoggingService
-            ? new dependencies.RawPlatformDataLoggingService({ logger: this.logger, config: this.config })
+            ? new dependencies.RawPlatformDataLoggingService({ logger: this.logger, config: this.config, rawEventLogWriter: dependencies.rawEventLogWriter })
             : new RawPlatformDataLoggingService(defaultRawPlatformDataLoggingDependencies));
 
         this.isInitialized = false;

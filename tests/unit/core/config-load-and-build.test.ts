@@ -91,6 +91,23 @@ describe('config load and build behavior', () => {
         });
     }
 
+    for (const scenario of [
+        { name: 'custom archive budgets', raw: { fileArchiveMaxBytes: '131072', fileArchiveMaxAgeDays: '7', rawArchiveMaxBytes: '262144', rawArchiveMaxAgeDays: '3' }, expected: [131072, 7, 262144, 3] },
+        { name: 'invalid archive budgets', raw: { fileArchiveMaxBytes: '9007199254740992', fileArchiveMaxAgeDays: '0', rawArchiveMaxBytes: '65535', rawArchiveMaxAgeDays: '36501' }, expected: [104857600, 14, 104857600, 2] }
+    ]) {
+        it(`normalizes and builds ${scenario.name} through the real INI boundary`, () => {
+            const raw = getRawTestConfig();
+            raw.logging = { ...raw.logging, ...scenario.raw };
+            fs.writeFileSync(tempConfigPath, ini.stringify(raw), 'utf8');
+            process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+            configModule._resetConfigForTesting();
+            const normalized = configModule.loadConfig().logging;
+            const built = configModule.config.logging;
+            expect([normalized.fileArchiveMaxBytes, normalized.fileArchiveMaxAgeDays, normalized.rawArchiveMaxBytes, normalized.rawArchiveMaxAgeDays]).toEqual(scenario.expected);
+            expect([built.file.archiveMaxBytes, built.file.archiveMaxAgeDays, built.rawArchiveMaxBytes, built.rawArchiveMaxAgeDays]).toEqual(scenario.expected);
+        });
+    }
+
     it('loads and builds configuration from ini file with debug enabled', async () => {
         const stdoutCapture = captureStdout();
         try {

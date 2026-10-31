@@ -3,7 +3,7 @@ import { createDisplayQueue, DisplayQueue } from '../../src/obs/display-queue';
 import type { createGuiTransportService } from '../../src/services/gui/gui-transport-service';
 import { EventEmitter } from 'node:events';
 import { mkdtempSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ensureSecrets } from '../../src/utils/secret-manager';
@@ -36,7 +36,7 @@ type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
 const buildMainConfig = (overrides: Parameters<typeof createConfigFixture>[0] = {}) => createConfigFixture({
   ...overrides,
   general: { envFileReadEnabled: false, envFileWriteEnabled: false, viewerCountPollingIntervalMs: 0, ...overrides.general },
-  logging: { file: { enabled: false, level: 'warn', directory: '/synthetic-unused', maxBytes: 20971520, maxQueueBytes: 2097152 } },
+  logging: { file: { enabled: false, level: 'warn', directory: '/synthetic-unused', maxBytes: 20971520, maxQueueBytes: 2097152, archiveMaxBytes: 104857600, archiveMaxAgeDays: 14 } },
   obs: { enabled: false, ttsChatEnabled: false, ttsNotificationsEnabled: false, ...overrides.obs },
   twitch: { enabled: false, ...overrides.twitch }, youtube: { enabled: false, ...overrides.youtube }, tiktok: { enabled: false, ...overrides.tiktok },
   gui: { enableDock: false, enableOverlay: false, enableOperator: false, enableNotifications: false, port: 0, ...overrides.gui },
@@ -100,6 +100,19 @@ afterEach(async () => {
 });
 
 describe('main startup using production owners', () => {
+
+  it('ignores a disabled StreamElements capture root beneath a regular file', async () => {
+    const h = buildOverrides();
+    const blocker = path.join(h.dir, 'synthetic-regular-file');
+    await writeFile(blocker, 'synthetic path blocker');
+    const config = buildMainConfig();
+    config.streamelements.enabled = false;
+    config.streamelements.dataLoggingEnabled = true;
+    config.streamelements.dataLoggingPath = path.join(blocker, 'capture');
+    expect((await main({ ...h.overrides, config })).success).toBe(true);
+    expect(h.runtime.isStarted).toBe(true);
+    await h.runtime.shutdown();
+  });
 
   it('configures the SDK before the actual supplied production dependency builder and preserves override arguments', async () => {
     const h = buildOverrides();

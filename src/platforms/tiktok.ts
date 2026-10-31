@@ -22,7 +22,7 @@ import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregato
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
 import { TIKTOK_EVENTS, TIKTOK_CONTROL_EVENTS } from './tiktok/events/transport-events';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
+import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
 import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 
 const PlatformEvents = {
@@ -123,6 +123,7 @@ type ConnectionFactoryLike = {
 };
 
 type TikTokDependencies = {
+    rawEventLogWriter?: RawEventSink | undefined;
     logger?: unknown;
     eventBus?: TikTokEventBus;
     notificationManager?: TikTokNotificationManager;
@@ -437,6 +438,7 @@ class TikTokPlatform extends EventEmitter {
         
         const RawPlatformDataLoggingServiceClass = dependencies.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
         const rawPlatformDataLoggingOptions: RawPlatformDataLoggingOptions = {
+            rawEventLogWriter: dependencies.rawEventLogWriter,
             config: {
                 ...(typeof this.config.dataLoggingPath === 'string' ? { dataLoggingPath: this.config.dataLoggingPath } : {})
             }

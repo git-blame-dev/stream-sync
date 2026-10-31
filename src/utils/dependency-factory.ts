@@ -188,6 +188,10 @@ class DependencyFactory {
         }
     }
 
+    createStreamelementsDependencies(_config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
+        return { ...options, logger: options.logger ?? this.createValidatedLogger('streamelements') };
+    }
+
     createTwitchDependencies(config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
         this._validateConfiguration(config, 'Twitch');
         this._validateOptions(options);

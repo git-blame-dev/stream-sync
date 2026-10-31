@@ -1,3 +1,4 @@
+import { RawEventLogWriter } from './services/RawEventLogWriter';
 import type { BuiltConfig } from './core/types/config-types';
 import { createEventBus } from './core/EventBus';
 import { buildLoggingConfig } from './core/config-builders';
@@ -251,7 +252,8 @@ function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
         createYoutubeInnertubeService: factory.createYoutubeInnertubeService.bind(factory),
         createYoutubeDependencies: factory.createYoutubeDependencies.bind(factory),
         createTiktokDependencies: factory.createTiktokDependencies.bind(factory),
-        createTwitchDependencies: factory.createTwitchDependencies.bind(factory)
+        createTwitchDependencies: factory.createTwitchDependencies.bind(factory),
+        createStreamelementsDependencies: factory.createStreamelementsDependencies.bind(factory)
     };
 }
 
@@ -878,7 +880,17 @@ async function main(overrides: MainOverrides = {}) {
             dependencies.innertubeService = innertubeService;
         }
 
+        const rawEventLogWriter = new RawEventLogWriter({
+            directories: [config.tiktok, config.twitch, config.youtube, config.streamelements]
+                .filter(platform => platform.enabled && platform.dataLoggingEnabled && platform.dataLoggingPath)
+                .map(platform => platform.dataLoggingPath!),
+            archiveMaxBytes: config.logging.rawArchiveMaxBytes,
+            archiveMaxAgeDays: config.logging.rawArchiveMaxAgeDays
+        });
+        construction.push(() => rawEventLogWriter.close());
+        dependencies.rawEventLogWriter = rawEventLogWriter;
         const sharedPlatformDependencies: Record<string, unknown> = {
+            rawEventLogWriter,
             innertubeService,
             logger,
             notificationManager,

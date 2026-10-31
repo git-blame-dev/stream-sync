@@ -14,7 +14,7 @@ import {
 type LogData = unknown;
 type LogEntry = { runId: string; timestamp: string; level: LogLevel; message: string; source: string; data: JsonLogValue; dataText: string };
 type Destination = 'console' | 'file';
-type OutputConfig = { enabled?: boolean; level?: LogThreshold; directory?: string; filename?: string; maxBytes?: number; maxQueueBytes?: number };
+type OutputConfig = { enabled?: boolean; level?: LogThreshold; directory?: string; filename?: string; maxBytes?: number; maxQueueBytes?: number; archiveMaxBytes?: number; archiveMaxAgeDays?: number };
 type LoggingConfig = { console?: OutputConfig; file?: OutputConfig; [key: string]: unknown };
 type LoggingOptions = { operatorCaptureEnabled?: boolean };
 type LoggerOutputter = { write(logEntry: LogEntry): void };
@@ -188,7 +188,9 @@ class FileOutputter {
         const destination = { logDir: config.directory,
             ...(config.filename !== undefined ? { filename: config.filename } : {}),
             ...(config.maxBytes !== undefined ? { maxBytes: config.maxBytes } : {}),
-            ...(config.maxQueueBytes !== undefined ? { maxQueueBytes: config.maxQueueBytes } : {}) };
+            ...(config.maxQueueBytes !== undefined ? { maxQueueBytes: config.maxQueueBytes } : {}),
+            ...(config.archiveMaxBytes !== undefined ? { archiveMaxBytes: config.archiveMaxBytes } : {}),
+            ...(config.archiveMaxAgeDays !== undefined ? { archiveMaxAgeDays: config.archiveMaxAgeDays } : {}) };
         try {
             if (this.fileAppender) this.fileAppender.reconfigure(destination);
             else this.fileAppender = new LineFileAppender(destination);

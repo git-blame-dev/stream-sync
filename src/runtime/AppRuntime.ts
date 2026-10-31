@@ -187,6 +187,7 @@ type RuntimeNeuralTtsProcessManager = {
 
 type RuntimeDependencies = RuntimeRecord & {
     onShutdownComplete?: () => void;
+    rawEventLogWriter?: { close: () => Promise<void> };
     logging: AppLogger;
     twitchAuth?: RuntimeTwitchAuth | null;
     lazyInnertube?: unknown;
@@ -811,6 +812,8 @@ class AppRuntime {
         // Stop only the acquired manager; do not create a process owner during teardown.
         await this.runTeardownStep(mode, 'stop neural TTS process manager', () => this.neuralTtsProcessManager?.stop?.());
         await this.runTeardownStep(mode, 'disconnect platforms', () => this.platformLifecycleService.disconnectAll());
+        await this.runTeardownStep(mode, 'drain raw capture', () => this.dependencies.rawEventLogWriter
+            ? withTimeout(this.dependencies.rawEventLogWriter.close(), 10000, 'Raw capture drain') : undefined);
         await this.runTeardownStep(mode, 'disconnect OBS', async () => {
             if (this.obsEventService) {
                 await this.obsEventService.disconnect?.();

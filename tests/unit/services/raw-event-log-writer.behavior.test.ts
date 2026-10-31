@@ -25,7 +25,7 @@ describe("RawEventLogWriter behavior", () => {
         'before token=synthetic-token,"password":"synthetic first second" after',
         'before session_token=synthetic-token,"cookie":"synthetic cookie with spaces" after',
       ];
-      const result = await new RawEventLogWriter().writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: { messages } });
+      const result = await new RawEventLogWriter({ directories: [tempDir] }).writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: { messages } });
       const text = await fs.readFile(result.filePath, "utf8");
       const captured: string[] = JSON.parse(text).payload.messages;
       expect(text).not.toMatch(/synthetic|secret with spaces|first second|remaining|and tail/);
@@ -43,7 +43,7 @@ describe("RawEventLogWriter behavior", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-safe-"));
     try {
       const ordinary = "https://example.invalid/watch#section=details";
-      const result = await new RawEventLogWriter().writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: {
+      const result = await new RawEventLogWriter({ directories: [tempDir] }).writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: {
         standalone: "https://example.invalid/callback#access_token=synthetic-access-secret&token_type=Bearer",
         embedded: 'before "https://example.invalid/callback#id_token=synthetic-id-secret&state=test" after',
         ordinary,
@@ -66,7 +66,7 @@ describe("RawEventLogWriter behavior", () => {
         "(https://example.invalid/watch?client_secret=synthetic-first);synthetic-ambiguous]"
       ];
       const ordinary = "https://example.invalid/watch?v=test,part(two)&other=three%2Cfour";
-      const result = await new RawEventLogWriter().writeRawEvent({ dataLoggingPath: tempDir, platform: "youtube", eventType: "chat", payload: { urls, ordinary } });
+      const result = await new RawEventLogWriter({ directories: [tempDir] }).writeRawEvent({ dataLoggingPath: tempDir, platform: "youtube", eventType: "chat", payload: { urls, ordinary } });
       const text = await fs.readFile(result.filePath, "utf8");
       expect(text).not.toContain("synthetic-");
       expect(JSON.parse(text).payload.ordinary).toBe(ordinary);
@@ -85,7 +85,7 @@ describe("RawEventLogWriter behavior", () => {
         'before {"client\\u005fsecret":"synthetic-encoded-label-secret"} after',
         "before {'client_secret':'synthetic single quoted secret'} after"
       ];
-      const result = await new RawEventLogWriter().writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: { messages } });
+      const result = await new RawEventLogWriter({ directories: [tempDir] }).writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload: { messages } });
       const text = await fs.readFile(result.filePath, "utf8");
       expect(text).not.toContain("synthetic");
       const captured: string[] = JSON.parse(text).payload.messages;
@@ -105,7 +105,7 @@ describe("RawEventLogWriter behavior", () => {
   it("redacts credentials without losing raw chat and ordinary URLs", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-safe-"));
     try {
-      const writer = new RawEventLogWriter();
+      const writer = new RawEventLogWriter({ directories: [tempDir] });
       const result = await writer.writeRawEvent({ dataLoggingPath: tempDir, platform: "youtube", eventType: "chat", payload: {
         message: "test chat Bearer synthetic-bearer-secret",
         nested: { access_token: "synthetic-access-secret", "Client-Secret": "synthetic-client-secret", cookie: "synthetic-cookie-secret" },
@@ -129,7 +129,7 @@ describe("RawEventLogWriter behavior", () => {
       payload.self = payload;
       Object.defineProperty(payload, "getter", { enumerable: true, get() { throw new Error("synthetic-getter-secret"); } });
       payload.toJSON = () => { throw new Error("synthetic-tojson-secret"); };
-      const writer = new RawEventLogWriter();
+      const writer = new RawEventLogWriter({ directories: [tempDir] });
       const result = await writer.writeRawEvent({ dataLoggingPath: tempDir, platform: "twitch", eventType: "chat", payload });
       const text = await fs.readFile(result.filePath, "utf8");
       expect(Buffer.byteLength(text)).toBeLessThanOrEqual(65_536);
@@ -145,7 +145,7 @@ describe("RawEventLogWriter behavior", () => {
   it("rejects every platform outside the exact production filename contract before creating directories", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-safe-"));
     try {
-      const writer = new RawEventLogWriter();
+      const writer = new RawEventLogWriter({ directories: [tempDir] });
       for (const platform of ["../escape", "foo/bar", "foo\\bar", "youtube\0", "YouTube", "unknown"]) {
         await expect(writer.writeRawEvent({ dataLoggingPath: path.join(tempDir, "absent"), platform, eventType: "chat", payload: {} })).rejects.toThrow("Unsupported raw logging platform");
       }
@@ -163,7 +163,7 @@ describe("RawEventLogWriter behavior", () => {
       const many = Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => "🦄".repeat(1000)));
       const polluted = Object.create({ toJSON() { throw new Error("synthetic-prototype-secret"); } });
       Object.defineProperty(polluted, "__proto__", { enumerable: true, value: { message: "test own proto" } });
-      const writer = new RawEventLogWriter();
+      const writer = new RawEventLogWriter({ directories: [tempDir] });
       for (const payload of [{ deep, proxy, wide, polluted }, many, 2n ** 1000n, undefined]) {
         const result = await writer.writeRawEvent({ dataLoggingPath: tempDir, platform: "youtube", eventType: "test", payload });
         const lines = (await fs.readFile(result.filePath, "utf8")).trim().split("\n");
@@ -180,8 +180,8 @@ describe("RawEventLogWriter behavior", () => {
   it("keeps filesystem failure diagnostics generic and supports relative configured roots", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-safe-"));
     try {
-      const writer = new RawEventLogWriter();
       const fileRoot = path.join(tempDir, "synthetic-private-path");
+      const writer = new RawEventLogWriter({ directories: [tempDir, fileRoot] });
       await fs.writeFile(fileRoot, "test fixture");
       await expect(writer.writeRawEvent({ dataLoggingPath: fileRoot, platform: "twitch", eventType: "chat", payload: {} })).rejects.toThrow("Raw event capture write failed");
       const relativeRoot = path.relative(process.cwd(), tempDir);
@@ -196,7 +196,7 @@ describe("RawEventLogWriter behavior", () => {
   });
   it("writes standard platform payloads as newline-delimited raw event entries", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-events-"));
-    const writer = new RawEventLogWriter();
+    const writer = new RawEventLogWriter({ directories: [tempDir] });
     const payload = { type: "follow", data: { displayName: "test-follower" } };
 
     try {
@@ -228,7 +228,7 @@ describe("RawEventLogWriter behavior", () => {
 
   it("preserves the YouTube unknown renderer filename", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-events-"));
-    const writer = new RawEventLogWriter();
+    const writer = new RawEventLogWriter({ directories: [tempDir] });
 
     try {
       await writer.writeRawEvent({
@@ -248,7 +248,7 @@ describe("RawEventLogWriter behavior", () => {
   it("creates nested raw event log directories before writing", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-events-"));
     const nestedLogDir = path.join(tempDir, "nested", "raw-events");
-    const writer = new RawEventLogWriter();
+    const writer = new RawEventLogWriter({ directories: [nestedLogDir] });
 
     try {
       await writer.writeRawEvent({

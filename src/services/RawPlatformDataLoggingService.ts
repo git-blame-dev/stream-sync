@@ -10,10 +10,12 @@ type LoggingConfig = {
     dataLoggingPath?: string;
 };
 
+export type RawEventSink = Pick<RawEventLogWriter, 'writeRawEvent' | 'resolveLogFileName'>;
+
 type LoggingDependencies = {
     logger?: LoggerLike;
     config?: LoggingConfig;
-    rawEventLogWriter?: Pick<RawEventLogWriter, 'writeRawEvent' | 'resolveLogFileName'>;
+    rawEventLogWriter?: RawEventSink | undefined;
 };
 
 type PlatformLoggingConfig = {
@@ -45,7 +47,7 @@ class RawPlatformDataLoggingService {
         if (this.config.dataLoggingPath !== undefined) {
             this.dataLoggingPath = this.config.dataLoggingPath;
         }
-        this.rawEventLogWriter = dependencies.rawEventLogWriter ?? new RawEventLogWriter();
+        this.rawEventLogWriter = dependencies.rawEventLogWriter ?? new RawEventLogWriter({ directories: this.dataLoggingPath ? [this.dataLoggingPath] : [] });
     }
 
     async logRawPlatformData(platform: string, eventType: string, data: unknown, platformConfig: PlatformLoggingConfig = {}): Promise<void> {

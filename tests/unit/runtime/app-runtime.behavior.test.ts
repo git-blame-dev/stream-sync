@@ -17,6 +17,8 @@ import { join } from 'node:path';
 import { createDonationSpamDetection, createSpamDetectionConfig } from '../../../src/utils/spam-detection';
 import { noOpLogger } from '../../helpers/mock-factories';
 import { AppRuntime } from '../../../src/runtime/AppRuntime';
+import { RawEventLogWriter } from '../../../src/services/RawEventLogWriter';
+import { promises as nativeFs } from 'node:fs';
 import { PlatformEvents } from '../../../src/interfaces/PlatformEvents';
 import { CommandCooldownService } from '../../../src/services/CommandCooldownService';
 import { PlatformLifecycleService } from '../../../src/services/PlatformLifecycleService';
@@ -47,6 +49,36 @@ const base = { userId: 'synthetic-user', timestamp: '2024-01-01T00:00:00.000Z' }
 const gift = { ...base, id: 'synthetic-gift', giftType: 'Synthetic gift', giftCount: 1, amount: 5, currency: 'USD' };
 
 describe('AppRuntime with production main owners', () => {
+  it('drains real accepted raw capture before OBS retirement and shutdown completion', async () => {
+    const raw = new RawEventLogWriter({ directories: [h.dir] });
+    h.runtime.dependencies.rawEventLogWriter = raw;
+    const order: string[] = [];
+    h.runtime.dependencies.onShutdownComplete = () => { order.push('complete'); };
+    const nativeAppend = nativeFs.appendFile;
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const append = spyOn(nativeFs, 'appendFile').mockImplementation(async (...args) => {
+      if (String(args[0]).endsWith('tiktok-data-log.ndjson')) { entered(); await gate; }
+      await nativeAppend(...args);
+      if (String(args[0]).endsWith('tiktok-data-log.ndjson')) order.push('capture appended');
+    });
+    const disconnect = spyOn(h.socket, 'disconnect').mockImplementation(async () => {
+      order.push('OBS retired'); h.socket.emit('ConnectionClosed');
+    });
+    const pending = raw.writeRawEvent({ dataLoggingPath: h.dir, platform: 'tiktok', eventType: 'chat', payload: { text: 'synthetic capture' } });
+    let shutdown: Promise<void> | undefined;
+    try {
+      await started;
+      shutdown = h.runtime.shutdown();
+      // Yield one event-loop turn while the external filesystem seam remains held.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(order).toEqual([]);
+      release(); await pending; await shutdown;
+      expect(order).toEqual(['capture appended', 'OBS retired', 'complete']);
+    } finally { release(); await pending; await shutdown; append.mockRestore(); disconnect.mockRestore(); }
+  });
+
   it('waits for the logger flush after resource retirement and tolerates a failed sink', async () => {
     let release!: () => void;
     let entered!: () => void;

@@ -1,3 +1,4 @@
+import { FILE_LOG_LIMITS, OPERATIONAL_RETENTION, RAW_RETENTION } from './logger/file-policy';
 import type { ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
 import { GUI_CONFIG_DEFAULTS } from './constants';
 
@@ -167,8 +168,12 @@ const CONFIG_SCHEMA = {
         consoleLevel: { type: 'string', userDefined: true },
         fileLevel: { type: 'string', userDefined: true },
         fileLoggingEnabled: { type: 'boolean', userDefined: true },
-        fileMaxBytes: { type: 'number', default: 20971520, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
-        fileQueueMaxBytes: { type: 'number', default: 2097152, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true }
+        fileMaxBytes: { type: 'number', default: FILE_LOG_LIMITS.maxBytes, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
+        fileQueueMaxBytes: { type: 'number', default: FILE_LOG_LIMITS.maxQueueBytes, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
+        fileArchiveMaxBytes: { type: 'number', default: OPERATIONAL_RETENTION.archiveMaxBytes, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
+        fileArchiveMaxAgeDays: { type: 'number', default: OPERATIONAL_RETENTION.archiveMaxAgeDays, min: 1, max: 36500, integer: true },
+        rawArchiveMaxBytes: { type: 'number', default: RAW_RETENTION.archiveMaxBytes, min: 65536, max: Number.MAX_SAFE_INTEGER, integer: true },
+        rawArchiveMaxAgeDays: { type: 'number', default: RAW_RETENTION.archiveMaxAgeDays, min: 1, max: 36500, integer: true }
     },
 
     handcam: {

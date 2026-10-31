@@ -169,7 +169,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.errorHandler = createPlatformErrorHandler(logger, 'streamelements');
         this.logger = logger;
         this.eventBus = dependencies.eventBus || null;
-        this.rawEventLogWriter = dependencies.rawEventLogWriter || new RawEventLogWriter();
+        this.rawEventLogWriter = dependencies.rawEventLogWriter || new RawEventLogWriter({ directories: config.dataLoggingPath ? [config.dataLoggingPath] : [] });
         this.WebSocketCtor = dependencies.WebSocketCtor || resolveWebSocketConstructor(createRequire(__filename)('ws') as unknown);
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);

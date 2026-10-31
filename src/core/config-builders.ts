@@ -5,13 +5,18 @@ import { isLogThreshold } from './logger/levels';
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'warn' as LogThreshold },
-    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY, maxBytes: 20971520, maxQueueBytes: 2097152 }
+    file: { enabled: true, level: 'debug' as LogThreshold, directory: DEFAULTS.LOG_DIRECTORY, maxBytes: DEFAULTS.logging.fileMaxBytes, maxQueueBytes: DEFAULTS.logging.fileQueueMaxBytes, archiveMaxBytes: DEFAULTS.logging.fileArchiveMaxBytes, archiveMaxAgeDays: DEFAULTS.logging.fileArchiveMaxAgeDays },
+    rawArchiveMaxBytes: DEFAULTS.logging.rawArchiveMaxBytes, rawArchiveMaxAgeDays: DEFAULTS.logging.rawArchiveMaxAgeDays
 };
 
-function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null; fileMaxBytes?: number; fileQueueMaxBytes?: number }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
+function buildLoggingConfig(normalized: { logging?: { consoleLevel?: string | null; fileLevel?: string | null; fileLoggingEnabled?: boolean | null; fileMaxBytes?: number; fileQueueMaxBytes?: number; fileArchiveMaxBytes?: number; fileArchiveMaxAgeDays?: number; rawArchiveMaxBytes?: number; rawArchiveMaxAgeDays?: number }; general?: { debugEnabled?: boolean | null } }, options: { debugMode?: boolean } = {}) {
     const config = structuredClone(DEFAULT_LOGGING_CONFIG);
     const logging = normalized.logging || {};
     const general = normalized.general || {};
+    config.file.archiveMaxBytes = logging.fileArchiveMaxBytes ?? config.file.archiveMaxBytes;
+    config.file.archiveMaxAgeDays = logging.fileArchiveMaxAgeDays ?? config.file.archiveMaxAgeDays;
+    config.rawArchiveMaxBytes = logging.rawArchiveMaxBytes ?? config.rawArchiveMaxBytes;
+    config.rawArchiveMaxAgeDays = logging.rawArchiveMaxAgeDays ?? config.rawArchiveMaxAgeDays;
     config.file.maxBytes = logging.fileMaxBytes ?? config.file.maxBytes;
     config.file.maxQueueBytes = logging.fileQueueMaxBytes ?? config.file.maxQueueBytes;
 

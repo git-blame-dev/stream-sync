@@ -170,7 +170,7 @@ export class LineFileAppender {
         }
         const current = this.current!;
         if (current.bytes > 0 && (current.day !== batch.day || current.bytes + batch.bytes > maxBytes)) {
-            await this.rotate(file);
+            await this.rotate(file, current.bytes > maxBytes);
             await this.maintain(batch.destination);
             current.bytes = 0;
         }
@@ -189,8 +189,10 @@ export class LineFileAppender {
         }
     }
 
-    private async rotate(file: string): Promise<void> {
-        const archive = path.join(path.dirname(file), `archive-${archiveIdentity(path.basename(file))}.${Date.parse(getSystemTimestampISO())}.${randomUUID()}.log`);
+    private async rotate(file: string, preserve: boolean): Promise<void> {
+        const prefix = preserve ? 'preserved' : 'archive';
+        const archive = path.join(path.dirname(file), `${prefix}-${archiveIdentity(path.basename(file))}.${Date.parse(getSystemTimestampISO())}.${randomUUID()}.log`);
         await this.rename(file, archive);
+        if (preserve) report('[LineFileAppender] Preserved oversized existing log outside managed retention\n');
     }
 }

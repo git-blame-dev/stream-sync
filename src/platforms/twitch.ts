@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
+import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
 import { ConnectionStateFactory } from '../utils/platform-connection-state';
 import { createTwitchEventFactory } from './twitch/events/event-factory';
 import { normalizeTimestampValue } from './twitch/events/event-normalizer';
@@ -118,6 +118,7 @@ type RawPlatformDataLoggingServiceLike = {
 type RawPlatformDataLoggingServiceConstructor = new (options: {
     logger: LoggerLike;
     config: TwitchConfig;
+    rawEventLogWriter?: RawEventSink | undefined;
 }) => RawPlatformDataLoggingServiceLike;
 
 type SelfMessageDetectionServiceLike = {
@@ -157,6 +158,7 @@ type TwitchFactoryMethod = keyof TwitchEventFactory;
 type TwitchStandardEventType = 'follow' | 'paypiggy' | 'giftpaypiggy' | 'raid' | 'gift';
 
 type TwitchPlatformDependencies = Record<string, unknown> & {
+    rawEventLogWriter?: RawEventSink | undefined;
     TwitchEventSub?: TwitchEventSubConstructor;
     logger?: LoggerLike;
     twitchAuth?: TwitchAuthLike;
@@ -326,6 +328,7 @@ class TwitchPlatform extends EventEmitter {
 
         const RawPlatformDataLoggingServiceClass = dependencies.RawPlatformDataLoggingService || (RawPlatformDataLoggingService as unknown as RawPlatformDataLoggingServiceConstructor);
         this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({
+            rawEventLogWriter: dependencies.rawEventLogWriter,
             logger: this.logger,
             config: this.config
         });
@@ -395,6 +398,7 @@ class TwitchPlatform extends EventEmitter {
             this.eventSub = new this.TwitchEventSub({ ...this.config, broadcasterId }, {
                 logger: this.logger,
                 twitchAuth: this.twitchAuth,
+                rawEventLogWriter: this.dependencies.rawEventLogWriter,
                 axios: this.dependencies?.axios,
                 WebSocketCtor: this.dependencies?.WebSocketCtor
             });

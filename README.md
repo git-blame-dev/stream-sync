@@ -93,6 +93,8 @@ subscriber alerts; Twitch follows use the native Twitch integration. Optional
 `dataLoggingEnabled` and `dataLoggingPath` configure local raw-event logging
 (disabled by default, with `./logs` as the default directory).
 
+Operational logs rotate at 20 MiB or a UTC date change. New plain-text archives have a 100 MiB budget and 14-day age limit, configured under `[logging]`. Opt-in raw capture rotates each file at 20 MiB and shares a 100 MiB archive budget per capture directory, with a two-day age limit. Retention runs on first use and rotation; idle directories are not continuously expired. Existing historical archives and oversized inherited active files are preserved outside these budgets. Emergency logs keep a 1 MiB active file and one backup; oversized inherited history is preserved separately. Unhandled rejections are reported through the emergency logger and terminate with exit code 1.
+
 Prompted credentials are persisted only when their representation roundtrips through the supported env-file loaders. Values with dollar expansion, backslashes, control characters or all three quoting delimiters remain available for the current process, with a notice that they were not persisted. Supply those values through your process environment for subsequent launches.
 
 ```bash

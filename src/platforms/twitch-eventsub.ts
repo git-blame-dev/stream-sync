@@ -3,7 +3,7 @@ import type { AxiosResponse } from 'axios';
 import { EventEmitter } from 'node:events';
 import * as WebSocketModule from 'ws';
 import { secrets } from '../core/secrets';
-import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
+import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
 import { validateLoggerInterface } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../utils/timestamp';
@@ -51,7 +51,7 @@ type RawPlatformDataLoggingServiceLike = {
     logRawPlatformData: (platform: string, eventType: string, data: unknown, platformConfig?: unknown) => Promise<void>;
 };
 
-type RawPlatformDataLoggingServiceCtor = new (dependencies: { logger: unknown; config: Record<string, unknown> }) => RawPlatformDataLoggingServiceLike;
+type RawPlatformDataLoggingServiceCtor = new (dependencies: { logger: unknown; config: Record<string, unknown>; rawEventLogWriter?: RawEventSink | undefined }) => RawPlatformDataLoggingServiceLike;
 
 type SubscriptionDefinition = {
     name: string;
@@ -180,7 +180,7 @@ class TwitchEventSub extends EventEmitter {
     private initialization: Promise<void> | null = null;
     private readonly lifetime = new AbortController();
 
-    constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
+    constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> & { rawEventLogWriter?: RawEventSink | undefined } = {}) {
         super();
 
         this.config = config;
@@ -228,7 +228,7 @@ class TwitchEventSub extends EventEmitter {
         const RawPlatformDataLoggingServiceClass: RawPlatformDataLoggingServiceCtor = typeof dependencies.RawPlatformDataLoggingService === 'function'
             ? dependencies.RawPlatformDataLoggingService as RawPlatformDataLoggingServiceCtor
             : RawPlatformDataLoggingService as unknown as RawPlatformDataLoggingServiceCtor;
-        this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({ logger: this.logger, config: this.config });
+        this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({ logger: this.logger, config: this.config, rawEventLogWriter: dependencies.rawEventLogWriter });
 
         this.eventRouter = createTwitchEventSubEventRouter({
             config: this.config,

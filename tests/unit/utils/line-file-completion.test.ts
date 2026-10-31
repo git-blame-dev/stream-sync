@@ -80,3 +80,17 @@ test('appends after rotating inherited history without depending on a metadata t
         expect(await readFile(path.join(directory, archive), 'utf8')).toBe('prior\n');
     } finally { await writer.flush(); stamp.mockRestore(); }
 });
+
+test('preserves oversized inherited active history outside the new archive budget', async () => {
+    const directory = await root();
+    const { writeFile, readFile, readdir } = await import('node:fs/promises');
+    const inherited = 'synthetic inherited history exceeds the active limit';
+    await writeFile(path.join(directory, 'runtime.log'), inherited);
+    const writer = new LineFileAppender({ logDir: directory, maxBytes: 14, archiveMaxBytes: 5 });
+    await writer.writeConfirmed('runtime.log', 'new');
+    await writer.flush();
+    expect(await readFile(path.join(directory, 'runtime.log'), 'utf8')).toBe('new\n');
+    const preserved = (await readdir(directory)).filter(name => name.startsWith('preserved-'));
+    expect(preserved).toHaveLength(1);
+    expect(await readFile(path.join(directory, preserved[0]!), 'utf8')).toBe(inherited);
+});

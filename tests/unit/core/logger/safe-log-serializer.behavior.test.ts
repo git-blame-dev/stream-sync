@@ -139,7 +139,7 @@ describe("safe log serializer behavior", () => {
     test("RAW opt-in retains provider chat while independently redacting credential keys", async () => {
         const directory = await fs.mkdtemp(path.join(tmpdir(), 'serializer-raw-policy-'));
         try {
-            const result = await new RawEventLogWriter().writeRawEvent({
+            const result = await new RawEventLogWriter({ directories: [directory] }).writeRawEvent({
                 dataLoggingPath: directory, platform: 'twitch', eventType: 'chat',
                 payload: { message: 'synthetic ordinary chat', authorization: 'Basic synthetic-raw-credential', password: 'synthetic-raw-password' },
             });
