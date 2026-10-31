@@ -52,13 +52,6 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
     }
 
     const connect = async (_handlers: unknown) => {
-        platform.logger.debug('connect() invoked', 'tiktok', {
-            hasConnectingPromise: !!platform.connectingPromise,
-            connectionActive: !!platform.connectionActive,
-            retryLock: !!platform.retryLock,
-            isConnecting: platform.connection?.isConnecting || false,
-            isConnected: platform.connection?.isConnected || false
-        });
 
         if (platform.connection && platform.connection.isConnecting && !platform.connectionActive) {
             platform.cleanupEventListeners();
@@ -78,7 +71,6 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
         }
 
         if (platform.connection && (platform.connection.isConnecting || platform.connection.isConnected)) {
-            platform.logger.debug('Connection attempt skipped: already connecting or connected.', 'tiktok');
             return;
         }
 
@@ -92,7 +84,6 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
 
             try {
                 platform.connectionStateManager.markConnecting();
-                platform.logger.debug('Checking TikTok connection...', 'tiktok');
 
                 platform.connection = platform.connectionStateManager.ensureConnection();
                 platform.setupEventListeners();

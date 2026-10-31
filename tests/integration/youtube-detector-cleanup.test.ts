@@ -64,7 +64,7 @@ test('cleanup and reporting faults cannot skip captured consumers or initializat
     expect(platform.isInitialized).toBe(false);
 });
 
-test('joins asynchronous detector and viewer cleanup despite debug reporting failure', async () => {
+test('joins captured asynchronous cleanup without routine debug reporting', async () => {
     const detector = deferred();
     const viewer = deferred();
     const viewerFinished = deferred();
@@ -74,12 +74,13 @@ test('joins asynchronous detector and viewer cleanup despite debug reporting fai
         viewerService: { cleanup: async () => { await viewer.promise; viewerFinished.resolve(); } } });
     platform.logger = { ...noOpLogger, debug: () => { throw new Error('synthetic debug reporting failure'); } };
     let settled = false;
-    const cleanup = platform.cleanup().catch(error => { settled = true; return error as Error; });
+    const cleanup = platform.cleanup().then(() => { settled = true; });
     platform.viewerService = { cleanup: () => { replacementCleanups++; } };
     viewer.resolve();
     await viewerFinished.promise;
     expect(settled).toBe(false);
     detector.resolve();
-    expect(await cleanup).toEqual(new Error('synthetic debug reporting failure'));
+    await cleanup;
+    expect(settled).toBe(true);
     expect(replacementCleanups).toBe(0);
 });

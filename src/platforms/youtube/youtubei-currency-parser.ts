@@ -280,12 +280,12 @@ class YouTubeiCurrencyParser {
         };
     }
 
-    private _logUnknownCurrency(originalString: unknown, giftData: Record<string, unknown> = {}): void {
+    private _logUnknownCurrency(originalString: unknown): void {
         try {
             this.logger.warn(
-                `Unknown currency format detected: "${String(originalString)}"`,
+                'Unknown currency format detected',
                 'youtubei-currency',
-                { originalString, giftData }
+                { inputType: typeof originalString }
             );
         } catch (error) {
             const wrappedError = error instanceof Error ? error : new Error(String(error));

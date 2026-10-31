@@ -338,7 +338,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                         state.ws = socket;
                         state.sessionId = id;
                         state._isConnected = true;
-                        try { state.logger?.info?.('EventSub session established', 'twitch', { hasSessionId: true, keepaliveTimeout: welcome?.keepalive_timeout_seconds ?? null }); }
+                        try { state.logger?.debug?.('EventSub session established', 'twitch', { hasSessionId: true, keepaliveTimeout: welcome?.keepalive_timeout_seconds ?? null }); }
                         catch (error) { report(state, 'EventSub session reporting failed', error, 'eventsub-observer'); }
                         state.reconnectUrl = null;
                         resetWatchdog();

@@ -384,11 +384,6 @@ class TwitchPlatform extends EventEmitter {
 
     async initializeEventSub(broadcasterId: string): Promise<void> {
         this.dataRegistration++;
-        this.logger.debug('initializeEventSub called', 'twitch', {
-            authReady: this.twitchAuth?.isReady?.(),
-            hasTwitchAuth: !!this.twitchAuth,
-            broadcasterId
-        });
 
         if (!this.twitchAuth.isReady()) {
             throw new Error('Twitch authentication is not ready');
@@ -397,7 +392,6 @@ class TwitchPlatform extends EventEmitter {
         let instance: TwitchEventSubLike | null = null;
         const generation = this.initializationGeneration;
         try {
-            this.logger.debug('Creating TwitchEventSub instance...', 'twitch');
             this.eventSub = new this.TwitchEventSub({ ...this.config, broadcasterId }, {
                 logger: this.logger,
                 twitchAuth: this.twitchAuth,
@@ -427,10 +421,7 @@ class TwitchPlatform extends EventEmitter {
                 if (this.eventSub === instance && this.initializationGeneration === generation && !this.isPlannedDisconnection) return callback(data);
                 return undefined;
             }])));
-
-            this.logger.debug('TwitchEventSub instance created, calling initialize()...', 'twitch');
             await this.eventSub.initialize();
-            this.logger.debug('TwitchEventSub initialize() completed', 'twitch');
         } catch (error) {
             if (this.eventSub === instance && this.initializationGeneration === generation) {
                 this._clearEventSubWiringState();
@@ -467,10 +458,6 @@ class TwitchPlatform extends EventEmitter {
         this._clearEventSubWiringState();
 
         try {
-            this.logger.debug('Using centralized Twitch auth...', 'twitch', {
-                authReady: this.twitchAuth?.isReady?.(),
-                hasTwitchAuth: !!this.twitchAuth
-            });
             if (!this.twitchAuth.isReady()) {
                 throw new Error('Twitch authentication is not ready');
             }
@@ -483,20 +470,12 @@ class TwitchPlatform extends EventEmitter {
                 this.config,
                 () => this.eventSub
             ) as unknown as ViewerCountProviderLike;
-            this.logger.debug('Modular components initialized', 'twitch');
 
             const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel || '');
             if (!initializationIsCurrent()) return;
             this.broadcasterId = broadcasterId;
-
-            this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
             await this.initializeEventSub(broadcasterId);
             if (!initializationIsCurrent()) return;
-            this.logger.debug('EventSub initialization completed', 'twitch', {
-                eventSubExists: !!this.eventSub,
-                eventSubConnected: this.eventSub?.isConnected?.(),
-                eventSubActive: this.eventSub?.isActive?.()
-            });
 
             if (!this.eventSub) {
                 const error = new Error('Twitch EventSub initialization failed: connection not established');
@@ -533,13 +512,6 @@ class TwitchPlatform extends EventEmitter {
                 this._logPlatformError('EventSub subscriptions not active after initialization', error, 'platform-init');
                 throw error;
             }
-
-            this.logger.debug('Using EventSub for chat messages', 'twitch', {
-                username: this.config.username,
-                channel: this.config.channel
-            });
-
-            this.logger.info('Twitch platform initialized with EventSub WebSocket', 'twitch');
             this.isConnected = this.eventSub?.isActive?.() || false;
             this.isConnecting = false;
             if (this.recoveryInFlight) {
@@ -1310,8 +1282,6 @@ class TwitchPlatform extends EventEmitter {
     }
 
     handleStreamOnlineEvent(data: Record<string, unknown>): void {
-        this.logger.info('Stream went online, starting viewer count polling', 'twitch');
-
         this._logRawEvent('stream-online', data);
 
         const startedAt = normalizeTimestampValue(data?.startedAt);
@@ -1331,14 +1301,14 @@ class TwitchPlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
         this.initializeViewerCountProvider();
+        this.logger.info('Stream online', 'twitch');
     }
 
     handleStreamOfflineEvent(data: Record<string, unknown>): void {
-        this.logger.info('Stream went offline, stopping viewer count polling', 'twitch');
-
         this._logRawEvent('stream-offline', data);
 
-        if (!data?.timestamp) {
+        const timestamp = normalizeTimestampValue(data?.timestamp);
+        if (!timestamp) {
             this.errorHandler.handleEventProcessingError(
                 new Error('Stream offline event requires timestamp'),
                 'stream-offline',
@@ -1349,7 +1319,7 @@ class TwitchPlatform extends EventEmitter {
 
         const eventData = this.eventFactory.createStreamOfflineEvent({
             ...(data || {}),
-            timestamp: data.timestamp
+            timestamp
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
@@ -1360,6 +1330,7 @@ class TwitchPlatform extends EventEmitter {
                 this.errorHandler.handleCleanupError(error, 'twitch viewer count stop');
             }
         }
+        this.logger.info('Stream offline', 'twitch');
     }
 
     async sendMessage(message: string): Promise<void> {
@@ -1441,7 +1412,6 @@ class TwitchPlatform extends EventEmitter {
             this.isConnected = false;
             this.isConnecting = false;
             this.handlers = {};
-            this.logger.info('Twitch platform cleanup completed', 'twitch');
         } catch (error) {
             this.errorHandler.handleCleanupError(error, 'twitch resources');
         }
@@ -1568,7 +1538,6 @@ class TwitchPlatform extends EventEmitter {
 
     async getViewerCount(): Promise<number> {
         if (!this.viewerCountProvider) {
-            this.logger.debug('Viewer count provider not initialized, returning 0', 'twitch');
             return 0;
         }
 
@@ -1629,8 +1598,6 @@ class TwitchPlatform extends EventEmitter {
             } catch (error) {
                 this.errorHandler.handleEventProcessingError(error, type, payload);
             }
-        } else {
-            this.logger.debug(`No handler for twitch event type: ${type}`, 'twitch', { payloadType: handlerName });
         }
     }
 

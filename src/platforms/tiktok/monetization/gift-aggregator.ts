@@ -126,7 +126,7 @@ const normalizeRequiredPositive = (value: unknown, label: string): number => {
     const flushGiftAggregation = async (key: string): Promise<void> => {
         const aggregationData = platform.giftAggregation[key];
         if (!aggregationData) {
-            platform.logger.warn(`Gift aggregation data missing for key ${key}`, 'tiktok');
+            platform.logger.warn('Gift aggregation data missing before flush', 'tiktok');
             return;
         }
 
@@ -282,13 +282,6 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         const resolvedGiftImageUrl = typeof gift.giftImageUrl === 'string' ? gift.giftImageUrl.trim() : '';
 
         const key = JSON.stringify([userId, giftType, resolvedCurrency]);
-        const existingAggregation = platform.giftAggregation[key];
-        if (existingAggregation) {
-            platform.logger.debug(
-                `[TikTok Gift] Existing aggregation found for ${key}: count=${existingAggregation.totalCount}, hasTimer=${!!existingAggregation.timer}`,
-                'tiktok'
-            );
-        }
 
         if (!platform.giftAggregation[key]) {
             const initialState: TikTokGiftAggregationState = {
@@ -332,10 +325,6 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         const deltaCount = giftCount > previousCount ? giftCount - previousCount : 0;
 
         if (deltaCount <= 0) {
-            platform.logger.debug(
-                `[TikTok Gift] Ignoring duplicate gift event for ${key}: identity=${identityValue}, count=${giftCount}, previous=${previousCount}`,
-                'tiktok'
-            );
             return;
         }
 
@@ -359,13 +348,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
             aggregationState.giftImageUrl = resolvedGiftImageUrl;
         }
 
-        platform.logger.debug(
-            `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${aggregationState.totalCount}, delta=${deltaCount}, unitAmount=${unitAmount}`,
-            'tiktok'
-        );
-
         if (aggregationState.timer) {
-            platform.logger.debug(`[TikTok Gift] Clearing existing timer for ${key}`, 'tiktok');
             clearTimeoutFn(aggregationState.timer);
             aggregationState.timer = null;
         }

@@ -17,13 +17,11 @@ type UserAgentStats = {
 };
 
 class YouTubeUserAgentManager {
-    private logger: UserAgentLogger;
     private userAgents: string[];
     private currentIndex: number;
     private rotationCount: number;
 
-    constructor(logger: UserAgentLogger, options: UserAgentManagerOptions = {}) {
-        this.logger = logger;
+    constructor(_logger: UserAgentLogger, options: UserAgentManagerOptions = {}) {
         this.userAgents = Array.isArray(options.userAgents)
             ? options.userAgents.slice()
             : DEFAULT_HTTP_USER_AGENTS.slice();
@@ -67,12 +65,6 @@ class YouTubeUserAgentManager {
         if (previousIndex === this.userAgents.length - 1) {
             this.rotationCount++;
         }
-
-        this.logger.debug('User-Agent rotation', 'youtube', {
-            index: previousIndex,
-            agent: `${agent.substring(0, 50)}...`,
-            totalAgents: this.userAgents.length
-        });
 
         return agent;
     }

@@ -1,3 +1,5 @@
+import { YouTubeiCurrencyParser } from "../../../../../src/platforms/youtube/youtubei-currency-parser";
+import { createRecordingLogger } from "../../../../helpers/recording-logger";
 import { describe, test, expect } from "bun:test";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { getSyntheticFixture } from "../../../../helpers/platform-test-data";
@@ -10,6 +12,16 @@ import { normalizeYouTubeEvent } from "../../../../../src/platforms/youtube/even
 import { createYouTubeMonetizationParser } from "../../../../../src/platforms/youtube/monetization/monetization-parser.ts";
 
 describe("YouTube monetization parser", () => {
+  test("reports unknown currency without exposing provider display text", () => {
+    const logger = createRecordingLogger();
+    const parser = new YouTubeiCurrencyParser({ logger });
+    const result = parser.parse("synthetic-private-provider-text");
+    expect(result.success).toBe(false);
+    expect(logger.entries).toHaveLength(1);
+    expect(logger.entries[0]?.level).toBe("warn");
+    expect(JSON.stringify(logger.entries)).not.toContain("synthetic-private");
+  });
+
   const createGiftMessageViewItem = (overrides = {}) => ({
     item: {
       type: "GiftMessageView",

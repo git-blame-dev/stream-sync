@@ -459,7 +459,7 @@ describe("YouTubePlatform modern architecture", () => {
     );
   });
 
-  it("ignores gift redemption announcements with fallback logging", async () => {
+  it("silently ignores gift redemption announcements", async () => {
     const logger = createLogger();
     const { platform } = createPlatform({ logger });
 
@@ -476,24 +476,10 @@ describe("YouTubePlatform modern architecture", () => {
       },
     });
 
-    const debugCalls = getDebugCalls(logger);
-    const giftLog = debugCalls.find(({ message }) =>
-      message.includes(
-        "ignored gifted membership announcement for Unknown User",
-      ),
-    );
-    expect(giftLog).toBeTruthy();
-    if (!giftLog) {
-      throw new Error("Expected ignored gifted membership debug log");
-    }
-    expect(giftLog.metadata).toMatchObject({
-      action: "ignored_gifted_membership_announcement",
-      recipient: "Unknown User",
-      eventType: "LiveChatSponsorshipsGiftRedemptionAnnouncement",
-    });
+    expect(getDebugCalls(logger)).toEqual([]);
   });
 
-  it("logs renderer variants as ignored duplicates", async () => {
+  it("silently ignores duplicate renderer variants", async () => {
     const logger = createLogger();
     const { platform } = createPlatform({ logger });
 
@@ -510,19 +496,7 @@ describe("YouTubePlatform modern architecture", () => {
       },
     });
 
-    const debugCalls = getDebugCalls(logger);
-    const duplicateLog = debugCalls.find(({ message }) =>
-      message.includes("ignored duplicate LiveChatPaidMessageRenderer"),
-    );
-    expect(duplicateLog).toBeTruthy();
-    if (!duplicateLog) {
-      throw new Error("Expected duplicate renderer debug log");
-    }
-    expect(duplicateLog.metadata).toMatchObject({
-      action: "ignored_duplicate",
-      eventType: "LiveChatPaidMessageRenderer",
-      author: "testRenderer",
-    });
+    expect(getDebugCalls(logger)).toEqual([]);
   });
 
   it("catches async handler failures and logs error without unhandled rejection", async () => {

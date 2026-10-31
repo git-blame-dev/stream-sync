@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
 type TikTokConnection = NonNullable<InstanceType<typeof TikTokPlatform>["connection"]>;
@@ -80,6 +81,29 @@ describe("TikTokPlatform Error Handling", () => {
 
   afterEach(() => {
     restoreAllMocks();
+  });
+
+  test("rejects invalid events without exposing provider identities or content", async () => {
+    const logger = createRecordingLogger();
+    const platform = new TikTokPlatform(baseConfig, { ...baseDependencies, logger });
+    const emitted: unknown[] = [];
+    platform.on("platform:event", (event) => emitted.push(event));
+    try {
+      await platform.handleTikTokGift("synthetic-private-gift");
+      await platform.handleTikTokSocial("synthetic-private-social");
+      await platform.handleTikTokShare("synthetic-private-share");
+      const invalidIdentity = { user: { nickname: "synthetic-private-viewer" }, comment: "synthetic-private-content" };
+      await platform.handleTikTokFollow(invalidIdentity);
+      await platform.handleTikTokSocial(invalidIdentity);
+      await platform.handleTikTokShare(invalidIdentity);
+      expect(emitted).toEqual([]);
+      expect(logger.entries.filter(entry => entry.level === "warn")).toHaveLength(3);
+      expect(logger.entries.filter(entry => entry.level === "error")).toHaveLength(3);
+      expect(JSON.stringify(logger.entries)).not.toContain("synthetic-private");
+      expect(logger.entries.every(entry => entry.data && typeof entry.data === "object")).toBe(true);
+    } finally {
+      await platform.cleanup();
+    }
   });
 
   describe("logger contract", () => {

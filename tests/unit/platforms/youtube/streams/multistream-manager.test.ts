@@ -42,7 +42,6 @@ type MultiStreamPlatformFixture = {
     reason: string,
     options?: { requestImmediateRefresh?: boolean; source?: string },
   ) => Promise<void>;
-  _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
   _handleProcessingError: (message: string, error: unknown, category: string) => void;
   _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
   _handleError: (error: unknown, context: string) => void;
@@ -97,7 +96,6 @@ describe("YouTube multi-stream manager", () => {
         [string, string, { requestImmediateRefresh?: boolean; source?: string }?],
         Promise<void>
       >().mockResolvedValue(undefined),
-      _logMultiStreamStatus: createMockFn(),
       _handleProcessingError: createMockFn(),
       _handleConnectionErrorLogging: createMockFn(),
       _handleError: createMockFn(),
@@ -111,6 +109,31 @@ describe("YouTube multi-stream manager", () => {
 
     return platform;
   };
+
+  test("keeps polling healthy connected streams without routine logs", async () => {
+    const messages: string[] = [];
+    let checks = 0;
+    const platform = buildPlatform({
+      connectionManager: {
+        getConnectionCount: () => 1,
+        getAllVideoIds: () => ["synthetic-live"],
+        hasConnection: () => true,
+      },
+      getActiveYouTubeVideoIds: () => ["synthetic-live"],
+      getLiveVideoIds: async () => { checks++; return ["synthetic-live"]; },
+      logger: {
+        debug: message => { messages.push(message); },
+        info: message => { messages.push(message); },
+        warn: message => { messages.push(message); },
+      },
+    });
+    const manager = buildManager(platform);
+    await manager.checkMultiStream();
+    await manager.checkMultiStream();
+    expect(checks).toBe(2);
+    expect(platform.connectionManager.getAllVideoIds()).toEqual(["synthetic-live"]);
+    expect(messages).toEqual([]);
+  });
 
   test("attempts discovered candidates without publishing attachment success as domain discovery", async () => {
     const events: PlatformEventRecord[] = [];
@@ -276,15 +299,15 @@ describe("YouTube multi-stream manager", () => {
     test("keeps monitoring after the initial check fails", async () => {
       const initialError = new Error("stream detection failed");
       const platform = buildPlatform({
-        checkMultiStream: createMockFn(async () => {
-          throw initialError;
-        }),
+        getLiveVideoIds: async () => { throw initialError; },
       });
       const manager = buildManager(platform);
 
+      platform.checkMultiStream = manager.checkMultiStream;
       await expect(manager.startMonitoring()).resolves.toBeUndefined();
       expect(platform.monitoringInterval).not.toBeNull();
-      expect(platform._handleProcessingError).toHaveBeenCalledTimes(1);
+      expect(platform._handleError).toHaveBeenCalledTimes(1);
+      expect(platform._handleProcessingError).not.toHaveBeenCalled();
     });
   });
 
@@ -671,100 +694,4 @@ describe("YouTube multi-stream manager", () => {
     });
   });
 
-  describe("logStatus", () => {
-    test("logs ready and total connection counts", () => {
-      const detailCalls: string[] = [];
-      const platform = buildPlatform({
-        connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["s1", "s2"]),
-          hasConnection: createMockFn(() => true),
-        },
-        getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
-        logger: createLoggerFixture({
-          debug: (msg: string) => {
-            detailCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.logStatus();
-
-      expect(detailCalls.some((msg) => msg.includes("1 ready"))).toBe(true);
-      expect(detailCalls.some((msg) => msg.includes("2 total"))).toBe(true);
-    });
-
-    test("logs pending connections when includeDetails is true", () => {
-      const detailCalls: string[] = [];
-      const platform = buildPlatform({
-        connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["s1", "s2"]),
-          hasConnection: createMockFn(() => true),
-        },
-        getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
-        logger: createLoggerFixture({
-          debug: (msg: string) => {
-            detailCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.logStatus(true);
-
-      expect(
-        detailCalls.some((msg) => msg.includes("Waiting for stream to start")),
-      ).toBe(true);
-    });
-
-    test("logs active streams list when includeActiveStreamsList is true", () => {
-      const detailCalls: string[] = [];
-      const platform = buildPlatform({
-        connectionManager: {
-          getConnectionCount: createMockFn(() => 1),
-          getAllVideoIds: createMockFn(() => ["s1"]),
-          hasConnection: createMockFn(() => true),
-        },
-        getActiveYouTubeVideoIds: createMockFn(() => ["s1"]),
-        logger: createLoggerFixture({
-          debug: (msg: string) => {
-            detailCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.logStatus(false, true);
-
-      expect(detailCalls.some((msg) => msg.includes("Active streams"))).toBe(
-        true,
-      );
-    });
-
-    test("logs no connections message when none exist", () => {
-      const debugCalls: string[] = [];
-      const platform = buildPlatform({
-        connectionManager: {
-          getConnectionCount: createMockFn(() => 0),
-          getAllVideoIds: createMockFn(() => []),
-          hasConnection: createMockFn(() => false),
-        },
-        getActiveYouTubeVideoIds: createMockFn(() => []),
-        logger: createLoggerFixture({
-          debug: (msg: string) => {
-            debugCalls.push(msg);
-          },
-        }),
-      });
-      const manager = buildManager(platform);
-
-      manager.logStatus();
-
-      expect(
-        debugCalls.some((msg) => msg.includes("No YouTube connections")),
-      ).toBe(true);
-    });
-  });
 });

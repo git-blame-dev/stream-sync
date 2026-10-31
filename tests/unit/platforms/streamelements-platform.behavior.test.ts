@@ -310,7 +310,34 @@ describe("StreamElementsPlatform behavior", () => {
     expect(asMock(platform.handlePing).mock.calls).toHaveLength(1);
   });
 
-  it("summarizes inbound websocket messages without routine raw payload logging", () => {
+  it("reports authentication only after confirmation and keeps healthy heartbeat traffic silent", () => {
+    useFakeTimers();
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
+    const socket = new MockWebSocket("wss://synthetic.invalid");
+    socket.readyState = MockWebSocket.OPEN;
+    setPrivateField(platform, "connection", socket);
+    logger.entries.length = 0;
+    try {
+      platform.handleConnectionOpen();
+      expect(socket.sent.map(payload => JSON.parse(payload).type)).toEqual(["auth"]);
+      expect(logger.entries.filter(entry => entry.level === "info")).toEqual([]);
+      platform.handleMessage(Buffer.from(JSON.stringify({ type: "auth", success: true })));
+      expect(logger.entries.filter(entry => entry.level === "info")).toHaveLength(1);
+      expect(socket.sent.map(payload => JSON.parse(payload).type)).toEqual(["auth", "subscribe", "subscribe"]);
+      logger.entries.length = 0;
+      platform.handleMessage(Buffer.from(JSON.stringify({ type: "ping" })));
+      platform.handlePong();
+      advanceTimersByTime(30000);
+      expect(socket.sent.map(payload => JSON.parse(payload).type)).toContain("pong");
+      expect(socket.sent.map(payload => JSON.parse(payload).type)).toContain("ping");
+      expect(logger.entries).toEqual([]);
+    } finally {
+      platform.disconnect();
+    }
+  });
+
+  it("routes inbound websocket messages without routine payload narration", () => {
     const logger = createRecordingLogger();
     const { platform } = createPlatform({}, { logger });
     platform.handleFollowEvent = createMockFn().mockResolvedValue();
@@ -325,11 +352,12 @@ describe("StreamElementsPlatform behavior", () => {
       },
     };
 
+    logger.entries.length = 0;
     platform.handleMessage(Buffer.from(JSON.stringify(inboundPayload)));
+    expect(asMock(platform.handleFollowEvent).mock.calls).toHaveLength(1);
 
     const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("messageType");
-    expect(serializedLogs).toContain("hasData");
+    expect(logger.entries).toEqual([]);
     expect(serializedLogs).not.toContain("test-private-follower");
     expect(serializedLogs).not.toContain("test-private-raw-payload");
   });

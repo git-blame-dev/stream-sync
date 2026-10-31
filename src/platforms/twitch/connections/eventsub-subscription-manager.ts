@@ -352,7 +352,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                 const details = parseSubscriptionError(error, subscription);
                 if (!valid()) { failures.push({ subscription: subscription.name, error: details }); return result('connection-lost'); }
                 failures.push({ subscription: subscription.name, error: details });
-                safeLogError('Failed to create EventSub subscription', null, 'subscription-create', { type: subscription.type, error: details });
+                safeLogError(`Failed to create EventSub subscription (type ${subscription.type}, status ${details.status ?? 'unknown'}, retryable ${details.isRetryable})`, error, 'subscription-create', { type: subscription.type });
                 if (details.message.toLowerCase().includes('websocket session has already disconnected')) return result('connection-lost');
                 if (details.isCritical || !details.isRetryable) break;
             }

@@ -1,4 +1,3 @@
-import { YOUTUBE } from '../../../core/endpoints';
 import { PlatformEvents } from '../../../interfaces/PlatformEvents';
 import type { UnknownRecord } from '../../../utils/record-contracts';
 type PlatformEventType = Extract<(typeof PlatformEvents)[keyof typeof PlatformEvents], string>;
@@ -36,7 +35,6 @@ interface YouTubeMultiStreamPlatform {
         reason: string,
         options?: { requestImmediateRefresh?: boolean; source?: string }
     ) => Promise<void>;
-    _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
     _handleProcessingError: (message: string, error: unknown, category: string) => void;
     _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
     _handleError: (error: unknown, context: string) => void;
@@ -59,7 +57,6 @@ interface YouTubeMultiStreamManager {
     checkMultiStream: (options?: CheckMultiStreamOptions) => Promise<void>;
     requestImmediateRefresh: (context?: UnknownRecord) => Promise<void>;
     isCheckInProgress: () => boolean;
-    logStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
 }
 
 const toErrorMessage = (error: unknown): string => (
@@ -92,10 +89,6 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
 
 const startMonitoring = async (): Promise<void> => {
         if (platform.monitoringInterval) {
-            platform.logger.debug(
-                `Cleaning up existing monitoring interval: ${platform.monitoringInterval}`,
-                'youtube'
-            );
             clearInterval(platform.monitoringInterval);
             platform.monitoringInterval = null;
         }
@@ -116,12 +109,8 @@ const startMonitoring = async (): Promise<void> => {
 
         try {
             await platform.checkMultiStream({ throwOnError: true });
-        } catch (error: unknown) {
-            platform._handleProcessingError(
-                `Initial multi-stream check failed: ${toErrorMessage(error)}`,
-                error,
-                'multi-stream-check'
-            );
+        } catch {
+            // checkMultiStream owns the failure report; monitoring stays active.
         }
     };
 
@@ -147,27 +136,15 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 );
 
                 if (timeSinceLastFullCheck < fullCheckInterval) {
-                    platform.logger.debug(
-                        `Skipping check: Already connected to ${currentConnections}/${maxStreams} active streams. ` +
-                        `Next full check in ${Math.round((fullCheckInterval - timeSinceLastFullCheck) / 1000)}s`,
-                        'youtube'
-                    );
 
-                    platform._logMultiStreamStatus();
                     return;
                 }
-
-                platform.logger.debug(
-                    `Performing periodic full check (at capacity with ${activeStreams.length} active streams)`,
-                    'youtube'
-                );
 
                 platform.lastFullStreamCheck = currentTimeMs;
 
                 const videoIds = await platform.getLiveVideoIds();
 
                 if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {
-                    platform.logger.warn('Stream detection failed, preserving existing connections', 'youtube');
                     return;
                 }
 
@@ -181,24 +158,12 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                         `Stream detection omitted ${omittedConnectedVideoIds.length} connected stream(s); preserving existing connections`,
                         'youtube'
                     );
-                } else {
-                    platform.logger.debug(`All ${activeStreams.length} streams still live, no changes needed`, 'youtube');
                 }
 
-                platform._logMultiStreamStatus();
                 return;
             }
 
             const videoIds = await platform.getLiveVideoIds();
-
-
-            if (videoIds.length > 0) {
-                platform.logger.debug('Detected live streams:', 'youtube');
-                videoIds.forEach((streamId: string, index: number) => {
-                    const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
-                    platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
-                });
-            }
 
             platform.lastYouTubeVideoIdsUpdateTime = currentTimeMs;
 
@@ -232,7 +197,6 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
             }
 
             if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {
-                platform.logger.warn('Stream detection failed, preserving existing connections', 'youtube');
                 return;
             }
 
@@ -247,13 +211,7 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 );
             }
 
-            platform._logMultiStreamStatus(true, true);
         } catch (error: unknown) {
-            platform._handleProcessingError(
-                `Error in checkMultiStream: ${toErrorMessage(error)}`,
-                error,
-                'checkMultiStream'
-            );
             platform._handleError(error, 'checkMultiStream');
             if (throwOnError) {
                 throw error;
@@ -279,14 +237,12 @@ const checkMultiStream = async (options: CheckMultiStreamOptions = {}): Promise<
         }
     };
 
-const requestImmediateRefresh = async (context: UnknownRecord = {}): Promise<void> => {
+const requestImmediateRefresh = async (_context: UnknownRecord = {}): Promise<void> => {
         if (immediateRefreshPromise) {
             return immediateRefreshPromise;
         }
 
         immediateRefreshPromise = (async () => {
-            const source = typeof context.source === 'string' ? context.source : 'unknown';
-            platform.logger.debug(`Requesting immediate multi-stream refresh (source: ${source})`, 'youtube');
 
             if (currentCheckPromise) {
                 try {
@@ -308,41 +264,11 @@ const requestImmediateRefresh = async (context: UnknownRecord = {}): Promise<voi
 
 const isCheckInProgress = (): boolean => currentCheckPromise !== null;
 
-const logStatus = (includeDetails = false, includeActiveStreamsList = false): void => {
-        const storedConnections = platform.connectionManager.getAllVideoIds();
-        const readyConnections = platform.getActiveYouTubeVideoIds();
-
-        if (storedConnections.length > 0) {
-            platform.logger.debug(
-                `Multi-stream status: ${readyConnections.length} ready, ${storedConnections.length} total connections`,
-                'youtube'
-            );
-
-            if (includeDetails && storedConnections.length > readyConnections.length) {
-                const pendingConnections = storedConnections.filter((id) => !readyConnections.includes(id));
-                pendingConnections.forEach((streamId: string) => {
-                    platform.logger.debug(`Waiting for stream to start: ${streamId}`, 'youtube');
-                });
-            }
-
-            if (includeActiveStreamsList && readyConnections.length > 0) {
-                platform.logger.debug('Active streams:', 'youtube');
-                readyConnections.forEach((streamId: string, index: number) => {
-                    const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
-                    platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
-                });
-            }
-        } else {
-            platform.logger.debug('No YouTube connections established', 'youtube');
-        }
-    };
-
     return {
         startMonitoring,
         checkMultiStream,
         requestImmediateRefresh,
-        isCheckInProgress,
-        logStatus
+        isCheckInProgress
     };
 }
 

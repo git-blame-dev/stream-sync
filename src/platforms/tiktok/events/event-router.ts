@@ -489,7 +489,6 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                 };
 
                 if (platform.selfMessageDetectionService.shouldFilterMessage('tiktok', messageData, platform.config)) {
-                    platform.logger.debug(`Filtering self-message from ${messageData.username}`, 'tiktok');
                     return;
                 }
             }
@@ -613,7 +612,6 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             await platform._logIncomingEvent('superfan', data);
             if (!isCurrentRegistration()) return;
             if (isNonPurchaseSuperFanBarrage(data)) {
-                platform.logger.debug('Ignoring non-purchase TikTok Super Fan barrage', 'tiktok');
                 return;
             }
 

@@ -225,11 +225,6 @@ class TwitchEventSub extends EventEmitter {
         this.messageIdTtlMs = 5 * 60 * 1000;
         this.maxMessageIds = 1000;
 
-        try {
-            this.logger.info('Manual EventSub initialized', 'twitch');
-        } catch (_error) {
-            // Logger failures are non-fatal during EventSub construction.
-        }
         const RawPlatformDataLoggingServiceClass: RawPlatformDataLoggingServiceCtor = typeof dependencies.RawPlatformDataLoggingService === 'function'
             ? dependencies.RawPlatformDataLoggingService as RawPlatformDataLoggingServiceCtor
             : RawPlatformDataLoggingService as unknown as RawPlatformDataLoggingServiceCtor;
@@ -296,8 +291,6 @@ class TwitchEventSub extends EventEmitter {
             return;
         }
 
-        this.logger.debug('Performing periodic EventSub memory cleanup', 'twitch');
-
         if (this.subscriptions.size > this.memoryUsage.maxSubscriptions) {
             this.logger.warn(`High subscription count detected: ${this.subscriptions.size}/${this.memoryUsage.maxSubscriptions}`, 'twitch');
         }
@@ -306,7 +299,6 @@ class TwitchEventSub extends EventEmitter {
 
         if (global.gc) {
             global.gc();
-            this.logger.debug('Forced garbage collection completed', 'twitch');
         }
     }
 
@@ -477,14 +469,9 @@ class TwitchEventSub extends EventEmitter {
                 throw new Error(`EventSub validation failed: ${validation.issues.join(', ')}`);
             }
 
-            this.logger.info('EventSub configuration validation passed', 'twitch');
-
             if (this.isInitialized) {
-                this.logger.debug('EventSub already initialized', 'twitch');
                 return;
             }
-
-            this.logger.info('Initializing Manual EventSub WebSocket connection', 'twitch');
 
             const userIdRaw = this.twitchAuth.getUserId();
             if (!userIdRaw) {
@@ -492,7 +479,6 @@ class TwitchEventSub extends EventEmitter {
             }
 
             this.userId = userIdRaw.toString();
-            this.logger.debug(`Using user ID: ${this.userId}`, 'twitch');
 
             await this._cleanupAllWebSocketSubscriptions();
             this.lifetime.signal.throwIfAborted();
@@ -501,7 +487,6 @@ class TwitchEventSub extends EventEmitter {
 
             this.isInitialized = true;
             this.retryAttempts = 0;
-            this.logger.info('Manual EventSub initialized successfully', 'twitch');
 
         } catch (error) {
             try {
@@ -532,7 +517,7 @@ class TwitchEventSub extends EventEmitter {
                     throw error;
                 }
 
-                this._logEventSubError('EventSub initialization failed - retrying', null, 'initial-startup-retry', {
+                this._logEventSubError(`EventSub initialization failed - retrying (attempt ${attempt}/${maxAttempts}, delay ${this.initialStartupRetryDelay}ms)`, error, 'initial-startup-retry', {
                     attempt,
                     maxAttempts,
                     retryDelay: this.initialStartupRetryDelay,
@@ -564,7 +549,7 @@ class TwitchEventSub extends EventEmitter {
 
         switch (metadata.message_type) {
             case 'session_welcome':
-                this.logger.info('EventSub welcome message received!', 'twitch', {
+                this.logger.debug('EventSub welcome message received!', 'twitch', {
                     hasSessionId: typeof getRecord(payload.session)?.id === 'string' && String(getRecord(payload.session)?.id).length > 0,
                     keepaliveTimeout: getRecord(payload.session)?.keepalive_timeout_seconds,
                     status: getRecord(payload.session)?.status,
@@ -577,7 +562,6 @@ class TwitchEventSub extends EventEmitter {
 
             case 'notification':
                 if (this._isDuplicateMessageId(metadata)) {
-                    this.logger.debug(`Duplicate EventSub notification ignored: ${metadata.message_id}`, 'twitch');
                     break;
                 }
                 this.handleNotificationEvent(String(getRecord(payload.subscription)?.type || ''), getRecord(payload.event), metadata);

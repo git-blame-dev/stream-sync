@@ -88,14 +88,13 @@ describe("YouTubePlatform behavior", () => {
     );
   });
 
-  it("logs platform configuration summaries without raw config values", () => {
+  it("constructs without routine configuration narration", () => {
     const logger = createRecordingLogger();
 
     createPlatform({ logger });
 
     const serializedLogs = JSON.stringify(logger.entries);
-    expect(serializedLogs).toContain("YouTube platform initialized");
-    expect(serializedLogs).toContain("hasUsername");
+    expect(logger.entries).toEqual([]);
     expect(serializedLogs).not.toContain("test-channel");
   });
 

@@ -161,10 +161,6 @@ const logRawIfEnabled = (
         logRawIfEnabled('subscription', rawEvent, 'subscription-data-log', 'Error logging raw subscription data');
 
         if (event?.is_gift === true) {
-            safeLogger.debug(
-                `[Twitch] Suppressing gifted user notification for ${event.user_name} (handled by channel.subscription.gift)`,
-                'twitch-eventsub'
-            );
             return;
         }
 
@@ -447,11 +443,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         }
 
         if (markResubPayloadSeen(payload)) {
-            safeLogger.debug('Duplicate EventSub resubscription message ignored', 'twitch-eventsub', {
-                userId,
-                tier,
-                months
-            });
             return;
         }
 
@@ -463,7 +454,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
 
         const noticeType = getString(event, 'notice_type');
         if (!noticeType || !RESUB_NOTICE_TYPES.has(noticeType)) {
-            safeLogger.debug('Ignoring unsupported chat notification type', 'twitch-eventsub', { noticeType });
             return;
         }
 
@@ -497,12 +487,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         }
 
         if (markResubPayloadSeen(payload)) {
-            safeLogger.debug('Duplicate EventSub chat notification resub ignored', 'twitch-eventsub', {
-                noticeType,
-                userId,
-                tier,
-                months
-            });
             return;
         }
 
@@ -534,8 +518,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
 
     const handleStreamOfflineEvent = (event: TwitchEventPayload | null | undefined, rawEvent: unknown = event) => {
         logRawIfEnabled('stream_offline', rawEvent, 'stream-offline-log', 'Error logging raw stream offline data');
-
-        safeLogger.info('Stream went offline, stopping viewer count polling', 'twitch');
         const timestamp = getString(event, 'timestamp');
         if (!timestamp) {
             errorHandler.handleEventProcessingError(

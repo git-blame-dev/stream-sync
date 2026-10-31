@@ -116,8 +116,6 @@ class YouTubeConnectionManager {
                 return false;
             }
 
-            this.logger.info(`Starting connection to ${videoId}`, 'youtube');
-
             const attemptId = (this.connectionAttemptIds.get(videoId) ?? 0) + 1;
             this.connectionAttemptIds.set(videoId, attemptId);
             let completeFactory!: () => void;
@@ -168,8 +166,6 @@ class YouTubeConnectionManager {
                 connectionData.state = this.CONNECTION_STATES.CONNECTED;
             }
             connectionData.metadata.connectionDuration = duration;
-
-            this.logger.info(`Successfully connected to ${videoId}`, 'youtube');
             return true;
         } catch (error) {
             const retirement = connectionData ? this.retireAttempt(videoId, connectionData) : undefined;
@@ -240,7 +236,6 @@ class YouTubeConnectionManager {
 
         connectionData.ready = true;
         connectionData.state = this.CONNECTION_STATES.READY;
-        this.logger.debug(`Connection ready for video ${videoId}`, 'youtube');
     }
 
     isConnectionReady(videoId: string): boolean {
@@ -317,7 +312,6 @@ class YouTubeConnectionManager {
         this.connections.clear();
         for (const [videoId, connectionData] of connections) this.retireAttempt(videoId, connectionData);
         void Promise.all([...this.retiring].map(attempt => attempt.retirement)).finally(() => {
-            this.logRetirement('info', `Cleaned up all ${connections.length} connections`);
             if (this.cleanupPromise === cleanup) this.cleanupPromise = undefined;
             complete();
         }).catch(() => {});
@@ -460,19 +454,12 @@ class YouTubeConnectionManager {
     }
 
     private getErrorMessage(error: unknown): string {
+        if (typeof error === 'string' && error.length > 0) return error;
         if (error instanceof Error && typeof error.message === 'string' && error.message.length > 0) {
             return error.message;
         }
 
-        if (typeof error === 'string') {
-            return error;
-        }
-
-        try {
-            return JSON.stringify(error);
-        } catch {
-            return 'Unknown error';
-        }
+        return `Non-Error YouTube failure (${error === null ? 'null' : typeof error})`;
     }
 
     private handleConnectionError(message: string, error: unknown, eventData: Record<string, unknown>): void {

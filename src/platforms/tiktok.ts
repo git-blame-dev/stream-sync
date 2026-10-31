@@ -693,9 +693,6 @@ class TikTokPlatform extends EventEmitter {
         try {
             const incomingHandlers = handlers || {};
             this.handlers = { ...this.handlers, ...incomingHandlers };
-            this.logger.debug(`Platform initialized with event handlers: ${Object.keys(incomingHandlers).join(', ')}`, 'tiktok');
-            this.logger.debug(`Event handlers available: ${Object.keys(this.handlers).join(', ')}`, 'tiktok');
-            this.logger.debug(`onViewerCount handler present: ${!!this.handlers.onViewerCount}`, 'tiktok');
             
             if (this.retrySystem) {
                 this.retrySystem.resetRetryCount('tiktok');
@@ -1028,7 +1025,6 @@ class TikTokPlatform extends EventEmitter {
             return;
         }
         if (this.offlineMonitoring) {
-            this.logger.debug('TikTok remains offline; monitoring continues', 'tiktok');
             return;
         }
         this.offlineMonitoring = true;
@@ -1256,7 +1252,7 @@ class TikTokPlatform extends EventEmitter {
 
     async handleTikTokGift(data: unknown) {
         if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-            this.logger.warn('handleTikTokGift called with empty or invalid data', 'tiktok', { data });
+            this.logger.warn('handleTikTokGift called with empty or invalid data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
             return;
         }
         try {
@@ -1265,40 +1261,20 @@ class TikTokPlatform extends EventEmitter {
                 getTimestamp: (payload) => this._getTimestamp(payload),
                 getPlatformMessageId: (payload) => this._getPlatformMessageId(payload)
             });
-            const {
-                userId,
-                giftType,
-                giftCount,
-                amount,
-                currency,
-                comboType,
-                repeatEnd
-            } = normalizedGift;
-            const identityKey = userId;
-
-            this.logger.debug(`[TikTok Gift] Processing gift: ${identityKey} sent ${giftCount}x ${giftType} (${amount} ${currency}, comboType: ${comboType}, repeatEnd: ${repeatEnd})`, 'tiktok');
+            const { comboType, repeatEnd } = normalizedGift;
 
             // TikTok combo gifts emit interim repeat events; only repeatEnd is final.
             
             if (comboType === 1 && !repeatEnd) {
-                this.logger.debug(`[TikTok Gift] Streak in progress: ${identityKey} sending ${giftType} x${giftCount} (waiting for repeatEnd: true)`, 'tiktok');
                 return;
             }
             
             const isStreakCompleted = (comboType === 1 && repeatEnd === true);
             
-            if (isStreakCompleted) {
-                this.logger.debug(`[TikTok Gift] Streak completed: ${identityKey} finished combo of ${giftCount}x ${giftType}`, 'tiktok');
-            } else {
-                this.logger.debug(`[TikTok Gift] Non-combo gift: ${identityKey} sent ${giftCount}x ${giftType}`, 'tiktok');
-            }
-
             if (!this.config.giftAggregationEnabled) {
                 if (this._shouldSkipDuplicatePlatformMessage({ common: { msgId: normalizedGift.id } }).isDuplicate) {
-                    this.logger.debug('Ignoring duplicate TikTok gift message', 'tiktok');
                     return;
                 }
-                this.logger.debug('[TikTok Gift] Aggregation disabled, sending gift immediately', 'tiktok');
                 await this.handleOfficialGift(normalizedGift, { isStreakCompleted });
                 return;
             }
@@ -1417,7 +1393,7 @@ class TikTokPlatform extends EventEmitter {
             const { username, userId } = extractTikTokUserData(data);
 
             if (!userId || !username) {
-                this.logger.warn('[TikTok Follow] Missing canonical identity in follow/share event data', 'tiktok', { data });
+                this.logger.warn('[TikTok Follow] Missing canonical identity in follow/share event data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
@@ -1430,12 +1406,9 @@ class TikTokPlatform extends EventEmitter {
             }
 
             if (actionType === 'share') {
-                this.logger.debug(`[TikTok Share] ${username} shared`, 'tiktok');
                 await this._handleShare(data);
                 return;
             }
-
-            this.logger.debug(`[TikTok Follow] ${username} followed`, 'tiktok');
             await this._handleFollow(data);
         } catch (err) {
             this.errorHandler.handleEventProcessingError(
@@ -1450,7 +1423,7 @@ class TikTokPlatform extends EventEmitter {
     async handleTikTokSocial(data: unknown) {
         try {
             if (!data || typeof data !== 'object') {
-                this.logger.warn('Received invalid social data', 'tiktok', { data });
+                this.logger.warn('Received invalid social data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
@@ -1460,24 +1433,17 @@ class TikTokPlatform extends EventEmitter {
             const actionType = this._inferSocialActionType(data, inferredActionType);
 
             if (!userId || !username) {
-                this.logger.warn('Received social event without canonical identity', 'tiktok', { data, actionType });
+                this.logger.warn('Received social event without canonical identity', 'tiktok', { dataType: typeof data, hasUserId: !!userId, hasUsername: !!username });
                 return;
             }
 
             if (actionType !== 'share' && actionType !== 'follow') {
-                this.logger.debug('[TikTok Social] Ignoring unsupported social action', 'tiktok', {
-                    actionType,
-                    userId,
-                    username
-                });
                 return;
             }
 
             if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
                 return;
             }
-
-            this.logger.debug(`[TikTok Social] ${username} performed ${actionType} action`, 'tiktok');
 
             if (actionType === 'share') {
                 await this._handleShare(data);
@@ -1498,22 +1464,20 @@ class TikTokPlatform extends EventEmitter {
     async handleTikTokShare(data: unknown) {
         try {
             if (!data || typeof data !== 'object') {
-                this.logger.warn('Received invalid share data', 'tiktok', { data });
+                this.logger.warn('Received invalid share data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
             const { username, userId } = extractTikTokUserData(data);
 
             if (!userId || !username) {
-                this.logger.warn('[TikTok Share] Missing canonical identity in direct share event data', 'tiktok', { data });
+                this.logger.warn('[TikTok Share] Missing canonical identity in direct share event data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
             if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
                 return;
             }
-
-            this.logger.debug(`[TikTok Share] ${username} shared`, 'tiktok');
             await this._handleShare(data);
         } catch (err) {
             this.errorHandler.handleEventProcessingError(
@@ -1848,10 +1812,6 @@ class TikTokPlatform extends EventEmitter {
         }
 
         this.recentShareActors.clear();
-        this.logger.debug('[TikTok Share] Cleared tracked share actors', 'tiktok', {
-            reason,
-            trackedCount
-        });
     }
 
     _handleEventProcessingError(emitType: string, data: unknown, error: unknown) {
@@ -2002,13 +1962,13 @@ class TikTokPlatform extends EventEmitter {
             const { username, userId } = extractTikTokUserData(data);
 
             if (!userId || !username) {
-                this.logger.warn('[TikTok Follow] Missing canonical identity in follow event', 'tiktok', { data });
+                this.logger.warn('[TikTok Follow] Missing canonical identity in follow event', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
             
             const timestamp = this._getTimestamp(data);
             if (!timestamp) {
-                this.logger.warn('[TikTok Follow] Missing timestamp in follow event data', 'tiktok', { data });
+                this.logger.warn('[TikTok Follow] Missing timestamp in follow event data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
@@ -2033,21 +1993,17 @@ class TikTokPlatform extends EventEmitter {
             const { username, userId } = extractTikTokUserData(data);
 
             if (!userId || !username) {
-                this.logger.warn('[TikTok Share] Missing canonical identity in share event', 'tiktok', { data });
+                this.logger.warn('[TikTok Share] Missing canonical identity in share event', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
             const timestamp = this._getTimestamp(data);
             if (!timestamp) {
-                this.logger.warn('[TikTok Share] Missing timestamp in share event data', 'tiktok', { data });
+                this.logger.warn('[TikTok Share] Missing timestamp in share event data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
             if (this._shouldSkipDuplicateShareActor(userId)) {
-                this.logger.debug('[TikTok Share] Suppressed duplicate share actor in current stream', 'tiktok', {
-                    userId,
-                    username
-                });
                 return;
             }
 

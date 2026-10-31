@@ -1,5 +1,6 @@
 import { describe, it, expect, spyOn, afterEach } from "bun:test";
 import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { createRecordingLogger } from "../../../helpers/recording-logger";
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
@@ -36,6 +37,30 @@ const shouldSkipUnknownMessage = (
 ): boolean => Reflect.apply(platform._shouldSkipMessage, platform, [message]);
 
 describe("YouTubePlatform internal behavior", () => {
+  it("emits failures for circular unknown errors without serializing provider data", () => {
+    const logger = createRecordingLogger();
+    const platform = createPlatform({ logger });
+    const events: unknown[] = [];
+    platform.on("platform:event", event => events.push(event));
+    const unknownError: Record<string, unknown> = {
+      message: "synthetic-private-error-body",
+      headers: { authorization: "synthetic-private-token" },
+      toJSON() { throw new Error("Unknown errors must not be serialized"); },
+    };
+    unknownError.self = unknownError;
+    expect(() => platform._handleError(unknownError, "checkMultiStream")).not.toThrow();
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events)).toContain("platform:error");
+    expect(JSON.stringify(events)).toContain("Non-Error YouTube failure");
+    expect(JSON.stringify([logger.entries, events])).not.toContain("synthetic-private");
+
+    const failure = new TypeError("Synthetic SDK failure");
+    platform._handleError(failure, "checkMultiStream");
+    expect(events).toHaveLength(2);
+    expect(JSON.stringify(events)).toContain("Synthetic SDK failure");
+    expect(JSON.stringify(events)).toContain("TypeError");
+  });
+
   it("resolves modern snake-case GiftMessageView author names", () => {
     const platform = createPlatform();
 
@@ -72,7 +97,6 @@ describe("YouTubePlatform internal behavior", () => {
     expect(premiere.shouldConnect).toBe(true);
     expect(info.mock.calls).toEqual([
       ["Premiere detected: Synthetic premiere (synthetic-premiere)", "youtube"],
-      ["Premiere connection established, waiting for start event...", "youtube"],
     ]);
     expect(liveResult.shouldConnect).toBe(true);
     expect(liveResult.reason).toBe("Stream is live");
