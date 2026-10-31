@@ -8,7 +8,6 @@ type LoggerLike = typeof defaultLogger;
 
 type LoggingConfig = {
     dataLoggingPath?: string;
-    dataLoggingVerbose?: boolean;
 };
 
 type LoggingDependencies = {
@@ -19,7 +18,6 @@ type LoggingDependencies = {
 
 type PlatformLoggingConfig = {
     dataLoggingEnabled?: boolean;
-    dataLoggingVerbose?: boolean;
 };
 
 type LogStatisticsResult = {

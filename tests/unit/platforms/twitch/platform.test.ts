@@ -1460,7 +1460,6 @@ describe("Twitch Platform", () => {
   describe("when logging raw platform data", () => {
     it("should complete without error when logging is enabled", async () => {
       platform.config.dataLoggingEnabled = true;
-      platform.config.dataLoggingVerbose = true;
       const eventData = { type: "chat", message: "test" };
 
       await expect(

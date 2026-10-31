@@ -470,8 +470,7 @@ class TikTokPlatform extends EventEmitter {
         const RawPlatformDataLoggingServiceClass = dependencies.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
         const rawPlatformDataLoggingOptions: RawPlatformDataLoggingOptions = {
             config: {
-                ...(typeof this.config.dataLoggingPath === 'string' ? { dataLoggingPath: this.config.dataLoggingPath } : {}),
-                ...(typeof this.config.dataLoggingVerbose === 'boolean' ? { dataLoggingVerbose: this.config.dataLoggingVerbose } : {})
+                ...(typeof this.config.dataLoggingPath === 'string' ? { dataLoggingPath: this.config.dataLoggingPath } : {})
             }
         };
         if (isRawPlatformDataLoggingLogger(this.logger)) {
