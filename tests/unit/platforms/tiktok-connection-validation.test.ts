@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformConnectionFactory } from "../../../src/utils/platform-connection-factory";
 
@@ -31,7 +31,7 @@ function isEventedTikTokConnection(
 describe("TikTok connection creation", () => {
   it("wraps connector instances so they expose EventEmitter methods for listener setup", async () => {
     const bareConnectorInstance = {
-      connect: createMockFn().mockResolvedValue(true),
+      connect: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
     class TikTokWebSocketClient implements TikTokConnectorInstance {
       [key: string]: unknown;

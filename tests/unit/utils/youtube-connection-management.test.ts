@@ -1,9 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube-connection-manager";
 
@@ -15,20 +11,17 @@ type TestConnection = ManagedConnection & {
   videoId: string;
   status: string;
   ready: boolean;
-  disconnect: TestMockFn<[], Promise<void>>;
-  isReady: TestMockFn<[], boolean>;
+  disconnect: Mock<(...args: []) => Promise<void>>;
+  isReady: Mock<(...args: []) => boolean>;
 };
 
-type HandleEventProcessingErrorMock = TestMockFn<
-    [
+type HandleEventProcessingErrorMock = Mock<(...args: [
       error: unknown,
       eventType: string,
       eventData?: unknown,
       message?: string | null,
       logContext?: string | null,
-    ],
-    void
-  >;
+    ]) => void>;
 
 const expectManagedConnection = (
   connection: ManagedConnection | null | undefined,
@@ -52,7 +45,7 @@ const setCurrentConnectionReady = (
 
 describe("YouTube Connection Manager - Lifecycle Behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let connectionManager: YouTubeConnectionManager;
@@ -62,18 +55,18 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
 
   beforeEach(() => {
     connectionManager = new YouTubeConnectionManager(noOpLogger);
-    handleEventProcessingError = createMockFn();
+    handleEventProcessingError = vi.fn<(error: unknown, eventType: string, eventData?: unknown, message?: string | null | undefined, logContext?: string | null | undefined) => void>();
     mockErrorHandler = connectionManager.errorHandler;
     mockErrorHandler.handleEventProcessingError = handleEventProcessingError;
-    mockErrorHandler.logOperationalError = createMockFn();
+    mockErrorHandler.logOperationalError = vi.fn<(message: string, context?: string, payload?: unknown) => void>();
 
     mockConnection = {
       id: "test-connection-1",
       videoId: "test-video-id",
       status: "connecting",
       ready: false,
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      isReady: createMockFn<[], boolean>().mockReturnValue(false),
+      disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      isReady: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
     };
 
     connectionManager.errorHandler = mockErrorHandler;
@@ -154,7 +147,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
       const videoId = "test-video-id";
       const connection = {
         ...mockConnection,
-        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
       };
 
       await connectionManager.connectToStream(videoId, async () => connection);
@@ -300,12 +293,12 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
       const connection1 = {
         ...mockConnection,
         videoId: "video-1",
-        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
       };
       const connection2 = {
         ...mockConnection,
         videoId: "video-2",
-        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
       };
 
       await connectionManager.connectToStream(
@@ -414,7 +407,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
     it("reports disconnect failures through the connection error channel", async () => {
       const connection = {
         ...mockConnection,
-        disconnect: createMockFn<[], Promise<void>>().mockRejectedValue(
+        disconnect: vi.fn<(...args: []) => Promise<void>>().mockRejectedValue(
           new Error("Disconnect failed"),
         ),
       };

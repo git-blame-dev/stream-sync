@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from "events";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { TwitchPlatform } from "../../../src/platforms/twitch";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
@@ -35,7 +35,7 @@ const requirePlatformPayload = (payload: unknown): PlatformEventPayload => {
 
 describe("TwitchPlatform monetisation mapping", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let twitch: TwitchPlatform & { emit: (evt: string, payload: unknown) => boolean };
@@ -67,7 +67,7 @@ describe("TwitchPlatform monetisation mapping", () => {
       {
         logger: noOpLogger,
         twitchAuth: {
-          isReady: createMockFn().mockReturnValue(true),
+          isReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         },
         RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
         TwitchEventSub: MockTwitchEventSub,

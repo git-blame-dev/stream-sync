@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, beforeEach, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { waitForDelay } from "../../helpers/time-utils";
 import {
@@ -8,25 +8,16 @@ import {
   resetDefaultEffectsManager,
 } from "../../../src/obs/effects.ts";
 import * as effectsCompatModule from "../../../src/obs/effects.ts";
-import type { TestMockFn } from "../../helpers/bun-mock-utils";
+
 
 type ObsManagerLike = ConstructorParameters<typeof OBSEffectsManager>[0];
-type ObsCall = TestMockFn<
-  [requestType: string, payload?: Record<string, unknown>],
-  Promise<unknown>
->;
+type ObsCall = Mock<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>>;
 type ObsEventHandler = (event?: Record<string, unknown>) => void;
 type TestObsManager = ObsManagerLike & {
-  ensureConnected: TestMockFn<[], Promise<void>>;
+  ensureConnected: Mock<(...args: []) => Promise<void>>;
   call: ObsCall;
-  addEventListener: TestMockFn<
-    [eventName: string, handler: ObsEventHandler],
-    void
-  >;
-  removeEventListener: TestMockFn<
-    [eventName: string, handler: ObsEventHandler],
-    void
-  >;
+  addEventListener: Mock<(...args: [eventName: string, handler: ObsEventHandler]) => void>;
+  removeEventListener: Mock<(...args: [eventName: string, handler: ObsEventHandler]) => void>;
 };
 
 function hasUpdateTextSource(
@@ -43,18 +34,12 @@ describe("obs effects behavior", () => {
   let mockObsManager: TestObsManager;
 
   const createObsManager = (): TestObsManager => ({
-    ensureConnected: createMockFn<[], Promise<void>>(async () => {}),
-    call: createMockFn<
-      [requestType: string, payload?: Record<string, unknown>],
-      Promise<unknown>
+    ensureConnected: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+    call: vi.fn<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>
     >(async () => ({})),
-    addEventListener: createMockFn<
-      [eventName: string, handler: ObsEventHandler],
-      void
+    addEventListener: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void
     >(),
-    removeEventListener: createMockFn<
-      [eventName: string, handler: ObsEventHandler],
-      void
+    removeEventListener: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void
     >(),
   });
 
@@ -140,10 +125,8 @@ describe("obs effects behavior", () => {
   it("rejects waiting for media completion when obs manager lacks event listener support", async () => {
     const manager = new OBSEffectsManager(
       {
-        ensureConnected: createMockFn<[], Promise<void>>(async () => {}),
-        call: createMockFn<
-          [requestType: string, payload?: Record<string, unknown>],
-          Promise<unknown>
+        ensureConnected: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+        call: vi.fn<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>
         >(async () => ({})),
       },
       { logger: noOpLogger },

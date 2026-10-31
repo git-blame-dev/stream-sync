@@ -1,6 +1,6 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { vi, describe, test, beforeEach, afterEach, expect } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { wireStreamStatusHandlers } from "../../src/viewer-count/stream-status-handler.ts";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
@@ -42,7 +42,7 @@ const createEventBus = (): TestEventBus => {
 
 describe("YouTube stream-status viewer count integration (smoke)", () => {
   afterEach(async () => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     if (viewerCountSystem) {
       viewerCountSystem.stopPolling();
       await viewerCountSystem.cleanup();
@@ -56,7 +56,7 @@ describe("YouTube stream-status viewer count integration (smoke)", () => {
   beforeEach(async () => {
     platforms = {
       youtube: {
-        getViewerCount: createMockFn().mockResolvedValue(42),
+        getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(42),
       },
     };
 

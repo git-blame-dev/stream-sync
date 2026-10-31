@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
+
 
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
 import { InnertubeService } from "../../../../../src/services/innertube-service";
@@ -75,7 +75,7 @@ describe("YouTube monetized event pipeline", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

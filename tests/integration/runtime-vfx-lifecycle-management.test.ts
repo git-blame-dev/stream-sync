@@ -1,12 +1,6 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { vi, describe, test, beforeEach, afterEach, expect } from "bun:test";
 import path from "node:path";
 import os from "node:os";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../helpers/bun-mock-utils";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
@@ -89,28 +83,16 @@ const emitVfxCommand = (
   emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
 };
 
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
-
 describe("AppRuntime VFXCommandService Lifecycle Management", () => {
   let runtime!: RuntimeUnderTest;
   let config!: RuntimeConfig;
 
   beforeEach(() => {
-    clearAllMocks();
-
     config = createRuntimeConfig();
   });
 
   afterEach(async () => {
-    try {
-      await runtime?.shutdown();
-    } finally {
-      restoreAllMocks();
-    }
+    await runtime?.shutdown();
   });
 
   describe("VFXCommandService Initialization", () => {
@@ -143,7 +125,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         let vfxExecuted = false;
         const service = requireExecuteCommand(runtime.vfxCommandService);
         const originalExecuteCommand = service.executeCommand;
-        runtime.vfxCommandService.executeCommand = createMockFn(
+        runtime.vfxCommandService.executeCommand = vi.fn(
           async (...args: Parameters<VfxExecuteCommand>) => {
             vfxExecuted = true;
             return originalExecuteCommand.apply(runtime.vfxCommandService, args);
@@ -188,7 +170,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         await runtime.start();
 
         const routed: unknown[] = [];
-        runtime.vfxCommandService.executeCommand = createMockFn(async (command: unknown) => {
+        runtime.vfxCommandService.executeCommand = vi.fn(async (command: unknown) => {
           routed.push(command);
           if (command === "!invalid") throw new Error("synthetic VFX execution failure");
           completed.resolve();
@@ -229,7 +211,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
 
         emitVfxCommand(runtime, {
           command: "!hello",
@@ -261,7 +243,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(disabledConfig, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
 
         emitVfxCommand(runtime, {
           command: "!hello",
@@ -288,7 +270,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         await runtime.start();
 
         runtime.vfxCommandService.executeCommand =
-          createMockFn().mockResolvedValue({ success: true });
+          vi.fn().mockResolvedValue({ success: true });
 
         emitVfxCommand(runtime, {
           command: "!hello",
@@ -314,7 +296,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
 
         emitVfxCommand(runtime, {
           command: "!hello",
@@ -339,7 +321,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
 
         emitVfxCommand(runtime, {
           command: "!hello",
@@ -388,8 +370,8 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
-        runtime.vfxCommandService.executeCommandForKey = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
+        runtime.vfxCommandService.executeCommandForKey = vi.fn();
 
         emitVfxCommand(runtime, {
           username: "NoCommand",
@@ -415,12 +397,12 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand = createMockFn();
+        runtime.vfxCommandService.executeCommand = vi.fn();
         const commandKeyExecutions: Array<{
           commandKey: string;
           context: Record<string, unknown>;
         }> = [];
-        runtime.vfxCommandService.executeCommandForKey = createMockFn(
+        runtime.vfxCommandService.executeCommandForKey = vi.fn(
           async (commandKey: unknown, context: Record<string, unknown>) => {
             if (typeof commandKey !== "string") {
               throw new Error("Expected string command key");
@@ -465,7 +447,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         await runtime.start();
 
         const executions: Record<string, unknown>[] = [];
-        runtime.vfxCommandService.executeCommandForKey = createMockFn(
+        runtime.vfxCommandService.executeCommandForKey = vi.fn(
           async (_commandKey: unknown, context: Record<string, unknown>) => {
             executions.push(context);
             return { success: true };
@@ -506,7 +488,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         const { dependencies } = createAppRuntimeTestDependencies();
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
-        runtime.vfxCommandService.executeCommandForKey = createMockFn();
+        runtime.vfxCommandService.executeCommandForKey = vi.fn();
 
         emitVfxCommand(runtime, {
           commandKey: "automatic-confetti",
@@ -529,7 +511,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         const { dependencies } = createAppRuntimeTestDependencies();
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
-        runtime.vfxCommandService.executeCommandForKey = createMockFn();
+        runtime.vfxCommandService.executeCommandForKey = vi.fn();
 
         emitVfxCommand(runtime, {
           commandKey: "automatic-confetti",
@@ -560,7 +542,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           commandKey: string;
           context: Record<string, unknown>;
         }> = [];
-        runtime.vfxCommandService.executeCommandForKey = createMockFn(
+        runtime.vfxCommandService.executeCommandForKey = vi.fn(
           async (commandKey: unknown, context: Record<string, unknown>) => {
             if (typeof commandKey !== "string") {
               throw new Error("Expected string command key");

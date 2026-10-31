@@ -1,9 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
 import { InnertubeService } from "../../../src/services/innertube-service";
@@ -27,7 +23,7 @@ type DetectionConfig = { timeout?: number; username?: string };
 const createDetectionClient = () => new InnertubeService({
   createWithTimeout: async (): Promise<DetectionClient & { getInfo: () => Promise<unknown> }> => ({
     getInfo: async () => ({}),
-    getChannel: createMockFn<[channelId: string], Promise<ChannelLike | null>>().mockResolvedValue(null),
+    getChannel: vi.fn<(...args: [channelId: string]) => Promise<ChannelLike | null>>().mockResolvedValue(null),
   }),
 }, { logger: noOpLogger });
 
@@ -131,11 +127,11 @@ describe("YouTubeStreamDetectionService behavior", () => {
     }
   });
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("returns error response for invalid channel handle", async () => {
@@ -173,7 +169,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
       createDetectionClient(),
       { logger: noOpLogger },
     );
-    service._performDetection = createMockFn().mockResolvedValue({
+    service._performDetection = vi.fn<(...args: unknown[]) => Promise<{ observationKind: "complete"; streams: { videoId: string; }[]; hasContent: true; detectionMethod: string; }>>().mockResolvedValue({
       observationKind: "complete" as const,
       streams: [{ videoId: "ABCDEFGHIJK" }, { videoId: "invalid" }],
       hasContent: true,
@@ -193,9 +189,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
       createDetectionClient(),
       { logger: noOpLogger },
     );
-    service._performDetection = createMockFn().mockRejectedValue(
-      new Error("timeout error"),
-    );
+    service._performDetection = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("timeout error"));
 
     await service.detectLiveStreams("testChannel");
     await service.detectLiveStreams("testChannel");
@@ -210,9 +204,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
       createDetectionClient(),
       { logger: noOpLogger },
     );
-    service._performDetection = createMockFn().mockRejectedValue(
-      new Error("unexpected downstream issue"),
-    );
+    service._performDetection = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("unexpected downstream issue"));
 
     const result = await service.detectLiveStreams("testChannel", {
       debug: true,
@@ -232,9 +224,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
       createDetectionClient(),
       { logger: noOpLogger },
     );
-    service._performDetection = createMockFn().mockRejectedValue(
-      new Error("hard failure"),
-    );
+    service._performDetection = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("hard failure"));
 
     await service.detectLiveStreams("testChannel");
     await service.detectLiveStreams("testChannel");

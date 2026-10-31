@@ -1,10 +1,6 @@
+import { vi, type Mock, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -20,18 +16,18 @@ type NotificationManagerLike = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>>;
-  addToQueue: ReturnType<typeof createMockFn>;
-  processQueue: ReturnType<typeof createMockFn>;
-  isQueueEmpty: TestMockFn<[], boolean>;
-  getQueueLength: TestMockFn<[], number>;
-  clearQueue: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>>;
+  addToQueue: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  processQueue: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  isQueueEmpty: Mock<(...args: []) => boolean>;
+  getQueueLength: Mock<(...args: []) => number>;
+  clearQueue: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 type EventBusMock = {
-  emit: ReturnType<typeof createMockFn>;
-  on: ReturnType<typeof createMockFn>;
-  off: ReturnType<typeof createMockFn>;
+  emit: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  on: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  off: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 describe("NotificationManager error handling", () => {
@@ -41,18 +37,18 @@ describe("NotificationManager error handling", () => {
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      addToQueue: createMockFn(),
-      processQueue: createMockFn(),
-      isQueueEmpty: createMockFn<[], boolean>().mockReturnValue(true),
-      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
-      clearQueue: createMockFn(),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      addToQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      processQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      isQueueEmpty: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+      getQueueLength: vi.fn<(...args: []) => number>().mockReturnValue(0),
+      clearQueue: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     mockEventBus = {
-      emit: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     manager = new NotificationManager({
@@ -62,13 +58,13 @@ describe("NotificationManager error handling", () => {
       constants,
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
     });
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("returns failure result when display queue throws error", async () => {

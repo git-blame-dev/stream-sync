@@ -1,10 +1,5 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, beforeEach, afterEach, it } from 'bun:test';
+
 import { useRealTimers } from "../../helpers/bun-timers";
 
 import * as testClock from "../../helpers/test-clock";
@@ -14,8 +9,8 @@ import * as OBSHealthCheckerCompat from "../../../src/obs/health-checker.ts";
 type OBSManager = ConstructorParameters<typeof OBSHealthChecker>[0];
 type HealthCheckerConfig = NonNullable<ConstructorParameters<typeof OBSHealthChecker>[1]>;
 type MockOBSManager = {
-  isConnected: TestMockFn<[], boolean>;
-  call: TestMockFn<[requestType: string, payload: Record<string, unknown>], Promise<unknown>>;
+  isConnected: Mock<(...args: []) => boolean>;
+  call: Mock<(...args: [requestType: string, payload: Record<string, unknown>]) => Promise<unknown>>;
 };
 
 const firstObsCall = (mockOBSManager: MockOBSManager): [string, Record<string, unknown>] => {
@@ -38,14 +33,14 @@ describe("OBSHealthChecker", () => {
 
   beforeEach(() => {
     mockOBSManager = {
-      isConnected: createMockFn<[], boolean>(),
-      call: createMockFn<[string, Record<string, unknown>], Promise<unknown>>(),
+      isConnected: vi.fn<(...args: []) => boolean>(),
+      call: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<unknown>>(),
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
-    clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     useRealTimers();
   });
 

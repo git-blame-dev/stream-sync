@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect } from 'bun:test';
+
 import { logger as appLogger } from "../../../src/core/logging";
 import { SelfMessageDetectionService } from "../../../src/services/SelfMessageDetectionService.ts";
 
@@ -16,7 +16,7 @@ const createPlainConfig = ({ twitch, youtube, tiktok }: SelfMessageConfig = {}) 
 });
 
 type LoggerMock = typeof appLogger & {
-  error: ReturnType<typeof createMockFn>;
+  error: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 const createLoggerMock = (): LoggerMock => ({
@@ -28,10 +28,10 @@ const createLoggerMock = (): LoggerMock => ({
   reconfigure() {},
   log() {},
   shouldOutput: () => false,
-  debug: createMockFn(),
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn(),
+  debug: vi.fn<(message: unknown, source?: string, data?: unknown) => void>(),
+  info: vi.fn<(message: unknown, source?: string, data?: unknown) => void>(),
+  warn: vi.fn<(message: unknown, source?: string, data?: unknown) => void>(),
+  error: vi.fn<(...args: unknown[]) => unknown>(),
   emergency() {},
   console() {},
 });

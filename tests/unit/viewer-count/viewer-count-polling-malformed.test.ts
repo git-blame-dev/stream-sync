@@ -1,6 +1,6 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
@@ -15,12 +15,12 @@ type ViewerCountUpdatePayload = {
 
 describe("ViewerCountSystem polling with malformed payloads", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function createSystemWithPlatformReturning(value: unknown) {
     const platform = {
-      getViewerCount: createMockFn().mockResolvedValue(value),
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<typeof value>>().mockResolvedValue(value),
     };
 
     const system = new ViewerCountSystem({

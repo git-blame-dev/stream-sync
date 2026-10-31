@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
 import { YouTubeConnectionManager } from "../../../../../src/platforms/youtube/youtube-connection-manager";
@@ -31,9 +31,9 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
   const platform = new YouTubePlatform(config, {
     logger: noOpLogger,
     streamDetectionService: {
-      detectLiveStreams: createMockFn().mockResolvedValue([]),
+      detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<never[]>>().mockResolvedValue([]),
     },
-    notificationDispatcher: { dispatch: createMockFn() },
+    notificationDispatcher: { dispatch: vi.fn<(...args: unknown[]) => unknown>() },
     RawPlatformDataLoggingService: class {
       logRawPlatformData() {}
     },
@@ -64,12 +64,12 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const readyVideoIds = ["testvideo1", "testvideo3"];
 
       const mockConnectionManager = createConnectionManager({
-        getActiveVideoIds: createMockFn().mockReturnValue(storedVideoIds),
-        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof storedVideoIds>().mockReturnValue(storedVideoIds),
+        isConnectionReady: vi.fn<(...args: [string]) => boolean>().mockImplementation(
           (videoId) => readyVideoIds.includes(videoId),
         ),
-        getConnectionCount: createMockFn().mockReturnValue(4),
-        getReadyConnectionCount: createMockFn().mockReturnValue(2),
+        getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(4),
+        getReadyConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(2),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
 
@@ -84,10 +84,10 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const storedVideoIds = ["testvideo1", "testvideo2", "testvideo3"];
 
       const mockConnectionManager = createConnectionManager({
-        getActiveVideoIds: createMockFn().mockReturnValue(storedVideoIds),
-        isConnectionReady: createMockFn().mockReturnValue(false),
-        getConnectionCount: createMockFn().mockReturnValue(3),
-        getReadyConnectionCount: createMockFn().mockReturnValue(0),
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof storedVideoIds>().mockReturnValue(storedVideoIds),
+        isConnectionReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+        getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(3),
+        getReadyConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(0),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
 
@@ -102,12 +102,12 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const videoId = "test_transition_video";
       const storedIds = [videoId];
 
-      const isReadyMock = createMockFn()
+      const isReadyMock = vi.fn<(...args: unknown[]) => boolean>()
         .mockReturnValueOnce(false)
         .mockReturnValueOnce(true);
 
       const mockConnectionManager = createConnectionManager({
-        getActiveVideoIds: createMockFn().mockReturnValue(storedIds),
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof storedIds>().mockReturnValue(storedIds),
         isConnectionReady: isReadyMock,
       });
       youtubePlatform.connectionManager = mockConnectionManager;
@@ -132,11 +132,11 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const readyConnections = ["testlive_stream1", "testlive_stream2"];
 
       const mockConnectionManager = createConnectionManager({
-        getAllVideoIds: createMockFn().mockReturnValue(storedConnections),
-        getActiveVideoIds: createMockFn().mockReturnValue(storedConnections),
-        getConnectionCount: createMockFn().mockReturnValue(4),
-        getReadyConnectionCount: createMockFn().mockReturnValue(2),
-        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+        getAllVideoIds: vi.fn<(...args: unknown[]) => typeof storedConnections>().mockReturnValue(storedConnections),
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof storedConnections>().mockReturnValue(storedConnections),
+        getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(4),
+        getReadyConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(2),
+        isConnectionReady: vi.fn<(...args: [string]) => boolean>().mockImplementation(
           (id) => readyConnections.includes(id),
         ),
       });
@@ -162,11 +162,11 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const actualReadyIds = ["testlive_active1", "testlive_active2"];
 
       const mockConnectionManager = createConnectionManager({
-        getAllVideoIds: createMockFn().mockReturnValue(allStoredIds),
-        getActiveVideoIds: createMockFn().mockReturnValue(allStoredIds),
-        getConnectionCount: createMockFn().mockReturnValue(4),
-        getReadyConnectionCount: createMockFn().mockReturnValue(2),
-        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+        getAllVideoIds: vi.fn<(...args: unknown[]) => typeof allStoredIds>().mockReturnValue(allStoredIds),
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof allStoredIds>().mockReturnValue(allStoredIds),
+        getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(4),
+        getReadyConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(2),
+        isConnectionReady: vi.fn<(...args: [string]) => boolean>().mockImplementation(
           (id) => actualReadyIds.includes(id),
         ),
       });
@@ -192,8 +192,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
       const operationallyActiveStreams = ["teststream2"];
 
       const mockConnectionManager = createConnectionManager({
-        getActiveVideoIds: createMockFn().mockReturnValue(storedStreams),
-        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => typeof storedStreams>().mockReturnValue(storedStreams),
+        isConnectionReady: vi.fn<(...args: [string]) => boolean>().mockImplementation(
           (id) => operationallyActiveStreams.includes(id),
         ),
       });
@@ -231,8 +231,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
       youtubePlatform = createPlatform();
 
       const mockConnectionManager = createConnectionManager({
-        getActiveVideoIds: createMockFn().mockReturnValue([]),
-        isConnectionReady: createMockFn().mockReturnValue(false),
+        getActiveVideoIds: vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]),
+        isConnectionReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
 

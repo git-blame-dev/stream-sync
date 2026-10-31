@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { noOpLogger } from '../../helpers/mock-factories';
-import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../../helpers/bun-timers';
+import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from '../../helpers/bun-timers';
 import { StreamElementsPlatform } from '../../../src/platforms/streamelements';
 
 class RecoverySocket extends EventEmitter {
@@ -25,6 +25,7 @@ const createPlatform = () => {
 };
 afterEach(async () => {
     for (const platform of platforms.splice(0)) await platform.disconnect();
+    expect(getTimerCount()).toBe(0);
     useRealTimers();
 });
 

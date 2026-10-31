@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { createMockFn } from "../helpers/bun-mock-utils";
+import { vi, describe, it, expect } from 'bun:test';
+
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
@@ -12,10 +12,10 @@ describe("Platform lifecycle startup smoke E2E", () => {
       logger: noOpLogger,
     });
 
-    const initialize = createMockFn().mockResolvedValue(true);
-    const cleanup = createMockFn().mockResolvedValue();
+    const initialize = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    const cleanup = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     class MockPlatform {
-      on = createMockFn();
+      on = vi.fn<(...args: unknown[]) => unknown>();
 
       initialize() {
         return initialize();
@@ -56,12 +56,12 @@ describe("Platform lifecycle startup smoke E2E", () => {
       },
     });
 
-    const initialize = createMockFn().mockResolvedValue(true);
-    const cleanup = createMockFn().mockResolvedValue();
+    const initialize = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    const cleanup = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     class MockPlatform {
       platformConfig: Record<string, unknown>;
       dependencies: unknown;
-      on = createMockFn();
+      on = vi.fn<(...args: unknown[]) => unknown>();
 
       constructor(platformConfig: Record<string, unknown>, dependencies?: unknown) {
         this.platformConfig = platformConfig;

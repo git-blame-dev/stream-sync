@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import {
   secrets,
@@ -68,6 +68,19 @@ class MockWebSocket {
 }
 
 describe("TwitchEventSub behavior", () => {
+  const instances: TwitchEventSub[] = [];
+  const createEventSub = (...args: ConstructorParameters<typeof TwitchEventSub>) => {
+    const instance = new TwitchEventSub(...args);
+    instances.push(instance);
+    return instance;
+  };
+  afterEach(async () => {
+    for (const instance of instances.splice(0)) {
+      await instance.cleanup();
+      expect(instance.cleanupInterval).toBeNull();
+      instance.removeAllListeners();
+    }
+  });
   let mockTwitchAuth: { isReady: () => boolean; refreshTokens: () => Promise<boolean>; getUserId: () => string };
   let MockRawPlatformDataLoggingService: new () => { logRawPlatformData: () => Promise<void> };
   let mockDependencies: MockDependencies;
@@ -78,7 +91,7 @@ describe("TwitchEventSub behavior", () => {
     secrets.twitch.accessToken = "testAccessToken";
     mockTwitchAuth = {
       isReady: () => true,
-      refreshTokens: createMockFn().mockResolvedValue(true),
+      refreshTokens: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
       getUserId: () => "testUser123",
     };
     MockRawPlatformDataLoggingService = class {
@@ -89,11 +102,16 @@ describe("TwitchEventSub behavior", () => {
       twitchAuth: mockTwitchAuth,
       RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
       WebSocketCtor: MockWebSocket,
+      axios: {
+        get: async () => ({ data: { data: [] } }),
+        post: async () => ({ data: { data: [] } }),
+        delete: async () => ({ data: {} }),
+      },
     };
   });
 
   it("routes follow events to handlers and emits follow event", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -119,7 +137,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("routes chat message events and includes timestamp", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -149,7 +167,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("ignores duplicate notification message ids", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -184,7 +202,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("stops subscription readiness for terminal authorization revocation", async () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -229,7 +247,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("validates configuration using centralized auth fallback", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -249,7 +267,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("parses subscription errors with critical flag for auth failures", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -272,7 +290,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("parses subscription errors with retryable flag for rate limits", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -295,7 +313,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("validates connection readiness before subscription setup", () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -314,7 +332,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("continues reconnecting when WebSocket close throws", async () => {
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -344,7 +362,7 @@ describe("TwitchEventSub behavior", () => {
   it("continues deleting WebSocket subscriptions after a deletion error", async () => {
     const logErrors: LoggedEventSubError[] = [];
     const mockAxios = {
-      get: createMockFn().mockResolvedValue({
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: { data: { id: string; type: string; status: string; transport: { method: string; session_id: string; }; }[]; }; }>>().mockResolvedValue({
         data: {
           data: [
             {
@@ -362,12 +380,12 @@ describe("TwitchEventSub behavior", () => {
           ],
         },
       }),
-      delete: createMockFn()
+      delete: vi.fn<(...args: unknown[]) => Promise<undefined>>()
         .mockRejectedValueOnce(new Error("delete failed"))
         .mockResolvedValueOnce(undefined),
     };
 
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",
@@ -391,7 +409,7 @@ describe("TwitchEventSub behavior", () => {
   it("continues deleting session subscriptions after a deletion error", async () => {
     const logErrors: LoggedEventSubError[] = [];
     const mockAxios = {
-      get: createMockFn().mockResolvedValue({
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: { data: { id: string; type: string; transport: { method: string; session_id: string; }; }[]; }; }>>().mockResolvedValue({
         data: {
           data: [
             {
@@ -412,12 +430,12 @@ describe("TwitchEventSub behavior", () => {
           ],
         },
       }),
-      delete: createMockFn()
+      delete: vi.fn<(...args: unknown[]) => Promise<undefined>>()
         .mockRejectedValueOnce(new Error("delete failed"))
         .mockResolvedValueOnce(undefined),
     };
 
-    const instance = new TwitchEventSub(
+    const instance = createEventSub(
       {
         channel: "testChannel",
         clientId: "testClientId",

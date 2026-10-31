@@ -1,8 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 const {
   cleanupTikTokEventListeners,
@@ -56,7 +53,7 @@ const expectDefined = <T>(value: T | undefined): T => {
 
 describe("TikTok event router", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createPlatformHarness = (overrides: Record<string, unknown> = {}) => {
@@ -65,10 +62,10 @@ describe("TikTok event router", () => {
     const handledChatMessages: HandledChatMessage[] = [];
 
     const connection = {
-      on: createMockFn<[eventName: string, handler: EventHandler], void>((eventName, handler) => {
+      on: vi.fn<(...args: [eventName: string, handler: EventHandler]) => void>((eventName, handler) => {
         listeners[eventName] = handler;
       }),
-      removeAllListeners: createMockFn(),
+      removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     const platform = {
@@ -99,30 +96,30 @@ describe("TikTok event router", () => {
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
       errorHandler: {
-        handleConnectionError: createMockFn(),
-        handleEventProcessingError: createMockFn(),
-        handleCleanupError: createMockFn(),
+        handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+        handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+        handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
       },
       constructor: {
-        resolveEventTimestampMs: createMockFn(() => null),
+        resolveEventTimestampMs: vi.fn(() => null),
       },
-      _logIncomingEvent: createMockFn().mockResolvedValue(),
+      _logIncomingEvent: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       _emitPlatformEvent: (type: string, payload: EmittedEvent["payload"]) =>
         emitted.push({ type, payload }),
-      _handleStandardEvent: createMockFn().mockResolvedValue(),
-      _handleStreamEnd: createMockFn(),
-      handleConnectionIssue: createMockFn(),
-      handleConnectionError: createMockFn(),
-      handleRetry: createMockFn(),
-      handleTikTokGift: createMockFn().mockResolvedValue(),
-      handleTikTokFollow: createMockFn().mockResolvedValue(),
-      handleTikTokShare: createMockFn().mockResolvedValue(),
-      handleTikTokSocial: createMockFn().mockResolvedValue(),
+      _handleStandardEvent: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      _handleStreamEnd: vi.fn<(...args: unknown[]) => unknown>(),
+      handleConnectionIssue: vi.fn<(...args: unknown[]) => unknown>(),
+      handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleRetry: vi.fn<(...args: unknown[]) => unknown>(),
+      handleTikTokGift: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      handleTikTokFollow: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      handleTikTokShare: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      handleTikTokSocial: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       connectionActive: false,
       cachedViewerCount: 0,
       connectionTime: 0,
-      _getTimestamp: createMockFn(() => "2025-01-02T03:04:05.000Z"),
-      _getPlatformMessageId: createMockFn((data: ChatPayload) => {
+      _getTimestamp: vi.fn(() => "2025-01-02T03:04:05.000Z"),
+      _getPlatformMessageId: vi.fn((data: ChatPayload) => {
         const msgId = data?.common?.msgId;
         if (msgId === undefined || msgId === null) {
           return null;
@@ -158,7 +155,7 @@ describe("TikTok event router", () => {
   });
 
   test("throws when connection is missing", () => {
-    const errorHandler = { handleConnectionError: createMockFn() };
+    const errorHandler = { handleConnectionError: vi.fn<(...args: unknown[]) => unknown>() };
     const platform = {
       listenersConfigured: false,
       connection: null,
@@ -172,7 +169,7 @@ describe("TikTok event router", () => {
   });
 
   test("throws when connection lacks event emitter methods", () => {
-    const errorHandler = { handleConnectionError: createMockFn() };
+    const errorHandler = { handleConnectionError: vi.fn<(...args: unknown[]) => unknown>() };
     const platform = {
       listenersConfigured: false,
       connection: {},
@@ -197,7 +194,7 @@ describe("TikTok event router", () => {
   });
 
   test("does not remove listeners it did not register", () => {
-    const removeAllListeners = createMockFn();
+    const removeAllListeners = vi.fn<(...args: unknown[]) => unknown>();
     const platform = {
       connection: { removeAllListeners },
       listenersConfigured: true,
@@ -220,7 +217,7 @@ describe("TikTok event router", () => {
         DISCONNECTED: "disconnected",
         ERROR: "control-error",
       },
-      errorHandler: { handleCleanupError: createMockFn() },
+      errorHandler: { handleCleanupError: vi.fn<(...args: unknown[]) => unknown>() },
     };
 
     cleanupTikTokEventListeners(platform);
@@ -258,7 +255,7 @@ describe("TikTok event router", () => {
       extractTimestamp: () => "2025-01-02T03:04:05.000Z",
     };
     const selfMessageDetectionService = {
-      shouldFilterMessage: createMockFn(() => false),
+      shouldFilterMessage: vi.fn(() => false),
     };
     const { platform, listeners, handledChatMessages } = createPlatformHarness({
       timestampService,
@@ -316,7 +313,7 @@ describe("TikTok event router", () => {
       timestampService,
       connectionTime: 2000,
       constructor: {
-        resolveEventTimestampMs: createMockFn(() => 1000),
+        resolveEventTimestampMs: vi.fn(() => 1000),
       },
     });
 
@@ -369,7 +366,7 @@ describe("TikTok event router", () => {
     const { platform, listeners, handledChatMessages } = createPlatformHarness({
       chatReplayProtectionConfig: { maxAgeMs: 60 * 1000 },
       constructor: {
-        resolveEventTimestampMs: createMockFn(() => 1),
+        resolveEventTimestampMs: vi.fn(() => 1),
       },
     });
 
@@ -428,7 +425,7 @@ describe("TikTok event router", () => {
       extractTimestamp: () => "2025-01-02T03:04:05.000Z",
     };
     const selfMessageDetectionService = {
-      shouldFilterMessage: createMockFn(() => true),
+      shouldFilterMessage: vi.fn(() => true),
     };
     const { platform, listeners, handledChatMessages } = createPlatformHarness({
       timestampService,
@@ -499,7 +496,7 @@ describe("TikTok event router", () => {
 
   test("warns when room user payload has no timestamp", async () => {
     const { platform, listeners, emitted } = createPlatformHarness({
-      _getTimestamp: createMockFn(() => null),
+      _getTimestamp: vi.fn(() => null),
     });
 
     setupTikTokEventListeners(platform);

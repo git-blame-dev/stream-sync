@@ -1,6 +1,6 @@
+import { vi, afterEach, describe, expect, test } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, describe, expect, test } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -9,17 +9,17 @@ import NotificationManager from "../../../src/notifications/NotificationManager"
 
 describe("NotificationManager raid viewer count fallback", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createManager = () => {
     const displayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      addToQueue: createMockFn(),
-      processQueue: createMockFn(),
-      isQueueEmpty: createMockFn().mockReturnValue(true),
-      clearQueue: createMockFn(),
-      getQueueLength: createMockFn(() => 0),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      addToQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      processQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      isQueueEmpty: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+      clearQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      getQueueLength: vi.fn(() => 0),
     };
 
     const config = createConfigFixture({
@@ -35,10 +35,10 @@ describe("NotificationManager raid viewer count fallback", () => {
       config,
       constants: require("../../../src/core/constants"),
       vfxCommandService: {
-        executeCommand: createMockFn().mockResolvedValue({ success: true }),
+        executeCommand: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
+        isFirstMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false),
       },
     });
   };

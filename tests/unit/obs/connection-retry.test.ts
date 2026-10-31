@@ -1,15 +1,15 @@
+import { vi, describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
-import { createMockFn } from '../../helpers/bun-mock-utils';
+
 import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from '../../helpers/bun-timers';
 import { OBSConnectionManager, getOBSConnectionManager, resetOBSConnectionManager } from '../../../src/obs/connection';
 
 class Socket extends EventEmitter {
-  connect = createMockFn(async () => {
+  connect = vi.fn(async () => {
     this.emit('Identified');
     return { obsWebSocketVersion: '5', negotiatedRpcVersion: 1 };
   });
-  disconnect = createMockFn(async () => { this.emit('ConnectionClosed', { code: 1000, reason: 'synthetic intentional close' }); });
+  disconnect = vi.fn(async () => { this.emit('ConnectionClosed', { code: 1000, reason: 'synthetic intentional close' }); });
   async call() { return {}; }
 }
 const config = { address: 'ws://synthetic.invalid', password: 'synthetic-only', enabled: true, connectionTimeoutMs: 5000 };

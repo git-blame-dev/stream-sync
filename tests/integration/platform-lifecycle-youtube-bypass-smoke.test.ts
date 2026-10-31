@@ -1,5 +1,5 @@
-import { describe, it, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, it, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 
@@ -19,13 +19,13 @@ const createTestPlatformConstructor = (
 ): TestPlatformConstructor =>
   class {
     initialize = initialize;
-    cleanup = createMockFn().mockResolvedValue(undefined);
-    on = createMockFn(() => undefined);
+    cleanup = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
+    on = vi.fn(() => undefined);
   };
 
 describe("PlatformLifecycleService connection routing (smoke)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("initializes enabled platforms directly without StreamDetector", async () => {
@@ -38,9 +38,9 @@ describe("PlatformLifecycleService connection routing (smoke)", () => {
       logger: noOpLogger,
     });
 
-    const youtubeInit = createMockFn().mockResolvedValue(true);
-    const twitchInit = createMockFn().mockResolvedValue(true);
-    const customInit = createMockFn().mockResolvedValue(true);
+    const youtubeInit = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    const twitchInit = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    const customInit = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
 
     const youtubePlatform = createTestPlatformConstructor(youtubeInit);
     const twitchPlatform = createTestPlatformConstructor(twitchInit);

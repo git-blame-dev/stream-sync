@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 
 import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
@@ -89,15 +89,13 @@ const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 class StubTwitchApiClient {
   constructor(_twitchAuth: TwitchAuthDependency, _config: TwitchConfig) {}
 
-  getBroadcasterId = createMockFn<[string], Promise<string>>().mockResolvedValue(
+  getBroadcasterId = vi.fn<(...args: [string]) => Promise<string>>().mockResolvedValue(
     "test-broadcaster-id",
   );
-  getStreamInfo = createMockFn<
-    [],
-    Promise<{ isLive: boolean; stream: unknown; viewerCount: number }>
+  getStreamInfo = vi.fn<(...args: []) => Promise<{ isLive: boolean; stream: unknown; viewerCount: number }>
   >().mockResolvedValue({ isLive: false, stream: null, viewerCount: 0 });
-  getGlobalChatBadges = createMockFn().mockResolvedValue([]);
-  getChannelChatBadges = createMockFn().mockResolvedValue([]);
+  getGlobalChatBadges = vi.fn<(...args: unknown[]) => Promise<never[]>>().mockResolvedValue([]);
+  getChannelChatBadges = vi.fn<(...args: unknown[]) => Promise<never[]>>().mockResolvedValue([]);
 }
 
 const createEventSub = (overrides: Partial<TwitchEventSub> = {}): TwitchEventSub => ({
@@ -151,9 +149,9 @@ const createPlatform = (
 describe("TwitchPlatform core behavior", () => {
   let platform: TwitchPlatformInstance | undefined;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (platform?.cleanup) {
-      platform.cleanup().catch(() => {});
+      await platform.cleanup();
     }
   });
 
@@ -208,8 +206,8 @@ describe("TwitchPlatform core behavior", () => {
 
   it("fails platform initialization when EventSub has no event binding interface", async () => {
     const eventSubWithoutOn = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
       isConnected: () => true,
     };
     platform = createPlatform(
@@ -227,9 +225,9 @@ describe("TwitchPlatform core behavior", () => {
 
   it("fails platform initialization when EventSub has no connectivity interface", async () => {
     const eventSubWithoutConnectivity = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      on: createMockFn(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
     };
     platform = createPlatform(
       {},
@@ -246,9 +244,9 @@ describe("TwitchPlatform core behavior", () => {
 
   it("fails platform initialization when EventSub has no active-state interface", async () => {
     const eventSubWithoutActiveState = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      on: createMockFn(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
       isConnected: () => true,
     };
     platform = createPlatform(
@@ -266,9 +264,9 @@ describe("TwitchPlatform core behavior", () => {
 
   it("hands an inactive EventSub startup to background recovery", async () => {
     const disconnectedEventSub = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      on: createMockFn(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
       isConnected: () => false,
       isActive: () => false,
     };
@@ -288,9 +286,9 @@ describe("TwitchPlatform core behavior", () => {
 
   it("resets connection state when platform initialization fails", async () => {
     const disconnectedEventSub = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      on: createMockFn(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
       isConnected: () => false,
       isActive: () => false,
     };
@@ -312,9 +310,9 @@ describe("TwitchPlatform core behavior", () => {
 
   it("hands inactive EventSub subscriptions to background recovery", async () => {
     const inactiveEventSub = {
-      initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      on: createMockFn(),
+      initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
       isConnected: () => true,
       isActive: () => false,
     };
@@ -348,8 +346,8 @@ describe("TwitchPlatform core behavior", () => {
       { eventName: "chatMessage", handler: () => {} },
     ];
     platform.eventSubWiring = {
-      bindAll: createMockFn<[Record<string, unknown>], void>(),
-      unbindAll: createMockFn<[], void>(),
+      bindAll: vi.fn<(...args: [Record<string, unknown>]) => void>(),
+      unbindAll: vi.fn<(...args: []) => void>(),
     } satisfies EventSubWiring;
 
     await expect(platform.initialize({})).rejects.toThrow(
@@ -481,9 +479,7 @@ describe("TwitchPlatform core behavior", () => {
       { dataLoggingEnabled: true },
       { twitchAuth: createReadyTwitchAuth() },
     );
-    platform._logRawEvent = createMockFn().mockRejectedValue(
-      new Error("disk full"),
-    );
+    platform._logRawEvent = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("disk full"));
     let emittedChat: ChatPayload | undefined;
     platform.handlers = {
       onChat: (payload) => {
@@ -547,29 +543,29 @@ describe("TwitchPlatform core behavior", () => {
         removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
       } = {
         listeners,
-        on: createMockFn((event: string, handler: (...args: unknown[]) => void) => {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
           listeners[event] = listeners[event] || [];
           listeners[event].push(handler);
         }),
-        off: createMockFn((event: string, handler: (...args: unknown[]) => void) => {
+        off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
           listeners[event] = (listeners[event] || []).filter(
             (h: (...args: unknown[]) => void) => h !== handler,
           );
         }),
-        removeListener: createMockFn((event: string, handler: (...args: unknown[]) => void) => {
+        removeListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
           listeners[event] = (listeners[event] || []).filter(
             (h: (...args: unknown[]) => void) => h !== handler,
           );
         }),
-        removeAllListeners: createMockFn(() => {
+        removeAllListeners: vi.fn(() => {
           Object.keys(listeners).forEach((key) => delete listeners[key]);
         }),
-        initialize: createMockFn().mockResolvedValue(),
-        sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-        cleanup: createMockFn().mockResolvedValue(),
-        disconnect: createMockFn().mockResolvedValue(),
-        isConnected: createMockFn(() => true),
-        isActive: createMockFn(() => true),
+        initialize: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
+        cleanup: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+        isConnected: vi.fn(() => true),
+        isActive: vi.fn(() => true),
       };
       return stub;
     })();

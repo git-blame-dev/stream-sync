@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from "node:fs";
 import type { PathLike, PathOrFileDescriptor } from "node:fs";
 import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { captureStderr } from "../helpers/output-capture";
 
@@ -182,7 +182,7 @@ describe("Configuration System Behavior Tests", () => {
   const testConfigPath = "/test/config.ini";
 
   const setupConfigMocks = (content: string, configPath = testConfigPath) => {
-    fs.existsSync = createMockFn(
+    fs.existsSync = vi.fn(
       (filePath: PathLike) => filePath === configPath,
     ) as FsLike["existsSync"];
     fs.readFileSync = createReadFileSyncMock((filePath: PathOrFileDescriptor) => {
@@ -214,7 +214,7 @@ describe("Configuration System Behavior Tests", () => {
     fs.readFileSync = originalReadFileSync;
     fs.existsSync = originalExistsSync;
     fs.writeFileSync = originalWriteFileSync;
-    restoreAllMocks();
+    vi.restoreAllMocks();
     resetConfigModule();
     restoreOptionalEnvValue("CHAT_BOT_CONFIG_PATH", originalConfigPath);
   });
@@ -263,7 +263,7 @@ userAgents = test-agent-1|test-agent-2
       const stderrCapture = captureStderr();
       process.env.NODE_ENV = "production";
       try {
-        fs.existsSync = createMockFn(() => false) as FsLike["existsSync"];
+        fs.existsSync = vi.fn(() => false) as FsLike["existsSync"];
         process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/config.ini";
 
         expect(() => {
@@ -282,7 +282,7 @@ userAgents = test-agent-1|test-agent-2
       const originalNodeEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = "production";
       try {
-        fs.existsSync = createMockFn(
+        fs.existsSync = vi.fn(
           (path: PathLike) => path === "/default/config.ini",
         ) as FsLike["existsSync"];
         process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/config.ini";
@@ -517,7 +517,7 @@ userAgents = test-agent-1|test-agent-2
       try {
         const fallbackPath = "/fallback/config.ini";
 
-        fs.existsSync = createMockFn(
+        fs.existsSync = vi.fn(
           (path: PathLike) => path === fallbackPath,
         ) as FsLike["existsSync"];
         fs.readFileSync = createReadFileSyncMock((path: PathOrFileDescriptor) => {

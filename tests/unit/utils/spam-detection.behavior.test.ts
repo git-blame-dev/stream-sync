@@ -1,5 +1,5 @@
-import { describe, expect, afterEach, it } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, afterEach, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   useFakeTimers,
@@ -131,7 +131,7 @@ describe("SpamDetection behavior", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     if (detection) {
       detection.destroy();
       detection = null;

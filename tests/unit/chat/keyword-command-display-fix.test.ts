@@ -5,15 +5,9 @@ import {
   TEST_TIMEOUTS,
 } from "../../helpers/test-setup";
 import { createConfigFixture } from "../../helpers/config-fixture";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { CommandParser } from "../../../src/chat/commands";
 
 initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 type CommandParseResult = ReturnType<InstanceType<typeof CommandParser>["parse"]>;
 

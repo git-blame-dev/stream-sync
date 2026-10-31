@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { vi, type Mock, beforeEach, describe, expect, it } from 'bun:test';
 import React from "react";
 import { advanceTimersByTime, getTimerCount, useFakeTimers, useRealTimers } from "../../helpers/bun-timers";
 import TestRenderer from "react-test-renderer";
@@ -8,7 +8,7 @@ import type {
   GuiGiftAnimationConfig,
   GuiGiftAnimationEffectEnvelope,
 } from "../../../gui/src/shared/types";
-import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
+
 
 type EffectOverrides = Partial<Omit<GuiGiftAnimationEffectEnvelope, "config">> & {
   config?: Partial<GuiGiftAnimationConfig>;
@@ -44,15 +44,15 @@ function createEffect(
 
 function createCanvasContext(overrides: Record<string, any> = {}) {
   return {
-    clearRect: createMockFn(),
-    drawImage: createMockFn(),
-    getImageData: createMockFn(() => ({
+    clearRect: vi.fn<(...args: unknown[]) => unknown>(),
+    drawImage: vi.fn<(...args: unknown[]) => unknown>(),
+    getImageData: vi.fn(() => ({
       data: new Uint8ClampedArray([10, 20, 30, 255, 40, 50, 60, 255]),
     })),
-    createImageData: createMockFn((width: number, height: number) => ({
+    createImageData: vi.fn((width: number, height: number) => ({
       data: new Uint8ClampedArray(width * height * 4),
     })),
-    putImageData: createMockFn(),
+    putImageData: vi.fn<(...args: unknown[]) => unknown>(),
     ...overrides,
   };
 }
@@ -68,10 +68,10 @@ type VideoNode = {
   onended: (() => void) | null;
   onerror: (() => void) | null;
   onloadeddata: (() => void) | null;
-  play: TestMockFn<[], Promise<undefined>>;
-  pause: TestMockFn;
-  removeAttribute: TestMockFn;
-  load: TestMockFn;
+  play: Mock<(...args: []) => Promise<undefined>>;
+  pause: Mock<(...args: unknown[]) => unknown>;
+  removeAttribute: Mock<(...args: unknown[]) => unknown>;
+  load: Mock<(...args: unknown[]) => unknown>;
 };
 
 function createVideoNode(): VideoNode {
@@ -86,10 +86,10 @@ function createVideoNode(): VideoNode {
     onended: null,
     onerror: null,
     onloadeddata: null,
-    play: createMockFn<[], Promise<undefined>>().mockResolvedValue(undefined),
-    pause: createMockFn(),
-    removeAttribute: createMockFn(),
-    load: createMockFn(),
+    play: vi.fn<(...args: []) => Promise<undefined>>().mockResolvedValue(undefined),
+    pause: vi.fn<(...args: unknown[]) => unknown>(),
+    removeAttribute: vi.fn<(...args: unknown[]) => unknown>(),
+    load: vi.fn<(...args: unknown[]) => unknown>(),
   };
 }
 
@@ -119,9 +119,9 @@ function installDomRuntime(
       rafCallbacks.set(handle, callback);
       return handle;
     },
-    cancelAnimationFrame: createMockFn((handle: number) => rafCallbacks.delete(handle)),
+    cancelAnimationFrame: vi.fn((handle: number) => rafCallbacks.delete(handle)),
     setTimeout: global.setTimeout,
-    clearTimeout: createMockFn((handle: ReturnType<typeof setTimeout>) => global.clearTimeout(handle)),
+    clearTimeout: vi.fn((handle: ReturnType<typeof setTimeout>) => global.clearTimeout(handle)),
   };
 
   global.window = windowMock as unknown as Window & typeof globalThis;
@@ -531,12 +531,12 @@ describe("GiftAnimationLayer behavior", () => {
 
   it("composites alpha frames, ignores stale completions, and completes active playback from timeout", async () => {
     const rgbBufferContext = createCanvasContext({
-      getImageData: createMockFn(() => ({
+      getImageData: vi.fn(() => ({
         data: new Uint8ClampedArray([1, 2, 3, 255, 4, 5, 6, 255]),
       })),
     });
     const alphaBufferContext = createCanvasContext({
-      getImageData: createMockFn(() => ({
+      getImageData: vi.fn(() => ({
         data: new Uint8ClampedArray([2, 97, 98, 99, 3, 101, 102, 103]),
       })),
     });
@@ -556,8 +556,8 @@ describe("GiftAnimationLayer behavior", () => {
     const onCompleteCalls: string[] = [];
     const videoNode = createVideoNode();
     const canvasContext = createCanvasContext({
-      drawImage: createMockFn(),
-      clearRect: createMockFn(),
+      drawImage: vi.fn<(...args: unknown[]) => unknown>(),
+      clearRect: vi.fn<(...args: unknown[]) => unknown>(),
     });
     let renderer: any = null;
     let staleOnEnded: (() => void) | null = null;

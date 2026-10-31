@@ -1,27 +1,13 @@
-import { describe, expect, afterEach, it } from "bun:test";
-import {
-  clearAllMocks,
-  createMockFn,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
+import { vi, describe, expect, afterEach, it } from "bun:test";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { DisplayQueue } from "../../../src/obs/display-queue";
 import { ConfigValidator } from "../../../src/utils/config-validator";
 import { buildObsConfig } from "../../../src/core/config-builders";
 
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
-
 describe("TTS Configuration Boolean Parsing", () => {
   const queues: DisplayQueue[] = [];
   afterEach(async () => {
     await Promise.all(queues.splice(0).map((queue) => queue.stop()));
-    restoreAllMocks();
-    clearAllMocks();
   });
 
   describe("when ttsNotificationsEnabled is configured with different values", () => {
@@ -58,11 +44,11 @@ describe("TTS Configuration Boolean Parsing", () => {
       };
 
       const mockOBS = {
-        ensureConnected: createMockFn().mockResolvedValue(),
+        ensureConnected: vi.fn().mockResolvedValue(undefined),
         isConnected: () => true,
         isReady: () => Promise.resolve(true),
-        call: createMockFn<[requestType: string, payload?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
-        updateTextSource: createMockFn().mockResolvedValue(true),
+        call: vi.fn<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
+        updateTextSource: vi.fn().mockResolvedValue(true),
       };
 
       const queue = new DisplayQueue(mockOBS, config as unknown as ConstructorParameters<typeof DisplayQueue>[1], baseConstants);

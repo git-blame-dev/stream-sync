@@ -1,5 +1,5 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import { clearAllMocks, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, beforeEach, afterEach, expect } from 'bun:test';
+
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import testClock from "../helpers/test-clock";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
@@ -10,8 +10,8 @@ describe("Extractor Service Integration", () => {
   });
 
   afterEach(async () => {
-    clearAllMocks();
-    restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Primary Extraction Strategy (View Text)", () => {

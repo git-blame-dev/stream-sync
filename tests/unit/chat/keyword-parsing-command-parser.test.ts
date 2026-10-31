@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, afterEach, beforeEach, describe, expect, test } from 'bun:test';
+
 import { CommandParser } from "../../../src/chat/commands";
 
 type CommandParserConfig = {
@@ -42,7 +42,7 @@ const requireParsedVfxConfig = (
 
 describe("CommandParser Keyword Parsing", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let commandParser: CommandParserInstance;

@@ -1,12 +1,12 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks, type TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
 type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
-type RuntimeNotificationMock = TestMockFn<[string, unknown, Record<string, unknown>], unknown>;
+type RuntimeNotificationMock = Mock<(...args: [string, unknown, Record<string, unknown>]) => unknown>;
 type RuntimeFake = {
   handlePaypiggyNotification: RuntimeNotificationMock;
 };
@@ -21,7 +21,7 @@ const firstMockCall = <Args extends unknown[]>(calls: Args[]): Args => {
 
 describe("PlatformEventRouter paypiggy months handling", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let runtime: RuntimeFake;
@@ -30,17 +30,17 @@ describe("PlatformEventRouter paypiggy months handling", () => {
   const buildRouter = () =>
     new PlatformEventRouter({
       eventBus: {
-        subscribe: createMockFn(() => createMockFn()),
+        subscribe: vi.fn(() => vi.fn<(...args: unknown[]) => unknown>()),
       },
       runtime,
-      notificationManager: { handleNotification: createMockFn() },
+      notificationManager: { handleNotification: vi.fn<(...args: unknown[]) => unknown>() },
       config,
       logger: noOpLogger,
     });
 
   beforeEach(() => {
     runtime = {
-      handlePaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handlePaypiggyNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
     };
     config = createConfigFixture({ general: { paypiggiesEnabled: true } });
   });

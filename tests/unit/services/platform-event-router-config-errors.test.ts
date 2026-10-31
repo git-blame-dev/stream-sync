@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -17,7 +17,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 describe("PlatformEventRouter config gating error handling", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const buildRouter = ({ config, runtime, notificationManager, logger }: BuildRouterOptions) =>
@@ -27,7 +27,7 @@ describe("PlatformEventRouter config gating error handling", () => {
       config,
       logger,
       eventBus: {
-        subscribe: createMockFn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
       },
     });
 
@@ -41,7 +41,7 @@ describe("PlatformEventRouter config gating error handling", () => {
     Reflect.deleteProperty(config.general, 'followsEnabled');
     Reflect.deleteProperty(config.twitch, 'followsEnabled');
     const runtime = {
-      handleFollowNotification: createMockFn().mockResolvedValue(true),
+      handleFollowNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -69,7 +69,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("routes unknown types without notification gating", async () => {
     const config = createConfigFixture();
     const notificationManager = {
-      handleNotification: createMockFn().mockResolvedValue({ success: true }),
+      handleNotification: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
     };
 
     const router = buildRouter({
@@ -94,7 +94,7 @@ describe("PlatformEventRouter config gating error handling", () => {
       general: { followsEnabled: false, giftsEnabled: false },
     });
     const notificationManager = {
-      handleNotification: createMockFn().mockResolvedValue({ success: true }),
+      handleNotification: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
     };
 
     const router = buildRouter({
@@ -117,7 +117,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("consults config for chat events and routes when enabled", async () => {
     const config = createConfigFixture({ general: { messagesEnabled: true } });
     const runtime = {
-      handleChatMessage: createMockFn().mockResolvedValue(true),
+      handleChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -155,7 +155,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("still routes chat events when config disables chat display messaging", async () => {
     const config = createConfigFixture({ general: { messagesEnabled: false } });
     const runtime = {
-      handleChatMessage: createMockFn().mockResolvedValue(true),
+      handleChatMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -184,8 +184,8 @@ describe("PlatformEventRouter config gating error handling", () => {
       general: { followsEnabled: false, raidsEnabled: false },
     });
     const runtime = {
-      handleFollowNotification: createMockFn().mockResolvedValue(true),
-      handleRaidNotification: createMockFn().mockResolvedValue(true),
+      handleFollowNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      handleRaidNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -223,7 +223,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("blocks gift routing when config disables gifts", async () => {
     const config = createConfigFixture({ general: { giftsEnabled: false } });
     const runtime = {
-      handleGiftNotification: createMockFn().mockResolvedValue(true),
+      handleGiftNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -254,7 +254,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("blocks envelope routing when config disables gifts", async () => {
     const config = createConfigFixture({ general: { giftsEnabled: false } });
     const runtime = {
-      handleEnvelopeNotification: createMockFn().mockResolvedValue(true),
+      handleEnvelopeNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     const router = buildRouter({
@@ -281,7 +281,7 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("routes unknown types without gating even when config exists", async () => {
     const config = createConfigFixture();
     const notificationManager = {
-      handleNotification: createMockFn().mockResolvedValue({ success: true }),
+      handleNotification: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
     };
 
     const router = buildRouter({
@@ -303,7 +303,7 @@ describe("PlatformEventRouter config gating error handling", () => {
 
   it("requires config for gift routing", async () => {
     const runtime = {
-      handleGiftNotification: createMockFn().mockResolvedValue(true),
+      handleGiftNotification: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
     expect(() =>
       constructInvalidRouter({
@@ -312,7 +312,7 @@ describe("PlatformEventRouter config gating error handling", () => {
         notificationManager: {},
         logger: noOpLogger,
         eventBus: {
-          subscribe: createMockFn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
         },
       }),
     ).toThrow(
@@ -329,7 +329,7 @@ describe("PlatformEventRouter config gating error handling", () => {
         notificationManager: null,
         logger: noOpLogger,
         eventBus: {
-          subscribe: createMockFn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
         },
       }),
     ).toThrow(
@@ -345,7 +345,7 @@ describe("PlatformEventRouter config gating error handling", () => {
       config,
       logger: noOpLogger,
       eventBus: {
-        subscribe: createMockFn(() => () => {
+        subscribe: vi.fn(() => () => {
           throw new Error("unsubscribe boom");
         }),
       },

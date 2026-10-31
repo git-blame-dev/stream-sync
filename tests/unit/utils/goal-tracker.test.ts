@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
 import { GoalTracker } from "../../../src/utils/goal-tracker";
 
@@ -18,7 +18,7 @@ const requireGoalState = (
 
 describe("Goal Tracker - Core Functionality", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let goalTracker: GoalTracker;

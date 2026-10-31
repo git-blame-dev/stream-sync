@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { createYouTubeRunsMessageChatItem } from "../../../helpers/youtube-test-data";
 
@@ -8,10 +8,10 @@ import { YouTubePlatform } from "../../../../src/platforms/youtube";
 type UnknownRecord = Record<string, unknown>;
 type PlatformEvent = UnknownRecord & { type?: string; data?: UnknownRecord };
 type TestLogger = {
-  debug: ReturnType<typeof createMockFn>;
-  info: ReturnType<typeof createMockFn>;
-  warn: ReturnType<typeof createMockFn>;
-  error: ReturnType<typeof createMockFn>;
+  debug: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  info: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  warn: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  error: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 type TestOverrides = {
   logger?: TestLogger | typeof noOpLogger;
@@ -109,7 +109,7 @@ const setNullableConnectionManager = (
 };
 
 const createTimestampService = () => ({
-  extractTimestamp: createMockFn().mockReturnValue("2024-01-01T00:00:00.000Z"),
+  extractTimestamp: vi.fn<(...args: unknown[]) => string>().mockReturnValue("2024-01-01T00:00:00.000Z"),
 });
 
 type StreamDetectionResult = {
@@ -120,9 +120,9 @@ type StreamDetectionResult = {
 };
 
 const createStreamDetectionService = (): {
-  detectLiveStreams: ReturnType<typeof createMockFn<[unknown], Promise<StreamDetectionResult>>>;
+  detectLiveStreams: ReturnType<typeof vi.fn<(...args: [unknown]) => Promise<StreamDetectionResult>>>;
 } => ({
-  detectLiveStreams: createMockFn<[unknown], Promise<StreamDetectionResult>>().mockResolvedValue({
+  detectLiveStreams: vi.fn<(...args: [unknown]) => Promise<StreamDetectionResult>>().mockResolvedValue({
     success: true,
     videoIds: [],
     detectionMethod: "mock",
@@ -145,57 +145,55 @@ const createPlatform = (overrides: TestOverrides = {}) => {
     viewerService: overrides.viewerService || null,
     RawPlatformDataLoggingService: overrides.RawPlatformDataLoggingService,
     notificationManager: overrides.notificationManager || {
-      emit: createMockFn(),
-      on: createMockFn(),
-      removeListener: createMockFn(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      removeListener: vi.fn<(...args: unknown[]) => unknown>(),
     },
   };
 
   const platform = asTestPlatform(
     new YouTubePlatform({ enabled: true, username: "test-channel" }, dependencies),
   );
-  platform.startMultiStreamMonitoring = createMockFn().mockResolvedValue();
+  platform.startMultiStreamMonitoring = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
 
   if (!platform.connectionManager) {
     platform.connectionManager = {
-      connectToStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn().mockReturnValue(0),
-      getAllVideoIds: createMockFn().mockReturnValue([]),
-      getActiveVideoIds: createMockFn().mockReturnValue([]),
-      hasConnection: createMockFn().mockReturnValue(false),
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      cleanupAllConnections: createMockFn().mockResolvedValue(),
-      removeConnection: createMockFn(),
+      connectToStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValue(0),
+      getAllVideoIds: vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]),
+      getActiveVideoIds: vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]),
+      hasConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      cleanupAllConnections: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      removeConnection: vi.fn<(videoId: string) => Promise<void>>(),
     };
   } else {
     platform.connectionManager.connectToStream =
-      createMockFn().mockResolvedValue(true);
+      vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(0);
-    platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue(
-      [],
-    );
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
+    platform.connectionManager.getAllVideoIds = vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]);
     platform.connectionManager.getActiveVideoIds =
-      createMockFn().mockReturnValue([]);
+      vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]);
     platform.connectionManager.hasConnection =
-      createMockFn().mockReturnValue(false);
+      vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
     platform.connectionManager.disconnectFromStream =
-      createMockFn().mockResolvedValue(true);
+      vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
     platform.connectionManager.cleanupAllConnections =
-      createMockFn().mockResolvedValue();
-    platform.connectionManager.removeConnection = createMockFn();
+      vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
+    platform.connectionManager.removeConnection = vi.fn<(videoId: string) => Promise<void>>();
   }
 
   if (!platform.connectionStateManager) {
     platform.connectionStateManager = {
-      markConnecting: createMockFn(),
-      markConnected: createMockFn(),
-      markError: createMockFn(),
+      markConnecting: vi.fn<(...args: unknown[]) => unknown>(),
+      markConnected: vi.fn<(...args: unknown[]) => unknown>(),
+      markError: vi.fn<(...args: unknown[]) => unknown>(),
     };
   } else {
-    platform.connectionStateManager.markConnecting = createMockFn();
-    platform.connectionStateManager.markConnected = createMockFn();
-    platform.connectionStateManager.markError = createMockFn();
+    platform.connectionStateManager.markConnecting = vi.fn<(...args: unknown[]) => unknown>();
+    platform.connectionStateManager.markConnected = vi.fn<(...args: unknown[]) => unknown>();
+    platform.connectionStateManager.markError = vi.fn<(...args: unknown[]) => unknown>();
   }
 
   return { platform, logger, streamDetectionService, timestampService };
@@ -218,16 +216,16 @@ const getDebugCalls = (logger: TestLogger) =>
     metadata: isRecord(metadata) ? metadata : null,
   }));
 const createLogger = () => ({
-  debug: createMockFn(),
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn(),
+  debug: vi.fn<(...args: unknown[]) => unknown>(),
+  info: vi.fn<(...args: unknown[]) => unknown>(),
+  warn: vi.fn<(...args: unknown[]) => unknown>(),
+  error: vi.fn<(...args: unknown[]) => unknown>(),
 });
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 describe("YouTubePlatform modern architecture", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("emits aggregated viewer counts as platform events after stream updates", () => {
@@ -429,12 +427,12 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("emits chat connected event when connectToYouTubeStream succeeds", async () => {
     const mockConnectionManager = {
-      hasConnection: createMockFn().mockReturnValue(false),
-      connectToStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn()
+      hasConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+      connectToStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>()
         .mockReturnValueOnce(0)
         .mockReturnValueOnce(1),
-      getConnectionId: createMockFn().mockReturnValue("youtube-abc123"),
+      getConnectionId: vi.fn<(...args: unknown[]) => string>().mockReturnValue("youtube-abc123"),
     };
 
     const youtubePlatform = createStandalonePlatform();
@@ -504,7 +502,7 @@ describe("YouTubePlatform modern architecture", () => {
     const { platform } = createPlatform({ logger });
     const handlerError = new Error("dispatch failed");
     platform.eventRouter = {
-      routeEvent: createMockFn().mockRejectedValue(handlerError),
+      routeEvent: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(handlerError),
     };
 
     const errorHandlerCalls: UnknownRecord[] = [];
@@ -656,12 +654,12 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("does not infer domain live status from the first chat connection", async () => {
     const mockConnectionManager = {
-      hasConnection: createMockFn().mockReturnValue(false),
-      connectToStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn()
+      hasConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+      connectToStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>()
         .mockReturnValueOnce(0)
         .mockReturnValueOnce(1),
-      getConnectionId: createMockFn().mockReturnValue("youtube-abc123"),
+      getConnectionId: vi.fn<(...args: unknown[]) => string>().mockReturnValue("youtube-abc123"),
     };
 
     const youtubePlatform = createStandalonePlatform();
@@ -678,9 +676,9 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("does not infer domain offline status from the last chat disconnection", async () => {
     const mockConnectionManager = {
-      hasConnection: createMockFn().mockReturnValue(true),
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn()
+      hasConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>()
         .mockReturnValueOnce(1)
         .mockReturnValueOnce(0),
     };
@@ -699,10 +697,10 @@ describe("YouTubePlatform modern architecture", () => {
   it("does not infer terminal status from a refresh leaving zero chat connections", async () => {
     const platform = createStandalonePlatform();
     platform.connectionManager = {
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(0),
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValueOnce(1).mockReturnValue(0),
     };
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
@@ -717,10 +715,10 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("does not emit terminal status when refresh fails", async () => {
     const platform = createStandalonePlatform();
-    const refresh = createMockFn().mockRejectedValue(new Error("refresh failed"));
+    const refresh = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("refresh failed"));
     platform.connectionManager = {
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(1),
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValueOnce(1).mockReturnValue(1),
     };
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
     const events: PlatformEvent[] = [];
@@ -738,10 +736,10 @@ describe("YouTubePlatform modern architecture", () => {
   it("does not emit terminal status when a successful refresh leaves a replacement connection", async () => {
     const platform = createStandalonePlatform();
     platform.connectionManager = {
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(1),
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>().mockReturnValueOnce(1).mockReturnValue(1),
     };
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
@@ -756,14 +754,14 @@ describe("YouTubePlatform modern architecture", () => {
   it("does not fabricate terminal status for repeated zero-connection livechat ends", async () => {
     const platform = createStandalonePlatform();
     platform.connectionManager = {
-      disconnectFromStream: createMockFn().mockResolvedValue(true),
-      getConnectionCount: createMockFn()
+      disconnectFromStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      getConnectionCount: vi.fn<(...args: unknown[]) => number>()
         .mockReturnValueOnce(2)
         .mockReturnValueOnce(0)
         .mockReturnValueOnce(0)
         .mockReturnValue(0),
     };
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
@@ -786,7 +784,7 @@ describe("YouTubePlatform modern architecture", () => {
       _activeStream: { videoId: "vid-123" },
       clearActiveStream: () => clearCalled.push("cleared"),
     };
-    platform.connectionManager.removeConnection = createMockFn();
+    platform.connectionManager.removeConnection = vi.fn<(videoId: string) => Promise<void>>();
 
     platform.removeYouTubeConnection("vid-123");
 
@@ -800,7 +798,7 @@ describe("YouTubePlatform modern architecture", () => {
       _activeStream: { videoId: "other-vid" },
       clearActiveStream: () => clearCalled.push("cleared"),
     };
-    platform.connectionManager.removeConnection = createMockFn();
+    platform.connectionManager.removeConnection = vi.fn<(videoId: string) => Promise<void>>();
 
     platform.removeYouTubeConnection("vid-123");
 
@@ -864,9 +862,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getViewerCount returns unavailable without an observation capability", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = {
-      getViewerCount: createMockFn().mockRejectedValue(
-        new Error("provider error"),
-      ),
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("provider error")),
     };
 
     const count = await platform.getViewerCount();
@@ -895,9 +891,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getViewerCountForVideo returns unavailable on provider error", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = {
-      getViewerCountForVideo: createMockFn().mockRejectedValue(
-        new Error("provider error"),
-      ),
+      getViewerCountForVideo: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("provider error")),
     };
 
     const count = await platform.getViewerCountForVideo("vid-123");
@@ -919,7 +913,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getHealthStatus returns degraded when no active connections and not monitoring", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(0);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
     platform.monitoringInterval = null;
 
     const status = platform.getHealthStatus();
@@ -930,7 +924,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getHealthStatus returns idle when no connections but monitoring active", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(0);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
     platform.monitoringInterval = { testInterval: "health-status" };
 
     const status = platform.getHealthStatus();
@@ -941,7 +935,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getHealthStatus returns healthy when connections exist", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
 
     const status = platform.getHealthStatus();
 
@@ -964,9 +958,9 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("reconnect calls initialize with existing handlers", async () => {
     const { platform } = createPlatform();
-    platform.handlers = { onChat: createMockFn() };
+    platform.handlers = { onChat: vi.fn<(...args: unknown[]) => unknown>() };
     const initCalls: unknown[] = [];
-    platform.initialize = createMockFn(async (handlers: unknown) => {
+    platform.initialize = vi.fn(async (handlers: unknown) => {
       initCalls.push(handlers);
     });
 
@@ -990,7 +984,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("chat count alone does not change membership", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
@@ -1001,15 +995,15 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("sendMessage tries all active connections and returns true on success", async () => {
     const { platform } = createPlatform();
-    platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue([
+    platform.connectionManager.getAllVideoIds = vi.fn<(...args: unknown[]) => string[]>().mockReturnValue([
       "v1",
       "v2",
     ]);
-    platform.connectionManager.getConnection = createMockFn((id) => ({
-      sendMessage: createMockFn().mockResolvedValue(id === "v2"),
+    platform.connectionManager.getConnection = vi.fn((id) => ({
+      sendMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(id === "v2"),
     }));
     platform.connectionManager.getConnectionStatus =
-      createMockFn().mockReturnValue({ ready: true });
+      vi.fn<(...args: unknown[]) => { ready: true; }>().mockReturnValue({ ready: true });
 
     const result = await platform.sendMessage("Hello");
 
@@ -1018,14 +1012,14 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("sendMessage returns false when no connections succeed", async () => {
     const { platform } = createPlatform();
-    platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue([
+    platform.connectionManager.getAllVideoIds = vi.fn<(...args: unknown[]) => string[]>().mockReturnValue([
       "v1",
     ]);
-    platform.connectionManager.getConnection = createMockFn(() => ({
-      sendMessage: createMockFn().mockResolvedValue(false),
+    platform.connectionManager.getConnection = vi.fn(() => ({
+      sendMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false),
     }));
     platform.connectionManager.getConnectionStatus =
-      createMockFn().mockReturnValue({ ready: true });
+      vi.fn<(...args: unknown[]) => { ready: true; }>().mockReturnValue({ ready: true });
 
     const result = await platform.sendMessage("Hello");
 
@@ -1034,14 +1028,14 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("sendMessage handles connection send error gracefully", async () => {
     const { platform } = createPlatform();
-    platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue([
+    platform.connectionManager.getAllVideoIds = vi.fn<(...args: unknown[]) => string[]>().mockReturnValue([
       "v1",
     ]);
-    platform.connectionManager.getConnection = createMockFn(() => ({
-      sendMessage: createMockFn().mockRejectedValue(new Error("send failed")),
+    platform.connectionManager.getConnection = vi.fn(() => ({
+      sendMessage: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("send failed")),
     }));
     platform.connectionManager.getConnectionStatus =
-      createMockFn().mockReturnValue({ ready: true });
+      vi.fn<(...args: unknown[]) => { ready: true; }>().mockReturnValue({ ready: true });
 
     const result = await platform.sendMessage("Hello");
 
@@ -1072,7 +1066,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getNextUserAgent delegates to userAgentManager", () => {
     const { platform } = createPlatform();
     platform.userAgentManager = {
-      getNextUserAgent: createMockFn().mockReturnValue("test-ua"),
+      getNextUserAgent: vi.fn<(...args: unknown[]) => string>().mockReturnValue("test-ua"),
     };
 
     const result = platform.getNextUserAgent();
@@ -1095,7 +1089,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("isAnyYouTubeStreamReady delegates to connectionManager", () => {
     const { platform } = createPlatform();
     platform.connectionManager.isAnyConnectionReady =
-      createMockFn().mockReturnValue(true);
+      vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
 
     const result = platform.isAnyYouTubeStreamReady();
 
@@ -1113,9 +1107,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("getLiveVideoIdsByYoutubei returns empty array when no streams found", async () => {
     const { platform, streamDetectionService } = createPlatform();
-    streamDetectionService.detectLiveStreams = createMockFn<
-      [unknown],
-      Promise<StreamDetectionResult>
+    streamDetectionService.detectLiveStreams = vi.fn<(...args: [unknown]) => Promise<StreamDetectionResult>
     >().mockResolvedValue(
       {
         success: false,
@@ -1132,11 +1124,11 @@ describe("YouTubePlatform modern architecture", () => {
   it("getConnectionState returns state with connection info", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
     platform.connectionManager.getActiveVideoIds =
-      createMockFn().mockReturnValue(["v1"]);
+      vi.fn<(...args: unknown[]) => string[]>().mockReturnValue(["v1"]);
     platform.connectionManager.isConnectionReady =
-      createMockFn().mockReturnValue(true);
+      vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
     platform.monitoringInterval = { testInterval: "connection-state" };
 
     const state = platform.getConnectionState();
@@ -1149,11 +1141,11 @@ describe("YouTubePlatform modern architecture", () => {
   it("getStats returns platform stats", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(2);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(2);
     platform.connectionManager.getActiveVideoIds =
-      createMockFn().mockReturnValue(["v1", "v2"]);
+      vi.fn<(...args: unknown[]) => string[]>().mockReturnValue(["v1", "v2"]);
     platform.connectionManager.isConnectionReady =
-      createMockFn().mockReturnValue(true);
+      vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
 
     const stats = platform.getStats();
 
@@ -1179,7 +1171,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("isConnected returns true when connectionManager has connections", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
 
     expect(platform.isConnected()).toBe(true);
   });
@@ -1187,7 +1179,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("isConnected returns false when connectionManager has no connections", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(0);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
 
     expect(platform.isConnected()).toBe(false);
   });
@@ -1195,7 +1187,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getConnectionStatus returns current status", async () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
 
     const status = await platform.getConnectionStatus();
 

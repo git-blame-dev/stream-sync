@@ -1,5 +1,6 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { dirname } from "node:path";
+import { withNativeChildEnvironment } from "../../helpers/native-child-environment";
+import { describe, expect, beforeEach, it } from "bun:test";
 import { initializeTestLogging } from "../../helpers/test-setup";
 initializeTestLogging();
 
@@ -8,12 +9,7 @@ import {
   expectNoTechnicalArtifacts,
   expectContentReadabilityForAudience,
 } from "../../helpers/assertion-helpers";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { noOpLogger } from "../../helpers/mock-factories";
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 type TestLogger = typeof noOpLogger & {
   console: (message: string, context?: string) => void;
@@ -149,49 +145,31 @@ describe(
         });
       });
 
-  describe("when handling exit scenarios", () => {
-    let originalProcessExit: typeof process.exit;
-    let exitCalled: boolean;
-    let observedExitCode: number | undefined;
-
-    beforeEach(() => {
-      exitCalled = false;
-      observedExitCode = undefined;
-      originalProcessExit = process.exit;
-      process.exit = ((code?: string | number | null | undefined) => {
-        exitCalled = true;
-        observedExitCode = typeof code === "number" ? code : undefined;
-        return undefined as never;
-      }) as typeof process.exit;
-    });
-
-        afterEach(() => {
-          restoreAllMocks();
-          process.exit = originalProcessExit;
-        });
-
-    it("exits with code 1 when exitOnError is true", () => {
-      const criticalError = "Authentication validation failed";
-
-          handleUserFacingError(
-            criticalError,
-            { logger: mockLogger },
-            {
-              exitOnError: true,
-            },
-          );
-
-      expect(exitCalled).toBe(true);
-      expect(observedExitCode).toBe(1);
-    });
-
-        it("should not exit by default", () => {
-          const normalError = "Some recoverable error";
-
-          handleUserFacingError(normalError, { logger: mockLogger });
-
-          expect(exitCalled).toBe(false);
-          expect(observedExitCode).toBeUndefined();
+      describe("when handling exit scenarios", () => {
+        it.each([true, false])("preserves native exit behavior with exitOnError=%s", async (exitOnError) => {
+          await withNativeChildEnvironment(async (env) => {
+            const script = `
+              import { handleUserFacingError } from ${JSON.stringify(import.meta.resolve("../../../src/utils/user-friendly-errors.ts"))};
+              const logger = {
+                console(message) { process.stdout.write(message); },
+                error() {}, warn() {},
+              };
+              handleUserFacingError("Token validation failed: 401 Unauthorized", { logger },
+                ${exitOnError ? "{ exitOnError: true }" : "{}"});
+              process.stdout.write("SYNTHETIC_RETURNED");
+            `;
+            const child = Bun.spawnSync([process.execPath, "--no-env-file", "--eval", script], {
+              cwd: dirname(env.CHAT_BOT_CONFIG_PATH!),
+              env,
+              stdout: "pipe",
+              stderr: "pipe",
+              timeout: 5_000,
+            });
+            expect(child.exitCode).toBe(exitOnError ? 1 : 0);
+            expect(child.stderr.toString()).toBe("");
+            expect(child.stdout.toString()).toContain("TWITCH CONNECTION PROBLEM");
+            expect(child.stdout.toString().includes("SYNTHETIC_RETURNED")).toBe(!exitOnError);
+          });
         });
       });
     });

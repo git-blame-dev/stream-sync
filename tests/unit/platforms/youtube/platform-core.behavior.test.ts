@@ -1,9 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { createRecordingLogger, type RecordingLogger } from "../../../helpers/recording-logger";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
@@ -15,9 +11,9 @@ type PlatformOverrides = {
   logger?: typeof noOpLogger | RecordingLogger;
   streamDetectionService?: ReturnType<typeof createStreamDetectionService>;
   notificationManager?: {
-    emit: TestMockFn<unknown[], unknown>;
-    on: TestMockFn<unknown[], unknown>;
-    removeListener: TestMockFn<unknown[], unknown>;
+    emit: Mock<(...args: unknown[]) => unknown>;
+    on: Mock<(...args: unknown[]) => unknown>;
+    removeListener: Mock<(...args: unknown[]) => unknown>;
   };
 };
 
@@ -39,7 +35,7 @@ function isRefreshRecord(value: unknown): value is RefreshRecord {
 }
 
 const createStreamDetectionService = (overrides = {}) => ({
-  detectLiveStreams: createMockFn<[unknown], Promise<{ success: boolean; videoIds: string[]; detectionMethod: string }>>().mockResolvedValue({
+  detectLiveStreams: vi.fn<(...args: [unknown]) => Promise<{ success: boolean; videoIds: string[]; detectionMethod: string }>>().mockResolvedValue({
     success: true,
     videoIds: [],
     detectionMethod: "mock",
@@ -56,9 +52,9 @@ const createPlatform = (overrides: PlatformOverrides = {}) => {
     logger,
     streamDetectionService,
     notificationManager: overrides.notificationManager || {
-      emit: createMockFn<unknown[], unknown>(),
-      on: createMockFn<unknown[], unknown>(),
-      removeListener: createMockFn<unknown[], unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      removeListener: vi.fn<(...args: unknown[]) => unknown>(),
     },
     USER_AGENTS: ["test-agent"],
     Innertube: null,
@@ -73,7 +69,7 @@ const createPlatform = (overrides: PlatformOverrides = {}) => {
 
 describe("YouTubePlatform behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("throws when dependencies argument is not an object", () => {
@@ -100,7 +96,7 @@ describe("YouTubePlatform behavior", () => {
 
   it("connects to live videos and uses connection manager", async () => {
     const streamDetectionService = createStreamDetectionService({
-      detectLiveStreams: createMockFn().mockResolvedValue({
+      detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ success: true; videoIds: string[]; detectionMethod: string; }>>().mockResolvedValue({
         success: true,
         videoIds: ["v1"],
         detectionMethod: "mock",
@@ -117,7 +113,7 @@ describe("YouTubePlatform behavior", () => {
       connected.push({ videoId, reason: options?.reason });
       return true;
     };
-    platform.startMultiStreamMonitoring = createMockFn<[], Promise<void>>().mockImplementation(
+    platform.startMultiStreamMonitoring = vi.fn<(...args: []) => Promise<void>>().mockImplementation(
       async () => {
         await platform.checkMultiStream({ throwOnError: true });
       },
@@ -130,13 +126,11 @@ describe("YouTubePlatform behavior", () => {
 
   it("fails fast when stream detection throws", async () => {
     const streamDetectionService = createStreamDetectionService({
-      detectLiveStreams: createMockFn().mockRejectedValue(
-        new Error("detection failed"),
-      ),
+      detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("detection failed")),
     });
 
     const platform = createPlatform({ streamDetectionService });
-    platform.startMultiStreamMonitoring = createMockFn<[], Promise<void>>().mockImplementation(
+    platform.startMultiStreamMonitoring = vi.fn<(...args: []) => Promise<void>>().mockImplementation(
       async () => {
         await platform.checkMultiStream({ throwOnError: true });
       },
@@ -519,14 +513,14 @@ describe("YouTubePlatform behavior", () => {
     const platform = createPlatform();
     const refreshCalls: RefreshRecord[] = [];
 
-    platform.connectionManager.getConnectionCount = createMockFn()
+    platform.connectionManager.getConnectionCount = vi.fn<(...args: unknown[]) => number>()
       .mockReturnValueOnce(1)
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0);
-    platform.connectionManager.disconnectFromStream = createMockFn()
+    platform.connectionManager.disconnectFromStream = vi.fn<(...args: unknown[]) => Promise<boolean>>()
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = vi.fn(
       async (context) => {
         if (isRefreshRecord(context)) {
           refreshCalls.push(context);
@@ -561,10 +555,10 @@ describe("YouTubePlatform behavior", () => {
   it("does not request immediate refresh without explicit context", async () => {
     const platform = createPlatform();
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
     platform.connectionManager.disconnectFromStream =
-      createMockFn().mockResolvedValue(true);
-    const refreshSpy = createMockFn().mockResolvedValue(undefined);
+      vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    const refreshSpy = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refreshSpy;
 
     await platform.disconnectFromYouTubeStream("video-2", "stream ended");
@@ -574,12 +568,12 @@ describe("YouTubePlatform behavior", () => {
 
   it("ignores a stale terminal callback before disconnect or refresh side effects", async () => {
     const platform = createPlatform();
-    platform.connectionManager.isCurrentAttempt = createMockFn().mockReturnValue(false);
-    const disconnect = createMockFn().mockResolvedValue(true);
+    platform.connectionManager.isCurrentAttempt = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
+    const disconnect = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
     platform.connectionManager.disconnectFromStream = disconnect;
-    const emitStatus = createMockFn();
+    const emitStatus = vi.fn<(...args: unknown[]) => unknown>();
     platform.on("platform:event", emitStatus);
-    const refresh = createMockFn().mockResolvedValue(undefined);
+    const refresh = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
 
     const result = await platform.disconnectFromYouTubeStream(
@@ -600,13 +594,13 @@ describe("YouTubePlatform behavior", () => {
 
   it("does not emit a normal status transition after failed shutdown", async () => {
     const platform = createPlatform();
-    platform.connectionManager.getConnectionCount = createMockFn()
+    platform.connectionManager.getConnectionCount = vi.fn<(...args: unknown[]) => number>()
       .mockReturnValueOnce(1)
       .mockReturnValueOnce(0);
-    platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(false);
-    const emitStatus = createMockFn();
+    platform.connectionManager.disconnectFromStream = vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false);
+    const emitStatus = vi.fn<(...args: unknown[]) => unknown>();
     platform.on("platform:event", emitStatus);
-    const refresh = createMockFn().mockResolvedValue(undefined);
+    const refresh = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
 
     const result = await platform.disconnectFromYouTubeStream(
@@ -628,13 +622,13 @@ describe("YouTubePlatform behavior", () => {
     });
 
     platform.connectionManager.getConnectionCount =
-      createMockFn().mockReturnValue(1);
+      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
     platform.connectionManager.disconnectFromStream =
-      createMockFn().mockResolvedValue(true);
-    platform._handleConnectionErrorLogging = createMockFn();
+      vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true);
+    platform._handleConnectionErrorLogging = vi.fn<(message: string, error: unknown, action?: string) => void>();
     platform._youtubeMultiStreamManager.isCheckInProgress =
-      createMockFn().mockReturnValue(true);
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn<[Record<string, unknown>?], Promise<void>>(
+      vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = vi.fn<(...args: [Record<string, unknown>?]) => Promise<void>>(
       () => refreshPromise,
     );
 

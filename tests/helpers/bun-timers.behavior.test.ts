@@ -1,133 +1,99 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-
 import {
-    advanceTimersByTime,
-    clearAllTimers,
-    clearTrackedTimers,
-    getTimerCount,
-    installTimerTracking,
-    restoreTimerTracking,
-    runAllTimers,
-    runOnlyPendingTimers,
-    setSystemTime,
-    useFakeTimers,
-    useRealTimers
+    advanceTimersByTime, clearAllTimers, getTimerCount, installTimerTracking,
+    restoreTimerTracking, runAllTimers, runOnlyPendingTimers, setSystemTime,
+    useFakeTimers, useRealTimers,
 } from './bun-timers';
 
-describe('bun-timers behavior', () => {
-    beforeEach(() => {
-        useRealTimers();
-        restoreTimerTracking();
-    });
-
+describe('bun-timers scoped observation', () => {
+    beforeEach(() => { useRealTimers(); restoreTimerTracking(); });
     afterEach(() => {
-        clearTrackedTimers();
         restoreTimerTracking();
-        try {
-            clearAllTimers();
-        } catch {
-            // Ignore when fake timers are not active.
-        }
         useRealTimers();
         setSystemTime();
-        installTimerTracking();
     });
 
-    it('retires tracked handles before each fake and real mode transition', () => {
+    it('observes timeout completion before any reset', () => {
+        useFakeTimers();
         const state = installTimerTracking();
-        const trackedTimeout = global.setTimeout;
-        const trackedInterval = global.setInterval;
-        trackedTimeout(() => {}, 60000);
-        trackedInterval(() => {}, 60000);
-        useFakeTimers();
-        expect(state.activeTimers.size).toBe(0);
-        const fakeTimeout = global.setTimeout;
-        const fakeInterval = global.setInterval;
-        let calls = 0;
-        fakeTimeout(() => { calls += 1; }, 10);
-        fakeInterval(() => { calls += 1; }, 10);
-        expect(state.activeTimers.size).toBe(2);
-        useRealTimers();
-        expect(state.activeTimers.size).toBe(0);
-        useFakeTimers();
-        const nextTimeout = global.setTimeout;
-        const nextInterval = global.setInterval;
-        nextTimeout(() => { calls += 1; }, 10);
-        nextInterval(() => { calls += 1; }, 10);
-        clearTrackedTimers();
+        const schedule = global.setTimeout;
+        const calls: string[] = [];
+        const timeout = schedule((value: string) => { calls.push(value); }, 10, 'synthetic');
+        expect(state.activeTimers.has(timeout)).toBe(true);
         advanceTimersByTime(10);
-        expect(calls).toBe(0);
+        expect(calls).toEqual(['synthetic']);
+        expect(state.activeTimers.has(timeout)).toBe(false);
         expect(getTimerCount()).toBe(0);
     });
 
-    it('captures the current timer owner on reinstall and restores its exact reference', () => {
-        installTimerTracking();
+    it('restoring observation does not cancel timers owned by the caller', () => {
+        useFakeTimers();
+        const state = installTimerTracking();
+        const schedule = global.setTimeout;
+        let calls = 0;
+        const timeout = schedule(() => { calls++; }, 10);
         restoreTimerTracking();
+        try {
+            expect(getTimerCount()).toBe(1);
+            advanceTimersByTime(10);
+            expect(calls).toBe(1);
+            expect(state.activeTimers.has(timeout)).toBe(false);
+            expect(getTimerCount()).toBe(0);
+        } finally { clearTimeout(timeout); }
+    });
+
+    it('captures the current timer owner on reinstall and restores its exact reference', () => {
         const timerSpy = vi.spyOn(global, 'setTimeout');
         const currentOwner = global.setTimeout;
         try {
             installTimerTracking();
-            const trackedTimeout = global.setTimeout;
-            trackedTimeout(() => {}, 60000);
+            const schedule = global.setTimeout;
+            const timeout = schedule(() => {}, 60000);
             expect(timerSpy).toHaveBeenCalledTimes(1);
+            clearTimeout(timeout);
             restoreTimerTracking();
             expect(global.setTimeout).toBe(currentOwner);
-        } finally {
-            restoreTimerTracking();
-            timerSpy.mockRestore();
-        }
+        } finally { restoreTimerTracking(); timerSpy.mockRestore(); }
     });
 
-    it('installs tracking once and tracks timeout and interval lifecycle', () => {
-        const installedState = installTimerTracking();
-        const secondInstallState = installTimerTracking();
-        const trackedSetTimeout = global.setTimeout;
-        const trackedSetInterval = global.setInterval;
-
-        expect(secondInstallState).toBe(installedState);
-
-        const timeoutId = trackedSetTimeout(() => {}, 50);
-        const intervalId = trackedSetInterval(() => {}, 50);
-
-        expect(installedState.activeTimers.has(timeoutId)).toBe(true);
-        expect(installedState.activeTimers.has(intervalId)).toBe(true);
-
-        clearTimeout(timeoutId);
-        clearInterval(intervalId);
-
-        expect(installedState.activeTimers.size).toBe(0);
+    it('installs once and observes caller cancellation of both timer kinds', () => {
+        const state = installTimerTracking();
+        expect(installTimerTracking()).toBe(state);
+        const scheduleTimeout = global.setTimeout;
+        const scheduleInterval = global.setInterval;
+        const timeout = scheduleTimeout(() => {}, 60000);
+        const interval = scheduleInterval(() => {}, 60000);
+        expect(state.activeTimers.has(timeout)).toBe(true);
+        expect(state.activeTimers.has(interval)).toBe(true);
+        clearTimeout(timeout);
+        clearInterval(interval);
+        expect(state.activeTimers.has(timeout)).toBe(false);
+        expect(state.activeTimers.has(interval)).toBe(false);
     });
 
-    it('clears tracked timers and tolerates uninstalled state', () => {
-        clearTrackedTimers();
-
-        const installedState = installTimerTracking();
-        const trackedSetTimeout = global.setTimeout;
-        const trackedSetInterval = global.setInterval;
-        trackedSetTimeout(() => {}, 1000);
-        trackedSetInterval(() => {}, 1000);
-
-        expect(installedState.activeTimers.size).toBeGreaterThan(0);
-
-        clearTrackedTimers();
-
-        expect(installedState.activeTimers.size).toBe(0);
+    it('switches clock modes without cancelling a native timer owned by the caller', () => {
+        const state = installTimerTracking();
+        const schedule = global.setTimeout;
+        const timeout = schedule(() => {}, 60000);
+        try {
+            useFakeTimers();
+            expect(state.activeTimers.has(timeout)).toBe(true);
+            useRealTimers();
+            expect(state.activeTimers.has(timeout)).toBe(true);
+        } finally { clearTimeout(timeout); }
+        expect(state.activeTimers.has(timeout)).toBe(false);
     });
 
-    it('exposes fake timer helpers through vi wrappers', () => {
+    it('exposes native fake timer helpers', () => {
         useFakeTimers();
         setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-        const nativeSetTimeout = global.setTimeout;
-
-        nativeSetTimeout(() => {}, 250);
-
+        const schedule = global.setTimeout;
+        schedule(() => {}, 250);
         expect(getTimerCount()).toBe(1);
-
         advanceTimersByTime(250);
         runOnlyPendingTimers();
         runAllTimers();
-        clearAllTimers();
-
         expect(getTimerCount()).toBe(0);
+        clearAllTimers();
     });
 });

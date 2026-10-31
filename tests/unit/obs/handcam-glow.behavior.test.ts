@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createHandcamConfigFixture } from "../../helpers/config-fixture";
 import { waitForDelay } from "../../helpers/time-utils";
@@ -50,10 +50,8 @@ describe("handcam-glow", () => {
 
   beforeEach(() => {
     mockLogger = noOpLogger;
-    mockEnsureConnected = createMockFn<[], Promise<void>>(async () => {});
-    mockDelay = createMockFn<
-      [ms: number, minMs: number, context: string],
-      Promise<void>
+    mockEnsureConnected = vi.fn<(...args: []) => Promise<void>>(async () => {});
+    mockDelay = vi.fn<(...args: [ms: number, minMs: number, context: string]) => Promise<void>
     >(async () => {});
 
     setTestingDependencies({
@@ -242,7 +240,7 @@ describe("handcam-glow", () => {
 
   it("skips initialization when disabled in config", async () => {
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async () => ({})),
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async () => ({})),
     );
 
     await initializeHandcamGlow(
@@ -255,7 +253,7 @@ describe("handcam-glow", () => {
 
   it("initializes glow filter to zero when enabled", async () => {
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async (action) => {
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async (action) => {
         if (action === "GetSourceFilter") {
           return { filterSettings: { brightness: 10 } };
         }
@@ -284,7 +282,7 @@ describe("handcam-glow", () => {
 
   it("handles initialization failure gracefully without throwing", async () => {
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async () => {
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async () => {
         throw new Error("OBS filter not found");
       }),
     );
@@ -303,7 +301,7 @@ describe("handcam-glow", () => {
   it("applies dual size fields during glow animation", async () => {
     const settingsCalls: Record<string, unknown>[] = [];
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async (action, payload) => {
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async (action, payload) => {
         if (action === "GetSourceFilter") {
           return { filterSettings: { brightness: 10 } };
         }
@@ -335,7 +333,7 @@ describe("handcam-glow", () => {
   it("resets glow properties after animation error without throwing", async () => {
     let setCallCount = 0;
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async (action) => {
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async (action) => {
         if (action === "GetSourceFilter") {
           return { filterSettings: { brightness: 10 } };
         }
@@ -361,7 +359,7 @@ describe("handcam-glow", () => {
 
   it("triggers fire-and-forget glow without throwing", async () => {
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async () => ({})),
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async () => ({})),
     );
     expect(() =>
       triggerHandcamGlow(obs, createHandcamConfigFixture()),
@@ -415,9 +413,7 @@ describe("handcam-glow", () => {
     let delayCallCount = 0;
     const settingsCalls: Record<string, unknown>[] = [];
 
-    mockDelay = createMockFn<
-      [ms: number, minMs: number, context: string],
-      Promise<void>
+    mockDelay = vi.fn<(...args: [ms: number, minMs: number, context: string]) => Promise<void>
     >(() => {
       delayCallCount += 1;
       if (delayCallCount === 1) {
@@ -434,7 +430,7 @@ describe("handcam-glow", () => {
     });
 
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async (action, payload) => {
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async (action, payload) => {
         if (action === "GetSourceFilter") {
           return { filterSettings: { brightness: 10 } };
         }
@@ -476,7 +472,7 @@ describe("handcam-glow", () => {
 
   it("ignores trigger when disabled", () => {
     const obs = createObsLike(
-      createMockFn<[string, ObsCallPayload], Promise<unknown>>(async () => ({})),
+      vi.fn<(...args: [string, ObsCallPayload]) => Promise<unknown>>(async () => ({})),
     );
     triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));
     expect(obs.call).not.toHaveBeenCalled();

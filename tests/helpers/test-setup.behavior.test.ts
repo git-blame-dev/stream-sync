@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { initializeLoggingConfig, logger } from '../../src/core/logging';
-import { createMockFn } from './bun-mock-utils';
-import { MockLifecycleManager } from './mock-lifecycle';
 import { captureStderr, captureStdout } from './output-capture';
 import { createTestNotification, createTestUser, initializeTestLogging } from './test-setup';
 import testClock from './test-clock';
@@ -68,32 +66,4 @@ describe('test-setup helper behavior', () => {
         expect(overridden.platform).toBe('youtube');
     });
 
-    it('cleans real registered mocks without touching a retired mock replaced under the same key', () => {
-        const manager = new MockLifecycleManager();
-        const retired = { action: createMockFn() };
-        const replacement = { action: createMockFn() };
-        const independent = { action: createMockFn() };
-        manager.registerMock('synthetic-owner', retired, { autoValidate: false });
-        manager.registerMock('synthetic-owner', replacement, { autoValidate: false });
-        retired.action();
-        replacement.action();
-        independent.action();
-        manager.cleanup();
-        expect(replacement.action.mock.calls).toHaveLength(0);
-        expect(retired.action.mock.calls).toHaveLength(1);
-        expect(independent.action.mock.calls).toHaveLength(1);
-        expect(manager.getPerformanceMetrics().activeMocks).toBe(1);
-        expect(manager.getPerformanceMetrics().totalCleanupOperations).toBe(1);
-    });
-
-    it('propagates a real registered mock cleanup failure', () => {
-        const manager = new MockLifecycleManager();
-        const target = {};
-        Object.defineProperty(target, 'broken', {
-            enumerable: true,
-            get() { throw new Error('synthetic cleanup failure'); }
-        });
-        manager.registerMock('synthetic-broken', target, { autoValidate: false });
-        expect(() => manager.cleanup()).toThrow('synthetic cleanup failure');
-    });
 });

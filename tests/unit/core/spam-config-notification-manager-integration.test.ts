@@ -1,17 +1,17 @@
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { config } from "../../../src/core/config";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
-type MockFn = ReturnType<typeof createMockFn>;
+type MockFn = ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 type QueueItem = DisplayQueueItem;
-type AddItemMockFn = ReturnType<typeof createMockFn<[item: QueueItem], readonly QueueItem[]>>;
-type GetQueueLengthMockFn = ReturnType<typeof createMockFn<[], number>>;
+type AddItemMockFn = ReturnType<typeof vi.fn<(...args: [item: QueueItem]) => readonly QueueItem[]>>;
+type GetQueueLengthMockFn = ReturnType<typeof vi.fn<(...args: []) => number>>;
 type DonationSpamArgs = [
   userId: unknown,
   username: unknown,
@@ -22,7 +22,7 @@ type DonationSpamArgs = [
 ];
 type SpamDecision = { shouldShow: boolean };
 type DonationSpamMockFn = ReturnType<
-  typeof createMockFn<DonationSpamArgs, SpamDecision>
+  typeof vi.fn<(...args: DonationSpamArgs) => SpamDecision>
 >;
 type ConfigWithSpam = {
   spam: {
@@ -61,7 +61,7 @@ const mockConstants = {
 
 describe("Spam Detection Service Integration Tests - Modernized", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let notificationManager: NotificationManagerInstance;
@@ -77,13 +77,13 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn<[item: QueueItem], readonly QueueItem[]>((item) => [item]),
-      processQueue: createMockFn(),
-      getQueueLength: createMockFn(() => 0),
+      addItem: vi.fn<(...args: [item: QueueItem]) => readonly QueueItem[]>((item) => [item]),
+      processQueue: vi.fn<(...args: unknown[]) => unknown>(),
+      getQueueLength: vi.fn(() => 0),
     };
 
     mockSpamDetector = {
-      handleDonationSpam: createMockFn<DonationSpamArgs, SpamDecision>(() => ({ shouldShow: true })),
+      handleDonationSpam: vi.fn<(...args: DonationSpamArgs) => SpamDecision>(() => ({ shouldShow: true })),
     };
 
     testConfig = createConfigFixture({
@@ -97,9 +97,9 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
   describe("when spam detection service is provided", () => {
     beforeEach(() => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -108,7 +108,7 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
+        vfxCommandService: { getVFXConfig: vi.fn(async () => null) },
       });
     });
 
@@ -228,9 +228,9 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
   describe("when spam detection service is not provided", () => {
     beforeEach(() => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -238,7 +238,7 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: testConfig,
-        vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
+        vfxCommandService: { getVFXConfig: vi.fn(async () => null) },
       });
     });
 
@@ -338,9 +338,9 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
   describe("when handling edge cases", () => {
     beforeEach(() => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -349,7 +349,7 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
+        vfxCommandService: { getVFXConfig: vi.fn(async () => null) },
       });
     });
 
@@ -403,9 +403,9 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
   describe("when verifying service injection pattern", () => {
     it("should route gift notifications through provided spam detector dependency", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       const nm = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -414,7 +414,7 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
+        vfxCommandService: { getVFXConfig: vi.fn(async () => null) },
       });
 
       mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: false });
@@ -442,16 +442,16 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
 
     it("should handle missing spam detector gracefully", async () => {
       const localLogger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
+        debug: vi.fn<(...args: unknown[]) => unknown>(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
+        warn: vi.fn<(...args: unknown[]) => unknown>(),
+        error: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       const nm = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -459,7 +459,7 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: testConfig,
-        vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
+        vfxCommandService: { getVFXConfig: vi.fn(async () => null) },
       });
 
       const result = await nm.handleNotification("platform:gift", "tiktok", {

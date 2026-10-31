@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { vi, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMockFn } from '../helpers/bun-mock-utils';
+
 import { secrets } from '../../src/core/secrets';
 import { getUnifiedLogger } from '../../src/core/logging';
 import { TwitchAuth } from '../../src/auth/TwitchAuth';
@@ -10,7 +10,7 @@ import { TWITCH_OAUTH_SCOPES } from '../../src/auth/twitch-oauth-scopes';
 import { EnhancedHttpClient } from '../../src/utils/enhanced-http-client';
 import { TwitchApiClient } from '../../src/utils/api-clients/twitch-api-client';
 
-const transportGet = () => createMockFn<[string, Record<string, unknown>], Promise<{ data: unknown }>>();
+const transportGet = () => vi.fn<(...args: [string, Record<string, unknown>]) => Promise<{ data: unknown }>>();
 
 describe('Twitch API errors through actual HTTP, retry and diagnostic owners', () => {
   const logger = getUnifiedLogger();

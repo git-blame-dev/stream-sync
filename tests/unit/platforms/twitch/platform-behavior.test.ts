@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { createTwitchEventSubChatMessageEvent } from "../../../helpers/twitch-test-data";
 
@@ -130,9 +130,9 @@ const createPlatform = (
 describe("TwitchPlatform behavior standards", () => {
   let platform: TwitchPlatform | undefined;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (platform?.cleanup) {
-      platform.cleanup().catch(() => {});
+      await platform.cleanup();
     }
     platform = undefined;
   });
@@ -387,7 +387,7 @@ describe("TwitchPlatform behavior standards", () => {
   });
 
   it("forwards connection lifecycle events to injected onConnection handlers", () => {
-    const onConnection = createMockFn();
+    const onConnection = vi.fn<(...args: unknown[]) => unknown>();
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     platform.handlers = { onConnection };
 

@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, beforeEach, afterEach } from 'bun:test';
+
 
 import { safeOBSOperation } from "../../../src/obs/safe-operations.ts";
 
@@ -17,12 +17,12 @@ describe("safeOBSOperation error handling", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("rethrows operation errors", async () => {
     const obsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     await expect(
@@ -38,7 +38,7 @@ describe("safeOBSOperation error handling", () => {
 
   it("rethrows non-Error operation failures without hiding the original value", async () => {
     const obsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
     await expect(
@@ -54,10 +54,10 @@ describe("safeOBSOperation error handling", () => {
 
   it("returns null when OBS is not ready", async () => {
     const obsManager = {
-      isReady: createMockFn().mockResolvedValue(false),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false),
     };
 
-    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
+    const operation = vi.fn<(...args: []) => Promise<unknown>>(async () => undefined);
     const result = await safeOBSOperation(
       obsManager,
       operation,
@@ -70,10 +70,10 @@ describe("safeOBSOperation error handling", () => {
 
   it("propagates readiness-check failures without running the operation", async () => {
     const obsManager = {
-      isReady: createMockFn().mockRejectedValue(new Error("readiness check failed")),
+      isReady: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("readiness check failed")),
     };
 
-    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
+    const operation = vi.fn<(...args: []) => Promise<unknown>>(async () => undefined);
 
     await expect(
       safeOBSOperation(obsManager, operation, "Readiness failure test"),
@@ -83,10 +83,10 @@ describe("safeOBSOperation error handling", () => {
 
   it("rethrows non-Error readiness failures without hiding the original value", async () => {
     const obsManager = {
-      isReady: createMockFn().mockRejectedValue("readinessStringFailure"),
+      isReady: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue("readinessStringFailure"),
     };
 
-    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
+    const operation = vi.fn<(...args: []) => Promise<unknown>>(async () => undefined);
 
     await expect(
       safeOBSOperation(obsManager, operation, "String readiness failure"),
@@ -96,10 +96,10 @@ describe("safeOBSOperation error handling", () => {
 
   it("returns operation result when successful", async () => {
     const obsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
-    const operation = createMockFn().mockResolvedValue({
+    const operation = vi.fn<(...args: unknown[]) => Promise<{ success: true; data: string; }>>().mockResolvedValue({
       success: true,
       data: "testData",
     });
@@ -115,10 +115,10 @@ describe("safeOBSOperation error handling", () => {
 
   it("executes operation when OBS is ready", async () => {
     const obsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
     };
 
-    const operation = createMockFn().mockResolvedValue("completed");
+    const operation = vi.fn<(...args: unknown[]) => Promise<string>>().mockResolvedValue("completed");
     await safeOBSOperation(obsManager, operation, "Execute test");
 
     expect(obsManager.isReady).toHaveBeenCalledTimes(1);

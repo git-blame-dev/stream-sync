@@ -1,4 +1,4 @@
-import { describe, expect, test, spyOn } from 'bun:test';
+import { vi, describe, expect, test, spyOn } from 'bun:test';
 import { createRequire } from 'node:module';
 import { createServer, type Socket } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -7,7 +7,7 @@ import * as deadlines from '../../../src/utils/timeout-wrapper';
 import { safeDelay } from '../../../src/utils/timeout-validator';
 import { HttpRetryExecutor } from '../../../src/utils/http-retry-executor';
 import { EnhancedHttpClient } from '../../../src/utils/enhanced-http-client';
-import { createMockFn } from '../../helpers/bun-mock-utils';
+
 import testClock from '../../helpers/test-clock';
 import { noOpLogger } from '../../helpers/mock-factories';
 
@@ -22,7 +22,7 @@ describe('operation deadlines', () => {
         const parent = new AbortController();
         const reason = new Error('synthetic parent retired');
         parent.abort(reason);
-        const operation = createMockFn(async () => 'late');
+        const operation = vi.fn(async () => 'late');
         await expect(deadlines.withOperationDeadline(operation, { budgetMs: 100, parentAbortSignal: parent.signal })).rejects.toBe(reason);
         expect(operation).not.toHaveBeenCalled();
     });
@@ -40,7 +40,7 @@ describe('operation deadlines', () => {
     });
 
     test('budget validation never invokes work and rejects unsupported timer durations', async () => {
-        const operation = createMockFn(async () => 'late');
+        const operation = vi.fn(async () => 'late');
         for (const budgetMs of [0, -1, Infinity, Number.NaN, 2_147_483_648]) {
             await expect(deadlines.withOperationDeadline(operation, { budgetMs })).rejects.toBeInstanceOf(RangeError);
         }
@@ -126,10 +126,10 @@ describe('operation deadlines', () => {
 
 describe('retry lifetime policy', () => {
     test('server minimum is 120 seconds and a short budget fails with the original error', async () => {
-        const sleep = createMockFn().mockResolvedValue(undefined);
+        const sleep = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const retry = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: sleep });
         const error = retryError();
-        const call = createMockFn<[], Promise<string>>().mockRejectedValueOnce(error).mockResolvedValue('ok');
+        const call = vi.fn<(...args: []) => Promise<string>>().mockRejectedValueOnce(error).mockResolvedValue('ok');
         await expect(retry.executeWithRetry('synthetic', call, 2)).resolves.toBe('ok');
         expect(sleep.mock.calls[0]?.[0]).toBe(120000);
         call.mockReset();
@@ -141,10 +141,10 @@ describe('retry lifetime policy', () => {
     });
 
     test('cancellation takes precedence over retryable status', async () => {
-        const sleep = createMockFn().mockResolvedValue(undefined);
+        const sleep = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const retry = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: sleep });
         const error = Object.assign(new Error('synthetic cancelled'), { code: 'ERR_CANCELED', response: { status: 503 } });
-        const call = createMockFn<[], Promise<never>>().mockRejectedValue(error);
+        const call = vi.fn<(...args: []) => Promise<never>>().mockRejectedValue(error);
         await expect(retry.executeWithRetry('synthetic', call, 2)).rejects.toBe(error);
         expect(call).toHaveBeenCalledTimes(1);
     });
@@ -152,7 +152,7 @@ describe('retry lifetime policy', () => {
     test('parent abort during real backoff removes timer and prevents retry', async () => {
         const parent = new AbortController();
         const reason = new Error('synthetic backoff stopped');
-        const call = createMockFn<[], Promise<never>>().mockRejectedValue(retryError({ 'retry-after': '0.02' }));
+        const call = vi.fn<(...args: []) => Promise<never>>().mockRejectedValue(retryError({ 'retry-after': '0.02' }));
         const schedule = spyOn(globalThis, 'setTimeout');
         const clear = spyOn(globalThis, 'clearTimeout');
         try {
@@ -175,7 +175,7 @@ describe('retry lifetime policy', () => {
     test('pre-abort and exhausted budgets never attempt work', async () => {
         const parent = new AbortController();
         parent.abort(new Error('synthetic retired'));
-        const call = createMockFn(async () => 'late');
+        const call = vi.fn(async () => 'late');
         const retry = new HttpRetryExecutor({ logger: noOpLogger });
         await expect(retry.executeWithRetry('synthetic', call, 2, { signal: parent.signal })).rejects.toBe(parent.signal.reason);
         await expect(retry.executeWithRetry('synthetic', call, 2, { remainingBudgetMs: () => 0 })).rejects.toThrow('budget exhausted');
@@ -191,15 +191,15 @@ describe('retry lifetime policy', () => {
             return 'late';
         }, 2, { signal: parent.signal })).rejects.toBe(reason);
         let budget = 10000;
-        const call = createMockFn<[], Promise<never>>().mockRejectedValue(retryError({ 'retry-after': '1' }));
-        const sleep = createMockFn(async () => { budget = 0; });
+        const call = vi.fn<(...args: []) => Promise<never>>().mockRejectedValue(retryError({ 'retry-after': '1' }));
+        const sleep = vi.fn(async () => { budget = 0; });
         const budgetRetry = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: sleep });
         await expect(budgetRetry.executeWithRetry('synthetic', call, 2, { remainingBudgetMs: () => budget })).rejects.toThrow('budget exhausted');
         expect(call).toHaveBeenCalledTimes(1);
     });
 
     test('Retry-After on 503, dates and reset epochs retain server minima beyond the backoff cap', async () => {
-        const sleep = createMockFn().mockResolvedValue(undefined);
+        const sleep = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const retry = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: sleep });
         const now = testClock.now();
         testClock.set(now);
@@ -210,7 +210,7 @@ describe('retry lifetime policy', () => {
                 { 'ratelimit-reset': String((now + 120000) / 1000) }
             ]) {
                 sleep.mockClear();
-                const call = createMockFn<[], Promise<string>>()
+                const call = vi.fn<(...args: []) => Promise<string>>()
                     .mockRejectedValueOnce({ response: { status: 503, headers } }).mockResolvedValue('ok');
                 await expect(retry.executeWithRetry('synthetic', call, 2)).resolves.toBe('ok');
                 expect(sleep.mock.calls[0]?.[0]).toBe(120000);
@@ -221,10 +221,10 @@ describe('retry lifetime policy', () => {
     });
 
     test('unsupported server timer delays are rejected before sleeping or retrying', async () => {
-        const sleep = createMockFn().mockResolvedValue(undefined);
+        const sleep = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const retry = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: sleep });
         for (const value of ['3000000', '9'.repeat(400)]) {
-            const call = createMockFn<[], Promise<never>>().mockRejectedValue(retryError({ 'retry-after': value }));
+            const call = vi.fn<(...args: []) => Promise<never>>().mockRejectedValue(retryError({ 'retry-after': value }));
             await expect(retry.executeWithRetry('synthetic', call, 2)).rejects.toThrow('supported timer range');
             expect(call).toHaveBeenCalledTimes(1);
             expect(sleep).not.toHaveBeenCalled();
@@ -248,10 +248,10 @@ describe('HTTP operation budgets', () => {
         const parent = new AbortController();
         const request = new AbortController();
         const adapter = {
-            get: createMockFn().mockResolvedValue({ status: 200 }),
-            post: createMockFn().mockResolvedValue({ status: 200 }),
-            put: createMockFn().mockResolvedValue({ status: 200 }),
-            delete: createMockFn().mockResolvedValue({ status: 200 })
+            get: vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 }),
+            post: vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 }),
+            put: vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 }),
+            delete: vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 })
         };
         const client = new EnhancedHttpClient({ logger: noOpLogger, axios: adapter });
         const schedule = spyOn(globalThis, 'setTimeout');
@@ -279,7 +279,7 @@ describe('HTTP operation budgets', () => {
             const request = new AbortController();
             const reason = new Error(`synthetic ${source} cancellation`);
             (source === 'parent' ? parent : request).abort(reason);
-            const get = createMockFn().mockResolvedValue({ status: 200 });
+            const get = vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 });
             const client = new EnhancedHttpClient({ logger: noOpLogger, axios: { ...realAxios, get } });
             await expect(client.get('http://synthetic.invalid', {
                 responseType: 'stream', parentAbortSignal: parent.signal, signal: request.signal
@@ -294,7 +294,7 @@ describe('HTTP operation budgets', () => {
         const parent = new AbortController();
         const reason = new Error('synthetic HTTP stopped');
         parent.abort(reason);
-        const get = createMockFn().mockResolvedValue({ status: 200 });
+        const get = vi.fn<(...args: unknown[]) => Promise<{ status: number; }>>().mockResolvedValue({ status: 200 });
         const client = new EnhancedHttpClient({ logger: noOpLogger, axios: { ...realAxios, get } });
         await expect(client.get('http://synthetic.invalid', { parentAbortSignal: parent.signal })).rejects.toBe(reason);
         expect(get).not.toHaveBeenCalled();
@@ -354,7 +354,7 @@ describe('HTTP operation budgets', () => {
         const parent = new AbortController();
         let signal: AbortSignal | undefined;
         let attempts = 0;
-        const get = createMockFn(async (_url: string, config: Record<string, unknown>) => {
+        const get = vi.fn(async (_url: string, config: Record<string, unknown>) => {
             signal = config.signal as AbortSignal;
             expect(config).not.toHaveProperty('overallBudgetMs');
             expect(config).not.toHaveProperty('parentAbortSignal');

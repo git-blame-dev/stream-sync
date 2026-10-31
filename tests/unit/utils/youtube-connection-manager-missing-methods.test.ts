@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube-connection-manager";
 
@@ -16,7 +16,7 @@ const setCurrentConnectionReady = (
 
 describe("YouTube Connection Manager - Missing Methods", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let connectionManager: YouTubeConnectionManager;

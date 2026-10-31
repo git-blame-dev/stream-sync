@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
-import { installTimerTracking } from '../helpers/bun-timers';
+import { installTimerTracking, restoreTimerTracking } from '../helpers/bun-timers';
 
 for (const chatLimit of [null, 1]) {
   test(`actual main owns and retires its keepalive with chat limit ${chatLimit}`, async () => {
@@ -21,7 +21,7 @@ for (const chatLimit of [null, 1]) {
       expect(fixture.runtime.keepAliveInterval).toBeUndefined();
       if (interval !== undefined) expect(trackedTimers.has(interval)).toBe(false);
     } finally {
-      await fixture.dispose();
+      try { await fixture.dispose(); } finally { restoreTimerTracking(); }
     }
   });
 }

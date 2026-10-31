@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
+
 
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 import { createTikTokLifetimeFixture } from "../../../../helpers/tiktok-connector-fixture";
@@ -37,7 +37,7 @@ describe("TikTok paypiggy routing", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

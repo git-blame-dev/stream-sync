@@ -1,6 +1,6 @@
+import { vi, type Mock, describe, it, beforeEach, expect } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
@@ -10,19 +10,19 @@ type QueueItem = DisplayQueueItem;
 type RouterRuntime = {
   config: TestConfig;
   displayQueue: {
-    addItem: TestMockFn<[QueueItem], readonly QueueItem[]>;
-    addSequence: TestMockFn<[QueueItem[]], readonly QueueItem[]>;
+    addItem: Mock<(...args: [QueueItem]) => readonly QueueItem[]>;
+    addSequence: Mock<(...args: [QueueItem[]]) => readonly QueueItem[]>;
   };
-  platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
+  platformLifecycleService: { getPlatformConnectionTime: Mock<(...args: [platform: string]) => null> };
   commandCooldownService: {
-    checkUserCooldown: TestMockFn<[userId: unknown, perUserCooldown: number, heavyCooldown: number], boolean>;
-    checkGlobalCooldown: TestMockFn<[commandName: string, globalCooldownMs: number], boolean>;
-    updateUserCooldown: TestMockFn<[userId: unknown], void>;
-    updateGlobalCooldown: TestMockFn<[commandName: string], void>;
+    checkUserCooldown: Mock<(...args: [userId: unknown, perUserCooldown: number, heavyCooldown: number]) => boolean>;
+    checkGlobalCooldown: Mock<(...args: [commandName: string, globalCooldownMs: number]) => boolean>;
+    updateUserCooldown: Mock<(...args: [userId: unknown]) => void>;
+    updateGlobalCooldown: Mock<(...args: [commandName: string]) => void>;
   };
-  userTrackingService: { isFirstMessage: TestMockFn<[userId: unknown, context: Record<string, unknown>], boolean> };
-  commandParser: { getVFXConfig: TestMockFn<[commandKey: string, message: string | null], null> };
-  isFirstMessage: TestMockFn<[userId: unknown, context: Record<string, unknown>], boolean>;
+  userTrackingService: { isFirstMessage: Mock<(...args: [userId: unknown, context: Record<string, unknown>]) => boolean> };
+  commandParser: { getVFXConfig: Mock<(...args: [commandKey: string, message: string | null]) => null> };
+  isFirstMessage: Mock<(...args: [userId: unknown, context: Record<string, unknown>]) => boolean>;
 };
 
 type ChatMessage = {
@@ -54,7 +54,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
     runtime: runtimeOverrides,
     config = testConfig,
   }: { runtime?: Partial<RouterRuntime>; config?: TestConfig } = {}) => {
-    const addItem = createMockFn<[QueueItem], readonly QueueItem[]>((item) => [item]);
+    const addItem = vi.fn<(...args: [QueueItem]) => readonly QueueItem[]>((item) => [item]);
     const baseRuntime: RouterRuntime = {
       config: {
         ...testConfig,
@@ -63,27 +63,27 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
       },
       displayQueue: {
         addItem,
-        addSequence: createMockFn<[QueueItem[]], readonly QueueItem[]>((items) => {
+        addSequence: vi.fn<(...args: [QueueItem[]]) => readonly QueueItem[]>((items) => {
           items.forEach((item) => addItem(item));
           return items;
         }),
       },
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn<[platform: string], null>().mockReturnValue(null),
+        getPlatformConnectionTime: vi.fn<(...args: [platform: string]) => null>().mockReturnValue(null),
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn<[string, number], boolean>().mockReturnValue(true),
-        updateUserCooldown: createMockFn<[unknown], void>(),
-        updateGlobalCooldown: createMockFn<[string], void>(),
+        checkUserCooldown: vi.fn<(...args: [unknown, number, number]) => boolean>().mockReturnValue(true),
+        checkGlobalCooldown: vi.fn<(...args: [string, number]) => boolean>().mockReturnValue(true),
+        updateUserCooldown: vi.fn<(...args: [unknown]) => void>(),
+        updateGlobalCooldown: vi.fn<(...args: [string]) => void>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false),
       },
       commandParser: {
-        getVFXConfig: createMockFn<[string, string | null], null>().mockReturnValue(null),
+        getVFXConfig: vi.fn<(...args: [string, string | null]) => null>().mockReturnValue(null),
       },
-      isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
+      isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false),
     };
 
     const runtime: RouterRuntime = { ...baseRuntime, ...runtimeOverrides };
@@ -100,7 +100,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
   it("queues first-message chat and greeting as one ordered sequence", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(true),
       },
     });
 
@@ -130,7 +130,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
           general: { ...testConfig.general, greetingsEnabled: true, messagesEnabled: true },
           twitch: { ...testConfig.twitch, greetingsEnabled: false, messagesEnabled: true },
         },
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(true),
       },
     });
 

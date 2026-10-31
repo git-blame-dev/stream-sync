@@ -1,5 +1,5 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
+
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
@@ -96,7 +96,7 @@ describe("YouTube GiftMessageView pipeline (smoke E2E)", () => {
             await metadata.dispose();
           }
         } finally {
-          restoreAllMocks();
+          vi.restoreAllMocks();
           if (presentation) {
             await presentation.dispose();
           }

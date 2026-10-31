@@ -1,17 +1,10 @@
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, beforeEach, describe, expect, it } from "bun:test";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { config as appConfig } from "../../../src/core/config";
 import NotificationManager from "../../../src/notifications/NotificationManager";
-
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 
 type NotificationConstants = {
   PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
@@ -27,16 +20,13 @@ type NotificationConstants = {
 };
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
-  processQueue: TestMockFn<[], void>;
-  getQueueLength: TestMockFn<[], number>;
+  addItem: Mock<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>;
+  processQueue: Mock<() => void>;
+  getQueueLength: Mock<() => number>;
 };
 
 type SpamDetectorMock = {
-  handleDonationSpam: TestMockFn<
-    [unknown, unknown, number, unknown, number, string],
-    { shouldShow: boolean }
-  >;
+  handleDonationSpam: Mock<(...args: [unknown, unknown, number, unknown, number, string]) => { shouldShow: boolean }>;
 };
 
 type SpamConfig = {
@@ -71,16 +61,7 @@ const getSpamConfig = (): SpamConfig => {
   return spamConfig;
 };
 
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
-
 describe("NotificationManager Spam Protection Behavior - Modernized", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
   let mockLogger: typeof noOpLogger;
   let mockConstants: NotificationConstants;
   let mockDisplayQueue: DisplayQueueMock;
@@ -103,16 +84,13 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      processQueue: createMockFn<[], void>(),
-      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      processQueue: vi.fn<() => void>(),
+      getQueueLength: vi.fn<() => number>().mockReturnValue(0),
     };
 
     mockSpamDetector = {
-      handleDonationSpam: createMockFn<
-        [unknown, unknown, number, unknown, number, string],
-        { shouldShow: boolean }
-      >().mockReturnValue({ shouldShow: true }),
+      handleDonationSpam: vi.fn<(...args: [unknown, unknown, number, unknown, number, string]) => { shouldShow: boolean }>().mockReturnValue({ shouldShow: true }),
     };
 
     config = createConfigFixture({
@@ -120,31 +98,30 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         giftsEnabled: true,
       },
     });
-
   });
 
   const createManagerWithSpamDetector = () => new NotificationManager({
     displayQueue: mockDisplayQueue,
     logger: mockLogger,
     eventBus: {
-      emit: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
     },
     config,
     constants: mockConstants,
     donationSpamDetector: mockSpamDetector,
     vfxCommandService: {
-      getVFXConfig: createMockFn().mockResolvedValue(null),
+      getVFXConfig: vi.fn().mockResolvedValue(null),
     },
   });
 
   describe("when spam protection is properly configured", () => {
     it("should enable spam protection when spam detector is provided", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -154,7 +131,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -173,9 +150,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
 
     it("should use spam detector when provided via constructor", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -185,7 +162,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -213,9 +190,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
   describe("when spam detector is not provided", () => {
     it("should operate without spam protection gracefully", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -224,7 +201,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         config,
         constants: mockConstants,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -252,9 +229,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
 
     it("should initialize successfully without spam detector (optional dependency)", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -263,7 +240,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         config,
         constants: mockConstants,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -305,9 +282,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: true });
 
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -317,7 +294,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -345,9 +322,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       });
 
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -357,7 +334,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 
@@ -387,9 +364,9 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
 
     it("should skip spam detection for aggregated donations", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -399,7 +376,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn().mockResolvedValue(null),
         },
       });
 

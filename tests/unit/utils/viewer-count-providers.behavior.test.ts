@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   ViewerCountProvider,
@@ -16,22 +16,16 @@ type AggregatedViewerCount = {
 };
 
 const createViewerExtractionService = (
-  getAggregatedViewerCount = createMockFn<
-    [string[]],
-    Promise<AggregatedViewerCount>
+  getAggregatedViewerCount = vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>
   >(),
 ) => ({
   getAggregatedViewerCount,
-  extractViewerCount: createMockFn<
-    [string],
-    Promise<{ success: boolean; count: number }>
+  extractViewerCount: vi.fn<(...args: [string]) => Promise<{ success: boolean; count: number }>
   >(),
 });
 
 const createTwitchApiClient = (
-  getStreamInfo = createMockFn<
-    [string],
-    Promise<{ isLive: boolean; viewerCount: number }>
+  getStreamInfo = vi.fn<(...args: [string]) => Promise<{ isLive: boolean; viewerCount: number }>
   >(),
 ) => ({ getStreamInfo });
 
@@ -64,7 +58,7 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
 
   it("returns unavailable and categorizes errors from extraction service", async () => {
     const viewerExtractionService = createViewerExtractionService(
-      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockRejectedValue(
+      vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>>().mockRejectedValue(
         new Error("network down"),
       ),
     );
@@ -116,9 +110,7 @@ describe("TwitchViewerCountProvider readiness", () => {
 
   it("resets consecutive errors after successful fetch", async () => {
     const apiClient = createTwitchApiClient(
-      createMockFn<
-        [string],
-        Promise<{ isLive: boolean; viewerCount: number }>
+      vi.fn<(...args: [string]) => Promise<{ isLive: boolean; viewerCount: number }>
       >()
         .mockRejectedValueOnce(new Error("network fail"))
         .mockResolvedValueOnce({ isLive: true, viewerCount: 15 }),

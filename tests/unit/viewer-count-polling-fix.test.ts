@@ -1,11 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { createRequire } from "node:module";
 
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../helpers/bun-mock-utils";
+
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { safeDelay } from "../../src/utils/timeout-validator";
@@ -13,13 +9,13 @@ import { safeDelay } from "../../src/utils/timeout-validator";
 const load = createRequire(import.meta.url);
 
 type ViewerCountPlatform = {
-  getViewerCount: TestMockFn<unknown[], Promise<number>>;
+  getViewerCount: Mock<(...args: unknown[]) => Promise<number>>;
 };
 
 type ViewerCountObserver = {
   getObserverId: () => string;
-  onViewerCountUpdate: TestMockFn<unknown[], Promise<void>>;
-  onStreamStatusChange: TestMockFn<unknown[], Promise<void>>;
+  onViewerCountUpdate: Mock<(...args: unknown[]) => Promise<void>>;
+  onStreamStatusChange: Mock<(...args: unknown[]) => Promise<void>>;
 };
 
 type ViewerCountSystemInstance = {
@@ -61,19 +57,19 @@ describe("Viewer Count Polling System Fix", () => {
     });
 
     mockYoutubePlatform = {
-      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(
         100,
       ),
     };
 
     mockTwitchPlatform = {
-      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(
         50,
       ),
     };
 
     mockTiktokPlatform = {
-      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(
         25,
       ),
     };
@@ -92,8 +88,8 @@ describe("Viewer Count Polling System Fix", () => {
 
     const mockObserver: ViewerCountObserver = {
       getObserverId: () => "testObserver",
-      onViewerCountUpdate: createMockFn<unknown[], Promise<void>>(async () => {}),
-      onStreamStatusChange: createMockFn<unknown[], Promise<void>>(async () => {}),
+      onViewerCountUpdate: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
+      onStreamStatusChange: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
     };
     viewerCountSystem.addObserver(mockObserver);
 
@@ -103,7 +99,7 @@ describe("Viewer Count Polling System Fix", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Platform Detection for Active Streams", () => {

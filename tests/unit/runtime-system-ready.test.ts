@@ -1,23 +1,23 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+
 import {
   useFakeTimers,
   useRealTimers,
-  runOnlyPendingTimers,
+  getTimerCount,
 } from "../helpers/bun-timers";
 import { noOpLogger } from "../helpers/mock-factories";
 import { AppRuntime } from "../../src/runtime/AppRuntime";
 
 describe("AppRuntime system readiness payload", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     useRealTimers();
   });
 
   const createAppRuntimeDouble = () => {
     const bot = Object.create(AppRuntime.prototype);
     bot.eventBus = null;
-    bot.getReadyServices = createMockFn().mockReturnValue([
+    bot.getReadyServices = vi.fn<(...args: unknown[]) => string[]>().mockReturnValue([
       "notificationManager",
       "platformLifecycleService",
     ]);
@@ -28,12 +28,12 @@ describe("AppRuntime system readiness payload", () => {
   it("omits monitoring metrics when building system readiness payload", () => {
     const runtime = createAppRuntimeDouble();
     runtime.platformLifecycleService = {
-      getStatus: createMockFn().mockReturnValue({
+      getStatus: vi.fn<(...args: unknown[]) => { initializedPlatforms: string[]; }>().mockReturnValue({
         initializedPlatforms: ["twitch"],
       }),
     };
     runtime.commandCooldownService = {
-      getStatus: createMockFn().mockReturnValue({ activeUsers: 3 }),
+      getStatus: vi.fn<(...args: unknown[]) => { activeUsers: number; }>().mockReturnValue({ activeUsers: 3 }),
     };
 
     const payload = runtime.emitSystemReady({
@@ -71,7 +71,7 @@ describe("AppRuntime system readiness payload", () => {
       emit: (...args: unknown[]) => emitCalls.push(args),
     };
     runtime.platformLifecycleService = {
-      getStatus: createMockFn().mockReturnValue({
+      getStatus: vi.fn<(...args: unknown[]) => { failedPlatforms: { name: string; lastError: string; }[]; platformHealth: { twitch: { state: string; lastError: string; }; }; }>().mockReturnValue({
         failedPlatforms: [{ name: "twitch", lastError: "auth failed" }],
         platformHealth: {
           twitch: { state: "failed", lastError: "auth failed" },
@@ -99,75 +99,57 @@ describe("AppRuntime system readiness payload", () => {
 describe("AppRuntime shutdown lifecycle", () => {
   const createAppRuntimeDouble = () => {
     const bot = Object.create(AppRuntime.prototype);
-    bot.eventBus = {
-      emit: createMockFn(),
-    };
+    bot.eventBus = { emit: vi.fn<(...args: unknown[]) => unknown>() };
     bot.logger = noOpLogger;
+    bot.dependencies = { onShutdownComplete: vi.fn<(...args: unknown[]) => unknown>() };
     return bot;
   };
 
-  it("emits shutdown lifecycle event with restart mode when restart is requested", () => {
+  for (const restartRequested of [false, true]) {
+    it(`emits shutdown before notifying composition with restart ${restartRequested}`, async () => {
+      useFakeTimers();
+      const runtime = createAppRuntimeDouble();
+      const events: unknown[][] = [];
+      runtime.eventBus.emit = (...args: unknown[]) => events.push(args);
+      runtime.dependencies.onShutdownComplete = () => events.push(["complete"]);
+      const exitCode = process.exitCode;
+      try {
+        await runtime.emitSystemShutdown({ reason: "synthetic-shutdown", restartRequested });
+        expect(events).toEqual([
+          ["system:shutdown", { reason: "synthetic-shutdown", mode: restartRequested ? "restart" : "exit" }],
+          ["complete"],
+        ]);
+        expect(getTimerCount()).toBe(0);
+        expect(process.exitCode).toBe(exitCode);
+      } finally {
+        process.exitCode = exitCode;
+        useRealTimers();
+      }
+    });
+  }
+
+  it("notifies composition only after the log flush settles", async () => {
     const runtime = createAppRuntimeDouble();
-    const emitCalls: unknown[][] = [];
-    runtime.eventBus.emit = (...args: unknown[]) => emitCalls.push(args);
-    useFakeTimers();
-    const originalExit = process.exit;
-    process.exit = (() => undefined as never) as typeof process.exit;
-    try {
-      runtime.emitSystemShutdown({ reason: "test", restartRequested: true });
-
-      expect(emitCalls).toEqual([
-        ["system:shutdown", { reason: "test", mode: "restart" }],
-      ]);
-      runOnlyPendingTimers();
-    } finally {
-      process.exit = originalExit;
-      useRealTimers();
-    }
-  });
-
-  it("emits shutdown lifecycle event before exiting on normal shutdown", () => {
-    const runtime = createAppRuntimeDouble();
-    const emitCalls: unknown[][] = [];
-    runtime.eventBus.emit = (...args: unknown[]) => emitCalls.push(args);
-    useFakeTimers();
-    const originalExit = process.exit;
-    process.exit = (() => undefined as never) as typeof process.exit;
-    try {
-      runtime.emitSystemShutdown({ reason: "manual" });
-
-      expect(emitCalls).toEqual([
-        ["system:shutdown", { reason: "manual", mode: "exit" }],
-      ]);
-      runOnlyPendingTimers();
-    } finally {
-      process.exit = originalExit;
-      useRealTimers();
-    }
+    const flush = Promise.withResolvers<void>();
+    runtime.logger = { ...noOpLogger, flush: () => flush.promise };
+    const pending = runtime.emitSystemShutdown({ reason: "synthetic-flush" });
+    expect(runtime.dependencies.onShutdownComplete).not.toHaveBeenCalled();
+    flush.resolve();
+    await pending;
+    expect(runtime.dependencies.onShutdownComplete).toHaveBeenCalledTimes(1);
   });
 
   it("invokes viewer count status cleanup during shutdown", async () => {
     const runtime = createAppRuntimeDouble();
     const cleanupCalls: string[] = [];
-    runtime.platformLifecycleService = {
-      disconnectAll: createMockFn().mockResolvedValue(),
-    };
-    runtime.obsEventService = {
-      disconnect: createMockFn().mockResolvedValue(),
-    };
-    runtime.platformEventRouter = { dispose: createMockFn() };
-    runtime.viewerCountSystem = { stopPolling: createMockFn() };
-    runtime.notificationManager = { stopSuppressionCleanup: createMockFn() };
+    runtime.platformLifecycleService = { disconnectAll: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) };
+    runtime.obsEventService = { disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) };
+    runtime.platformEventRouter = { dispose: vi.fn<(...args: unknown[]) => unknown>() };
+    runtime.viewerCountSystem = { stopPolling: vi.fn<(...args: unknown[]) => unknown>() };
+    runtime.notificationManager = { stopSuppressionCleanup: vi.fn<(...args: unknown[]) => unknown>() };
     runtime.viewerCountStatusCleanup = () => cleanupCalls.push("cleanup");
-    const originalExit = process.exit;
-    process.exit = (() => undefined as never) as typeof process.exit;
-
-    try {
-      await runtime.shutdown();
-
-      expect(cleanupCalls).toEqual(["cleanup"]);
-    } finally {
-      process.exit = originalExit;
-    }
+    await runtime.shutdown();
+    expect(cleanupCalls).toEqual(["cleanup"]);
+    expect(runtime.dependencies.onShutdownComplete).toHaveBeenCalledTimes(1);
   });
 });

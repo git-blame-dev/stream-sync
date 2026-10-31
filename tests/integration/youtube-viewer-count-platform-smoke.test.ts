@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
 
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 import { YouTubePlatform } from "../../src/platforms/youtube";
@@ -6,7 +6,7 @@ import { InnertubeService } from "../../src/services/innertube-service.ts";
 import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service.ts";
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 
@@ -43,7 +43,7 @@ describe("YouTube viewer count platform flow (smoke)", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -132,7 +132,7 @@ describe("YouTube viewer count platform flow (smoke)", () => {
       await platformLifecycleService.disconnectAll();
       platformLifecycleService.dispose();
       await innertubeService.dispose();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

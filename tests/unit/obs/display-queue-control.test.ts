@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, describe, expect, it } from 'bun:test';
 import { EventEmitter } from "node:events";
 
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { DisplayQueue } from "../../../src/obs/display-queue";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { initializeTestLogging } from "../../helpers/test-setup";
 
 initializeTestLogging();
@@ -68,7 +68,7 @@ function createQueue(options: { rowIntervalMs?: number; readyError?: Error; noti
 
 describe("DisplayQueue GUI-primary control", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("rejects items without a platform", () => {

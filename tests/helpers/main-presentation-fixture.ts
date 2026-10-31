@@ -32,7 +32,7 @@ class SyntheticObsSocket extends EventEmitter {
     }
 }
 
-export async function createMainPresentationFixture(options: { operator?: boolean; chatLimit?: number | null } = {}) {
+export async function createMainPresentationFixture(options: { operator?: boolean; chatLimit?: number | null; WebSocketCtor?: unknown } = {}) {
     const dir = await mkdtemp(join(tmpdir(), 'synthetic-main-presentation-'));
     const config = createConfigFixture({
         general: { envFileReadEnabled: false, envFileWriteEnabled: false, viewerCountPollingIntervalMs: 0, filterOldMessages: false },
@@ -56,7 +56,7 @@ export async function createMainPresentationFixture(options: { operator?: boolea
     const fundingPath = join(dir, 'funding.json');
     const start = async () => {
         await obs.connect();
-        return main({ config, cliArgs: { chat: options.chatLimit === undefined ? 1000 : options.chatLimit },
+        return main({ config, WebSocketCtor: options.WebSocketCtor, onShutdownComplete: () => {}, cliArgs: { chat: options.chatLimit === undefined ? 1000 : options.chatLimit },
             getOBSConnectionManager: () => obs,
             createEventBus: options => {
                 bus = createEventBus(options);

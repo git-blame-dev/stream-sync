@@ -63,7 +63,7 @@ describe("platform config parsing behavior", () => {
     close() {}
   }
 
-  test("TwitchEventSub stores normalized config values", () => {
+  test("TwitchEventSub stores normalized config values", async () => {
     secrets.twitch.accessToken = "test-token";
     const twitchAuth = {
       isReady: () => true,
@@ -83,10 +83,8 @@ describe("platform config parsing behavior", () => {
     try {
       expect(eventSub.config.dataLoggingEnabled).toBe(true);
     } finally {
-      if (eventSub.cleanupInterval) {
-        clearInterval(eventSub.cleanupInterval);
-        eventSub.cleanupInterval = null;
-      }
+      await eventSub.cleanup();
+      expect(eventSub.cleanupInterval).toBeNull();
     }
   });
 

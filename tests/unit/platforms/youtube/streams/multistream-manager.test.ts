@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import {
   useFakeTimers,
@@ -85,25 +85,23 @@ describe("YouTube multi-stream manager", () => {
         fullCheckInterval: 1000,
       },
       connectionManager: {
-        getConnectionCount: createMockFn(() => 0),
-        getAllVideoIds: createMockFn(() => []),
-        hasConnection: createMockFn(() => false),
+        getConnectionCount: vi.fn(() => 0),
+        getAllVideoIds: vi.fn(() => []),
+        hasConnection: vi.fn(() => false),
       },
-      getActiveYouTubeVideoIds: createMockFn(() => []),
-      getLiveVideoIds: createMockFn(async () => []),
-      connectToYouTubeStream: createMockFn<[string], Promise<boolean>>().mockResolvedValue(true),
-      disconnectFromYouTubeStream: createMockFn<
-        [string, string, { requestImmediateRefresh?: boolean; source?: string }?],
-        Promise<void>
+      getActiveYouTubeVideoIds: vi.fn(() => []),
+      getLiveVideoIds: vi.fn(async () => []),
+      connectToYouTubeStream: vi.fn<(...args: [string]) => Promise<boolean>>().mockResolvedValue(true),
+      disconnectFromYouTubeStream: vi.fn<(...args: [string, string, { requestImmediateRefresh?: boolean; source?: string }?]) => Promise<void>
       >().mockResolvedValue(undefined),
-      _handleProcessingError: createMockFn(),
-      _handleConnectionErrorLogging: createMockFn(),
-      _handleError: createMockFn(),
+      _handleProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      _handleConnectionErrorLogging: vi.fn<(...args: unknown[]) => unknown>(),
+      _handleError: vi.fn<(...args: unknown[]) => unknown>(),
       logger: createLoggerFixture(),
-      _emitPlatformEvent: createMockFn(),
+      _emitPlatformEvent: vi.fn<(...args: unknown[]) => unknown>(),
       monitoringInterval: null,
       lastFullStreamCheck: null,
-      checkMultiStream: createMockFn<[{ throwOnError?: boolean }?], Promise<void>>().mockResolvedValue(undefined),
+      checkMultiStream: vi.fn<(...args: [{ throwOnError?: boolean }?]) => Promise<void>>().mockResolvedValue(undefined),
       ...overrides,
     };
 
@@ -166,7 +164,7 @@ describe("YouTube multi-stream manager", () => {
   test("does not duplicate platform-owned discovery events during attachment", async () => {
     const emitted: PlatformEventRecord[] = [];
     const platform = buildPlatform({
-      getLiveVideoIds: createMockFn(async () => ["stream-1"]),
+      getLiveVideoIds: vi.fn(async () => ["stream-1"]),
       _emitPlatformEvent: (type: PlatformEventType, payload: Record<string, unknown>) => emitted.push({ type, payload }),
     });
     const manager = buildManager(platform);
@@ -180,7 +178,7 @@ describe("YouTube multi-stream manager", () => {
   test("does not emit stream-detected when no new streams are found", async () => {
     const emitted: PlatformEventRecord[] = [];
     const platform = buildPlatform({
-      getLiveVideoIds: createMockFn(async () => []),
+      getLiveVideoIds: vi.fn(async () => []),
       _emitPlatformEvent: (type: PlatformEventType, payload: Record<string, unknown>) => emitted.push({ type, payload }),
     });
     const manager = buildManager(platform);
@@ -246,7 +244,7 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
           maxStreams: 0,
         },
-        getLiveVideoIds: createMockFn(async () => ["stream-1"]),
+        getLiveVideoIds: vi.fn(async () => ["stream-1"]),
         _emitPlatformEvent: (type: PlatformEventType, payload: Record<string, unknown>) => emitted.push({ type, payload }),
       });
       const manager = buildManager(platform);
@@ -268,18 +266,18 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
           maxStreams: 0,
         },
-        getLiveVideoIds: createMockFn(async () => ["stream-1"]),
+        getLiveVideoIds: vi.fn(async () => ["stream-1"]),
         _emitPlatformEvent: (type: PlatformEventType, payload: Record<string, unknown>) => emitted.push({ type, payload }),
       });
       const manager = buildManager(platform);
       platform.checkMultiStream = () => manager.checkMultiStream();
 
       await manager.startMonitoring();
-      const initialCheckCount = (platform.getLiveVideoIds as ReturnType<typeof createMockFn>).mock.calls.length;
+      const initialCheckCount = (platform.getLiveVideoIds as ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>).mock.calls.length;
 
       await advanceTimersByTime(1100);
 
-      expect((platform.getLiveVideoIds as ReturnType<typeof createMockFn>).mock.calls.length).toBeGreaterThan(initialCheckCount);
+      expect((platform.getLiveVideoIds as ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>).mock.calls.length).toBeGreaterThan(initialCheckCount);
     });
 
     test("records monitoring start time", async () => {
@@ -287,7 +285,7 @@ describe("YouTube multi-stream manager", () => {
       const expectedTime = testClock.now();
 
       const platform = buildPlatform({
-        getLiveVideoIds: createMockFn(async () => []),
+        getLiveVideoIds: vi.fn(async () => []),
       });
       const manager = buildManager(platform);
 
@@ -313,7 +311,7 @@ describe("YouTube multi-stream manager", () => {
 
   describe("requestImmediateRefresh", () => {
     test("coalesces duplicate immediate refresh requests into one check", async () => {
-      const getLiveVideoIds = createMockFn(async () => []);
+      const getLiveVideoIds = vi.fn(async () => []);
       const platform = buildPlatform({
         getLiveVideoIds,
       });
@@ -333,7 +331,7 @@ describe("YouTube multi-stream manager", () => {
         releaseFirstCheck = resolve;
       });
       let callCount = 0;
-      const getLiveVideoIds = createMockFn(async () => {
+      const getLiveVideoIds = vi.fn(async () => {
         callCount += 1;
         if (callCount === 1) {
           await firstCheckGate;
@@ -369,11 +367,11 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 60000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-          hasConnection: createMockFn(() => true),
+          getConnectionCount: vi.fn(() => 2),
+          getAllVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+          hasConnection: vi.fn(() => true),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
+        getActiveYouTubeVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
         lastFullStreamCheck: currentTime - 50,
       });
       const manager = buildManager(platform);
@@ -392,12 +390,12 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-          hasConnection: createMockFn(() => true),
+          getConnectionCount: vi.fn(() => 2),
+          getAllVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+          hasConnection: vi.fn(() => true),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-        getLiveVideoIds: createMockFn(async () => ["stream-1", "stream-2"]),
+        getActiveYouTubeVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+        getLiveVideoIds: vi.fn(async () => ["stream-1", "stream-2"]),
         lastFullStreamCheck: currentTime - 5000,
       });
       const manager = buildManager(platform);
@@ -417,13 +415,13 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-          hasConnection: createMockFn(() => true),
+          getConnectionCount: vi.fn(() => 2),
+          getAllVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+          hasConnection: vi.fn(() => true),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-        getLiveVideoIds: createMockFn(async () => ["stream-1"]),
-        disconnectFromYouTubeStream: createMockFn(
+        getActiveYouTubeVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+        getLiveVideoIds: vi.fn(async () => ["stream-1"]),
+        disconnectFromYouTubeStream: vi.fn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
             disconnected.push({ videoId, reason, options });
           },
@@ -448,19 +446,19 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-          hasConnection: createMockFn((videoId: string) =>
+          getConnectionCount: vi.fn(() => 2),
+          getAllVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+          hasConnection: vi.fn((videoId: string) =>
             videoId === "stream-1" || videoId === "stream-2",
           ),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-        getLiveVideoIds: createMockFn(async () => ["stream-1", "stream-3"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getActiveYouTubeVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+        getLiveVideoIds: vi.fn(async () => ["stream-1", "stream-3"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           connected.push(videoId);
           return true;
         }),
-        disconnectFromYouTubeStream: createMockFn(
+        disconnectFromYouTubeStream: vi.fn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
             disconnected.push({ videoId, reason, options });
           },
@@ -485,13 +483,13 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 2),
-          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-          hasConnection: createMockFn(() => true),
+          getConnectionCount: vi.fn(() => 2),
+          getAllVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+          hasConnection: vi.fn(() => true),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
-        getLiveVideoIds: createMockFn(async () => []),
-        disconnectFromYouTubeStream: createMockFn(async (videoId: string) => {
+        getActiveYouTubeVideoIds: vi.fn(() => ["stream-1", "stream-2"]),
+        getLiveVideoIds: vi.fn(async () => []),
+        disconnectFromYouTubeStream: vi.fn(async (videoId: string) => {
           disconnected.push(videoId);
         }),
         lastFullStreamCheck: currentTime - 5000,
@@ -513,8 +511,8 @@ describe("YouTube multi-stream manager", () => {
           streamPollingInterval: 60,
           fullCheckInterval: 1000,
         },
-        getLiveVideoIds: createMockFn(async () => ["s1", "s2", "s3", "s4"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getLiveVideoIds: vi.fn(async () => ["s1", "s2", "s3", "s4"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           connected.push(videoId);
           return true;
         }),
@@ -531,8 +529,8 @@ describe("YouTube multi-stream manager", () => {
     test("continues connecting other streams when one stream connection fails", async () => {
       const connected: string[] = [];
       const platform = buildPlatform({
-        getLiveVideoIds: createMockFn(async () => ["s1", "s2"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getLiveVideoIds: vi.fn(async () => ["s1", "s2"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           if (videoId === "s1") throw new Error("connection failed");
           connected.push(videoId);
           return true;
@@ -552,17 +550,17 @@ describe("YouTube multi-stream manager", () => {
 
       const platform = buildPlatform({
         connectionManager: {
-          getConnectionCount: createMockFn(() => connectedVideoIds.size),
-          getAllVideoIds: createMockFn(() => Array.from(connectedVideoIds)),
-          hasConnection: createMockFn((videoId: string) =>
+          getConnectionCount: vi.fn(() => connectedVideoIds.size),
+          getAllVideoIds: vi.fn(() => Array.from(connectedVideoIds)),
+          hasConnection: vi.fn((videoId: string) =>
             connectedVideoIds.has(videoId),
           ),
         },
-        getActiveYouTubeVideoIds: createMockFn(() =>
+        getActiveYouTubeVideoIds: vi.fn(() =>
           Array.from(connectedVideoIds),
         ),
-        getLiveVideoIds: createMockFn(async () => ["retry-stream"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getLiveVideoIds: vi.fn(async () => ["retry-stream"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           attempted.push(videoId);
           if (shouldFail) {
             shouldFail = false;
@@ -589,13 +587,13 @@ describe("YouTube multi-stream manager", () => {
       const disconnected: string[] = [];
       const platform = buildPlatform({
         connectionManager: {
-          getConnectionCount: createMockFn(() => 1),
-          getAllVideoIds: createMockFn(() => ["existing-stream"]),
-          hasConnection: createMockFn(() => true),
+          getConnectionCount: vi.fn(() => 1),
+          getAllVideoIds: vi.fn(() => ["existing-stream"]),
+          hasConnection: vi.fn(() => true),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => []),
-        getLiveVideoIds: createMockFn(async () => []),
-        disconnectFromYouTubeStream: createMockFn(async (videoId: string) => {
+        getActiveYouTubeVideoIds: vi.fn(() => []),
+        getLiveVideoIds: vi.fn(async () => []),
+        disconnectFromYouTubeStream: vi.fn(async (videoId: string) => {
           disconnected.push(videoId);
         }),
       });
@@ -616,17 +614,17 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 1),
-          getAllVideoIds: createMockFn(() => ["old-stream"]),
-          hasConnection: createMockFn((videoId: string) => videoId === "old-stream"),
+          getConnectionCount: vi.fn(() => 1),
+          getAllVideoIds: vi.fn(() => ["old-stream"]),
+          hasConnection: vi.fn((videoId: string) => videoId === "old-stream"),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["old-stream"]),
-        getLiveVideoIds: createMockFn(async () => ["new-stream"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getActiveYouTubeVideoIds: vi.fn(() => ["old-stream"]),
+        getLiveVideoIds: vi.fn(async () => ["new-stream"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           connected.push(videoId);
           return true;
         }),
-        disconnectFromYouTubeStream: createMockFn(
+        disconnectFromYouTubeStream: vi.fn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
             disconnected.push({ videoId, reason, options });
           },
@@ -649,13 +647,13 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: createMockFn(() => 1),
-          getAllVideoIds: createMockFn(() => ["existing-stream"]),
-          hasConnection: createMockFn((videoId: string) => videoId === "existing-stream"),
+          getConnectionCount: vi.fn(() => 1),
+          getAllVideoIds: vi.fn(() => ["existing-stream"]),
+          hasConnection: vi.fn((videoId: string) => videoId === "existing-stream"),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => ["existing-stream"]),
-        getLiveVideoIds: createMockFn(async () => ["new-stream-1", "new-stream-2", "new-stream-3"]),
-        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+        getActiveYouTubeVideoIds: vi.fn(() => ["existing-stream"]),
+        getLiveVideoIds: vi.fn(async () => ["new-stream-1", "new-stream-2", "new-stream-3"]),
+        connectToYouTubeStream: vi.fn(async (videoId: string) => {
           connected.push(videoId);
           return true;
         }),
@@ -671,7 +669,7 @@ describe("YouTube multi-stream manager", () => {
   describe("checkMultiStream error handling", () => {
     test("completes without throwing when stream detection fails and throwOnError is false", async () => {
       const platform = buildPlatform({
-        getLiveVideoIds: createMockFn(async () => {
+        getLiveVideoIds: vi.fn(async () => {
           throw new Error("api error");
         }),
       });
@@ -682,7 +680,7 @@ describe("YouTube multi-stream manager", () => {
 
     test("throws error when stream detection fails and throwOnError is true", async () => {
       const platform = buildPlatform({
-        getLiveVideoIds: createMockFn(async () => {
+        getLiveVideoIds: vi.fn(async () => {
           throw new Error("api error");
         }),
       });

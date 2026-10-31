@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
@@ -24,7 +24,7 @@ type RoutedPayload = Record<string, unknown> & {
 
 const createReadyTwitchAuth = () => ({
   isReady: () => true,
-  refreshTokens: createMockFn().mockResolvedValue(true),
+  refreshTokens: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
   getUserId: () => "test-user-123",
 });
 
@@ -49,9 +49,9 @@ const createEventSub = (
     logger: noOpLogger,
     twitchAuth,
     axios: {
-      post: createMockFn().mockResolvedValue({ data: {} }),
-      get: createMockFn().mockResolvedValue({ data: {} }),
-      delete: createMockFn().mockResolvedValue({ data: {} }),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      delete: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
     },
     WebSocketCtor: class {
       close() {}
@@ -66,9 +66,10 @@ const createEventSub = (
 describe("TwitchEventSub notification routing", () => {
   let eventSub: TwitchEventSub | null;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (eventSub?.cleanup) {
-      eventSub.cleanup().catch(() => {});
+      await eventSub.cleanup();
+      expect(eventSub.cleanupInterval).toBeNull();
     }
     _resetForTesting();
     initializeStaticSecrets();

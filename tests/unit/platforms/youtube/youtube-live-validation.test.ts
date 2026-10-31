@@ -1,18 +1,18 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
 describe("YouTubePlatform live validation (modern signals)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
-  const streamDetectionService = { detectLiveStreams: createMockFn() };
+  const streamDetectionService = { detectLiveStreams: vi.fn<(...args: unknown[]) => unknown>() };
   const rawPlatformDataLoggingService = {
-    logChatMessage: createMockFn(),
-    close: createMockFn(),
+    logChatMessage: vi.fn<(...args: unknown[]) => unknown>(),
+    close: vi.fn<(...args: unknown[]) => unknown>(),
   };
 
   const baseConfig = {

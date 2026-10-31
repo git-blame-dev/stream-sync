@@ -17,7 +17,6 @@ import {
     allowsYouTubeJewelsMissingUserId
 } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import { safeSetTimeout } from '../utils/timeout-validator';
 import { withTimeout } from '../utils/timeout-wrapper';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
@@ -187,6 +186,7 @@ type RuntimeNeuralTtsProcessManager = {
 };
 
 type RuntimeDependencies = RuntimeRecord & {
+    onShutdownComplete?: () => void;
     logging: AppLogger;
     twitchAuth?: RuntimeTwitchAuth | null;
     lazyInnertube?: unknown;
@@ -865,18 +865,7 @@ class AppRuntime {
                 catch { /* A failed diagnostic cannot prevent the termination fallback. */ }
             }
         }
-        process.exitCode = 0;
-        const forcedExitTimer = safeSetTimeout(() => {
-            try {
-                this._handleAppRuntimeError('[Shutdown] Forced exit due to lingering handles', null, null, { eventType: 'shutdown', logContext: 'system' });
-            } catch {
-                // The termination fallback must survive a failed diagnostic.
-            }
-            process.exit(0);
-        }, 2000);
-        if (forcedExitTimer && typeof forcedExitTimer.unref === 'function') {
-            forcedExitTimer.unref();
-        }
+        this.dependencies.onShutdownComplete?.();
     }
 
     start(): Promise<void> {

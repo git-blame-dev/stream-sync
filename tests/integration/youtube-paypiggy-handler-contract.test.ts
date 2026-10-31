@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 
 import { createEventBus } from "../../src/core/EventBus";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
@@ -9,7 +9,7 @@ import { ViewerCountExtractionService } from "../../src/services/viewer-count-ex
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 
 type PlatformEventPayload = {
@@ -72,7 +72,7 @@ const createYouTubePlatform = () => {
 
 describe("YouTube paypiggy handler contract (integration)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("forwards membership chat events through lifecycle default handlers to event bus", async () => {

@@ -49,7 +49,11 @@ const installTimerTracking = () => {
     } = originals;
 
     global.setTimeout = ((...args: Parameters<typeof global.setTimeout>) => {
-        const timerId = nativeSetTimeout(...args);
+        const [callback, delay, ...callbackArguments] = args;
+        const timerId = nativeSetTimeout(function (this: unknown, ...callbackArgs: unknown[]) {
+            timerState.activeTimers.delete(timerId as TimerIdentifier);
+            callback.apply(this, callbackArgs);
+        }, delay, ...callbackArguments);
         timerState.activeTimers.add(timerId as TimerIdentifier);
         return timerId;
     }) as typeof global.setTimeout;
@@ -74,27 +78,10 @@ const installTimerTracking = () => {
     return timerState;
 };
 
-const clearTrackedTimers = () => {
-    if (!timerState.original) {
-        return;
-    }
-    const { clearTimeout, clearInterval } = timerState.original;
-    timerState.activeTimers.forEach((timerId) => {
-        try {
-            clearTimeout(timerId as Parameters<typeof clearTimeout>[0]);
-            clearInterval(timerId as Parameters<typeof clearInterval>[0]);
-        } catch {
-            // Ignore already-cleared timers
-        }
-    });
-    timerState.activeTimers.clear();
-};
-
 const restoreTimerTracking = () => {
     if (!timerState.original) {
         return;
     }
-    clearTrackedTimers();
     global.setTimeout = timerState.original.setTimeout;
     global.setInterval = timerState.original.setInterval;
     global.clearTimeout = timerState.original.clearTimeout;
@@ -126,7 +113,6 @@ const getTimerCount = () => vi.getTimerCount();
 
 export {
     installTimerTracking,
-    clearTrackedTimers,
     restoreTimerTracking,
     useFakeTimers,
     useRealTimers,

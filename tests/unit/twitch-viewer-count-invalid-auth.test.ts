@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import type { TestMockFn } from "../helpers/bun-mock-utils";
+import { vi, type Mock, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 
 describe("Twitch Viewer Count with Invalid Authentication", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   type StreamInfo = { isLive: boolean; viewerCount: number };
@@ -17,12 +17,12 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
     refreshToken?: string;
   };
   type TwitchApiClientFixture = {
-    getStreamInfo: TestMockFn<[channel: string], Promise<StreamInfo>>;
+    getStreamInfo: Mock<(...args: [channel: string]) => Promise<StreamInfo>>;
   };
 
   let mockApiClient: TwitchApiClientFixture;
   let mockConnectionStateFactory: {
-    createTwitchState: ReturnType<typeof createMockFn>;
+    createTwitchState: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
   };
   let configFixture: TwitchConfigFixture;
   let viewerCountProvider: InstanceType<typeof TwitchViewerCountProvider>;
@@ -30,11 +30,11 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
 
   beforeEach(() => {
     mockApiClient = {
-      getStreamInfo: createMockFn<[channel: string], Promise<StreamInfo>>(),
+      getStreamInfo: vi.fn<(...args: [channel: string]) => Promise<StreamInfo>>(),
     };
 
     mockConnectionStateFactory = {
-      createTwitchState: createMockFn(),
+      createTwitchState: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     configFixture = {
@@ -48,7 +48,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
 
   describe("when authentication is invalid but channel is configured", () => {
     beforeEach(() => {
-      mockApiClient.getStreamInfo = createMockFn<[channel: string], Promise<StreamInfo>>(async (channel: string) => ({
+      mockApiClient.getStreamInfo = vi.fn<(...args: [channel: string]) => Promise<StreamInfo>>(async (channel: string) => ({
         isLive: true,
         viewerCount: channel === "hero_stream" ? 15 : 0,
       }));
@@ -119,7 +119,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
   describe("when authentication is valid but API call fails", () => {
     beforeEach(() => {
       const mockState = {
-        isApiReady: createMockFn().mockReturnValue(true),
+        isApiReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         isConnected: true,
         channel: "hero_stream",
         username: "hero_stream",
@@ -159,7 +159,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
   describe("when authentication is valid and API returns data", () => {
     beforeEach(() => {
       const mockState = {
-        isApiReady: createMockFn().mockReturnValue(true),
+        isApiReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         isConnected: true,
         channel: "hero_stream",
         username: "hero_stream",

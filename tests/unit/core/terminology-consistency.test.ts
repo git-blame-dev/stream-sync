@@ -1,19 +1,11 @@
-import { describe, test, expect } from "bun:test";
+import { vi, describe, test, expect } from "bun:test";
 
-import { createMockFn } from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { generateLogMessage } from "../../helpers/notification-test-utils";
 import { createTestUser, TEST_TIMEOUTS } from "../../helpers/test-setup";
 import * as constants from "../../../src/core/constants";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 describe("Terminology Consistency", () => {
   const testOptions = { timeout: TEST_TIMEOUTS.FAST };
@@ -44,18 +36,18 @@ describe("Terminology Consistency", () => {
         handled.push({ platform, username, data });
       },
     };
-    const eventBus = { subscribe: createMockFn(() => () => {}) };
+    const eventBus = { subscribe: vi.fn(() => () => {}) };
     const notificationManager = {
-      handleNotification: createMockFn(async () => true),
+      handleNotification: vi.fn(async () => true),
     };
     const config = createConfigFixture({
       general: { paypiggiesEnabled: true },
     });
     const logger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
     };
     const router = new PlatformEventRouter({
       eventBus,

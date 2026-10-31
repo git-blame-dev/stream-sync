@@ -1,7 +1,7 @@
-import { describe, expect, it, afterEach, beforeEach } from "bun:test";
+import { vi, describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { DependencyFactory } from "../../src/utils/dependency-factory";
 import { PlatformConnectionFactory } from "../../src/utils/platform-connection-factory";
 import { validateConnectionFactoryInterface } from "../../src/utils/dependency-validator";
@@ -20,13 +20,13 @@ describe("Dependency Injection Validation", () => {
   });
   afterEach(async () => {
     try { await youtubeDependencies.innertubeService.dispose(); }
-    finally { restoreAllMocks(); }
+    finally { vi.restoreAllMocks(); }
   });
 
   describe("Logger Interface Contract Validation", () => {
     it("should validate logger has required interface methods before platform initialization", () => {
       const incompleteLogger = {
-        info: createMockFn(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       const createPlatform = () => {
@@ -45,7 +45,7 @@ describe("Dependency Injection Validation", () => {
 
     it("should validate logger methods are callable functions", () => {
       const invalidLogger = {
-        info: createMockFn(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
         debug: "not-a-function",
         error: null,
         warn: undefined,
@@ -241,8 +241,8 @@ describe("Dependency Injection Validation", () => {
   describe("Error Message Quality for Dependency Issues", () => {
     it("should provide actionable error messages for missing logger methods", () => {
       const partialLogger = {
-        info: createMockFn(),
-        error: createMockFn(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
+        error: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       const validateLogger = () => {

@@ -1,44 +1,41 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, beforeEach, afterEach, expect } from 'bun:test';
 
+
+import { useFakeTimers, useRealTimers, getTimerCount } from "../../helpers/bun-timers";
 import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
 
 type TestRuntime = {
-  shutdown: TestMockFn<[], Promise<void>>;
-  getPlatforms: TestMockFn<[], Record<string, unknown>>;
+  shutdown: Mock<(...args: []) => Promise<void>>;
+  getPlatforms: Mock<(...args: []) => Record<string, unknown>>;
 };
 
 describe("GracefulExitService additional behavior", () => {
   let runtime: TestRuntime;
-  let originalExit: typeof process.exit;
+  let service: GracefulExitService | undefined;
 
   beforeEach(() => {
-    clearAllMocks();
-    originalExit = process.exit;
+    vi.clearAllMocks();
+    useFakeTimers();
 
     runtime = {
-      shutdown: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
-      getPlatforms: createMockFn<[], Record<string, unknown>>().mockReturnValue({}),
+      shutdown: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
+      getPlatforms: vi.fn<(...args: []) => Record<string, unknown>>().mockReturnValue({}),
     };
 
-    process.exit = (_code?: string | number | null): never => {
-      throw new Error("process.exit should not be called in this test");
-    };
+
   });
 
   afterEach(() => {
-    process.exit = originalExit;
-    restoreAllMocks();
-    clearAllMocks();
+    service?.stop();
+    expect(getTimerCount()).toBe(0);
+    useRealTimers();
+    service = undefined;
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   test("disables tracking when target is non-positive", () => {
-    const service = new GracefulExitService(runtime, 0);
+    service = new GracefulExitService(runtime, 0);
 
     expect(service.isEnabled()).toBe(false);
     expect(service.incrementMessageCount()).toBe(false);
@@ -46,7 +43,7 @@ describe("GracefulExitService additional behavior", () => {
   });
 
   test("guards against duplicate shutdown attempts", async () => {
-    const service = new GracefulExitService(runtime, 1);
+    service = new GracefulExitService(runtime, 1);
     service.isShuttingDown = true;
 
     await service.triggerExit();
@@ -57,7 +54,7 @@ describe("GracefulExitService additional behavior", () => {
   test("handles shutdown errors gracefully", async () => {
     runtime.shutdown.mockRejectedValue(new Error("shutdown failed"));
 
-    const service = new GracefulExitService(runtime, 1);
+    service = new GracefulExitService(runtime, 1);
     service.incrementMessageCount();
 
     await service.triggerExit();
@@ -66,7 +63,7 @@ describe("GracefulExitService additional behavior", () => {
   });
 
   test("builds exit summary without memory stats", () => {
-    const service = new GracefulExitService(runtime, 1);
+    service = new GracefulExitService(runtime, 1);
 
     const summary = service._buildExitSummary();
 

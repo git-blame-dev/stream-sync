@@ -1,10 +1,6 @@
+import { vi, type Mock, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -15,24 +11,24 @@ initializeTestLogging();
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
-  getQueueLength: TestMockFn<[], number>;
+  addItem: Mock<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>;
+  getQueueLength: Mock<(...args: []) => number>;
 };
 
 type VfxCommandServiceMock = {
-  executeCommand: TestMockFn<unknown[], Promise<{ success: boolean }>>;
-  getVFXConfig: TestMockFn<unknown[], Promise<{ filename: string }>>;
+  executeCommand: Mock<(...args: unknown[]) => Promise<{ success: boolean }>>;
+  getVFXConfig: Mock<(...args: unknown[]) => Promise<{ filename: string }>>;
 };
 
 type UserTrackingServiceMock = {
-  isFirstMessage: TestMockFn<unknown[], Promise<boolean>>;
-  trackUser: TestMockFn<unknown[], void>;
+  isFirstMessage: Mock<(...args: unknown[]) => Promise<boolean>>;
+  trackUser: Mock<(...args: unknown[]) => void>;
 };
 
 type EventBusMock = {
-  emit: ReturnType<typeof createMockFn>;
-  on: ReturnType<typeof createMockFn>;
-  off: ReturnType<typeof createMockFn>;
+  emit: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  on: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  off: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -55,8 +51,8 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      getQueueLength: vi.fn<(...args: []) => number>().mockReturnValue(0),
     };
 
     mockConfig = createConfigFixture({
@@ -73,36 +69,36 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
     });
 
     mockVFXCommandService = {
-      executeCommand: createMockFn<unknown[], Promise<{ success: boolean }>>()
+      executeCommand: vi.fn<(...args: unknown[]) => Promise<{ success: boolean }>>()
         .mockResolvedValue({ success: true }),
-      getVFXConfig: createMockFn<unknown[], Promise<{ filename: string }>>()
+      getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ filename: string }>>()
         .mockResolvedValue({ filename: "test.mp4" }),
     };
 
     mockUserTrackingService = {
-      isFirstMessage: createMockFn<unknown[], Promise<boolean>>()
+      isFirstMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>()
         .mockResolvedValue(false),
-      trackUser: createMockFn<unknown[], void>(),
+      trackUser: vi.fn<(...args: unknown[]) => void>(),
     };
 
     mockEventBus = {
-      emit: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     notificationManager = undefined;
   });
 
   describe("Constructor Service Injection", () => {
     it("should initialize with minimal required dependencies", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -175,9 +171,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     it("should require config for notification setup", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       expect(() => {
         new NotificationManager({
@@ -191,9 +187,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     it("should work without spam detector gracefully", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -208,9 +204,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     it("should continue processing notifications without VFX services", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -272,9 +268,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     it("should display notifications with minimal services", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -303,9 +299,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
   describe("Configuration Loading via plain config", () => {
     it("should require config instead of relying on defaults", () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       expect(() => {
         new NotificationManager({
@@ -321,15 +317,15 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
   describe("Spam Detection Integration", () => {
     it("should use spam detector when provided", async () => {
       const mockSpamDetector = {
-        handleDonationSpam: createMockFn().mockReturnValue({
+        handleDonationSpam: vi.fn<(...args: unknown[]) => { shouldShow: true; }>().mockReturnValue({
           shouldShow: true,
         }),
       };
 
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -357,9 +353,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     it("should work without spam detector", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -388,9 +384,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
   describe("Graceful Degradation", () => {
     it("should handle missing services gracefully during notification processing", async () => {
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -436,9 +432,9 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
     it("should reject null config dependency", () => {
       const nullConfig = JSON.parse("null");
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn<(...args: unknown[]) => unknown>(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
+        off: vi.fn<(...args: unknown[]) => unknown>(),
       };
       expect(() => {
         new NotificationManager({

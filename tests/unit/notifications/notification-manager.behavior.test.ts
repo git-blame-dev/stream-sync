@@ -1,6 +1,6 @@
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
@@ -21,20 +21,20 @@ describe("NotificationManager behavior", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createDeps = (overrides = {}) => ({
     logger: noOpLogger,
     displayQueue: {
-      enqueue: createMockFn(),
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      getQueueLength: createMockFn(() => 0),
+      enqueue: vi.fn<(...args: unknown[]) => unknown>(),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      getQueueLength: vi.fn(() => 0),
     },
     eventBus: {
-      on: createMockFn(),
-      emit: createMockFn(),
-      subscribe: createMockFn(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      subscribe: vi.fn<(...args: unknown[]) => unknown>(),
     },
     config: createConfigFixture(),
     constants: {
@@ -89,7 +89,7 @@ describe("NotificationManager behavior", () => {
       platform: "twitch",
     };
     manager.handleNotification =
-      createMockFn().mockResolvedValue(expectedResult);
+      vi.fn<(...args: unknown[]) => Promise<typeof expectedResult>>().mockResolvedValue(expectedResult);
 
     const result = await manager.handleGiftNotification("twitch", {
       id: "test-gift-id",

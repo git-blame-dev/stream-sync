@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
 import { join } from "node:path";
 
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
@@ -12,7 +12,7 @@ import { createMainPresentationFixture } from "../helpers/main-presentation-fixt
 import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture.ts";
 import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import {
   createTikTokConfigFixture,
   createTwitchConfigFixture,
@@ -110,7 +110,7 @@ describe("Paypiggy platform flows (smoke)", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -209,7 +209,7 @@ describe("Paypiggy platform flows (smoke)", () => {
     const cleanup = registerCleanup(async () => {
       await platformLifecycleService.disconnectAll();
       platformLifecycleService.dispose();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

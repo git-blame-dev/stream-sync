@@ -1,15 +1,15 @@
-import { describe, test, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 
 describe("PlatformLifecycleService platform contract validation (smoke)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("fails fast with actionable error when a platform instance is invalid", async () => {
-    const eventBus = { emit: createMockFn() };
+    const eventBus = { emit: vi.fn<(...args: unknown[]) => unknown>() };
 
     const lifecycle = new PlatformLifecycleService({
       config: { twitch: { enabled: true } },

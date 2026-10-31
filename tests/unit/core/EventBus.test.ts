@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { createMockFn, clearAllMocks } from '../../helpers/bun-mock-utils';
+import { vi, describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+
 import { advanceTimersByTime, setSystemTime, useFakeTimers, useRealTimers } from '../../helpers/bun-timers';
 import { waitForDelay } from '../../helpers/time-utils';
 
@@ -51,7 +51,7 @@ describe('EventBus', () => {
     
     beforeEach(() => {
         useFakeTimers();
-        clearAllMocks();
+        vi.clearAllMocks();
         eventBus = new EventBus({});
     });
     
@@ -89,7 +89,7 @@ describe('EventBus', () => {
 
     describe('Event Subscription', () => {
         test('should subscribe to events successfully', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             const unsubscribe = eventBus.subscribe('test-event', handler);
             
             expect(typeof unsubscribe).toBe('function');
@@ -104,7 +104,7 @@ describe('EventBus', () => {
         });
 
         test('should support once subscription', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler, { once: true });
             
             eventBus.emit('test-event', 'data');
@@ -115,7 +115,7 @@ describe('EventBus', () => {
 
         test('should support context binding', () => {
             const context = { name: 'TestContext', value: 42 };
-            const handler = createMockFn(function(this: typeof context) {
+            const handler = vi.fn(function(this: typeof context) {
                 return this.value;
             });
             
@@ -126,7 +126,7 @@ describe('EventBus', () => {
         });
 
         test('should return unsubscribe function from subscription', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             const unsubscribe = eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(1);
@@ -137,9 +137,9 @@ describe('EventBus', () => {
         });
 
         test('should handle multiple subscribers to same event', () => {
-            const handler1 = createMockFn();
-            const handler2 = createMockFn();
-            const handler3 = createMockFn();
+            const handler1 = vi.fn<(...args: unknown[]) => unknown>();
+            const handler2 = vi.fn<(...args: unknown[]) => unknown>();
+            const handler3 = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler1);
             eventBus.subscribe('test-event', handler2);
@@ -157,7 +157,7 @@ describe('EventBus', () => {
 
     describe('Event Emission', () => {
         test('should emit events successfully', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler);
             
             const result = eventBus.emit('test-event', 'data', 42, { key: 'value' });
@@ -173,7 +173,7 @@ describe('EventBus', () => {
         });
 
         test('should update event statistics on emission', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event');
@@ -188,7 +188,7 @@ describe('EventBus', () => {
 
     describe('Async Handler Support', () => {
         test('should handle async handlers successfully', async () => {
-            const asyncHandler = createMockFn(async (data: unknown) => {
+            const asyncHandler = vi.fn(async (data: unknown) => {
                 await waitForDelay(10);
                 return String(data).toUpperCase();
             });
@@ -205,7 +205,7 @@ describe('EventBus', () => {
         });
 
         test('should handle async handler errors', async () => {
-            const errorHandler = createMockFn(async () => {
+            const errorHandler = vi.fn(async () => {
                 throw new Error('Async handler error');
             });
             
@@ -219,7 +219,7 @@ describe('EventBus', () => {
         });
 
         test('should handle Promise-returning handlers', async () => {
-            const promiseHandler = createMockFn(() => {
+            const promiseHandler = vi.fn(() => {
                 return Promise.resolve('success');
             });
             
@@ -237,11 +237,11 @@ describe('EventBus', () => {
 
     describe('Error Handling and Isolation', () => {
         test('should isolate handler errors from other handlers', async () => {
-            const goodHandler = createMockFn();
-            const errorHandler = createMockFn(() => {
+            const goodHandler = vi.fn<(...args: unknown[]) => unknown>();
+            const errorHandler = vi.fn(() => {
                 throw new Error('Handler failed');
             });
-            const anotherGoodHandler = createMockFn();
+            const anotherGoodHandler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', goodHandler);
             eventBus.subscribe('test-event', errorHandler);
@@ -262,10 +262,10 @@ describe('EventBus', () => {
         });
 
         test('should emit handler-error event when handler fails', async () => {
-            const errorHandler = createMockFn(() => {
+            const errorHandler = vi.fn(() => {
                 throw new Error('Test error');
             });
-            const errorEventHandler = createMockFn();
+            const errorEventHandler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', errorHandler);
             eventBus.subscribe('handler-error', errorEventHandler);
@@ -281,10 +281,10 @@ describe('EventBus', () => {
         });
 
         test('does not re-emit handler-error when handler-error handler fails', async () => {
-            const errorHandler = createMockFn(() => {
+            const errorHandler = vi.fn(() => {
                 throw new Error('Test error');
             });
-            const handlerErrorHandler = createMockFn(() => {
+            const handlerErrorHandler = vi.fn(() => {
                 throw new Error('Handler error failure');
             });
 
@@ -300,7 +300,7 @@ describe('EventBus', () => {
 
         test('should handle context errors gracefully', async () => {
             const context = { name: 'TestContext' };
-            const errorHandler = createMockFn(function(this: typeof context) {
+            const errorHandler = vi.fn(function(this: typeof context) {
                 throw new Error('Context error');
             });
             
@@ -315,10 +315,10 @@ describe('EventBus', () => {
 
         test('should truncate long arguments in error reporting', async () => {
             const longObject = { data: 'x'.repeat(200) };
-            const errorHandler = createMockFn(() => {
+            const errorHandler = vi.fn(() => {
                 throw new Error('Handler error');
             });
-            const errorEventHandler = createMockFn();
+            const errorEventHandler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', errorHandler);
             eventBus.subscribe('handler-error', errorEventHandler);
@@ -337,7 +337,7 @@ describe('EventBus', () => {
 
     describe('Unsubscribe Functionality', () => {
         test('should unsubscribe handlers successfully', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(1);
@@ -350,7 +350,7 @@ describe('EventBus', () => {
 
         test('should handle unsubscribe with context', () => {
             const context = { name: 'TestContext' };
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler, { context });
             
@@ -363,7 +363,7 @@ describe('EventBus', () => {
         test('should not unsubscribe handler with different context', () => {
             const context1 = { name: 'Context1' };
             const context2 = { name: 'Context2' };
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler, { context: context1 });
             
@@ -374,7 +374,7 @@ describe('EventBus', () => {
         });
 
         test('should warn when handler not found for unsubscription', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             const result = eventBus.unsubscribe('nonexistent-event', handler);
             
@@ -382,7 +382,7 @@ describe('EventBus', () => {
         });
 
         test('should handle multiple handlers with same function reference', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             const context1 = { name: 'Context1' };
             const context2 = { name: 'Context2' };
             
@@ -407,8 +407,8 @@ describe('EventBus', () => {
 
     describe('Once Functionality', () => {
         test('should call once handlers only once', () => {
-            const onceHandler = createMockFn();
-            const regularHandler = createMockFn();
+            const onceHandler = vi.fn<(...args: unknown[]) => unknown>();
+            const regularHandler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', onceHandler, { once: true });
             eventBus.subscribe('test-event', regularHandler);
@@ -421,7 +421,7 @@ describe('EventBus', () => {
         });
 
         test('should support unsubscribing once handlers before they trigger', () => {
-            const onceHandler = createMockFn();
+            const onceHandler = vi.fn<(...args: unknown[]) => unknown>();
             const unsubscribe = eventBus.subscribe('test-event', onceHandler, { once: true });
             
             unsubscribe();
@@ -440,7 +440,7 @@ describe('EventBus', () => {
                 }
             };
             
-            const handler = createMockFn(function(this: typeof context) {
+            const handler = vi.fn(function(this: typeof context) {
                 return this.getValue();
             });
             
@@ -459,7 +459,7 @@ describe('EventBus', () => {
             }
             
             const context = new TestClass();
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler, { context });
             
@@ -467,7 +467,7 @@ describe('EventBus', () => {
         });
 
         test('should handle null context gracefully', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler, { context: null });
             eventBus.emit('test-event', 'data');
@@ -478,7 +478,7 @@ describe('EventBus', () => {
 
     describe('Event Statistics', () => {
         test('should track event emission statistics', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event');
@@ -494,8 +494,8 @@ describe('EventBus', () => {
         });
 
         test('should track handler success and error rates', async () => {
-            const goodHandler = createMockFn();
-            const badHandler = createMockFn(() => {
+            const goodHandler = vi.fn<(...args: unknown[]) => unknown>();
+            const badHandler = vi.fn(() => {
                 throw new Error('Handler error');
             });
             
@@ -589,7 +589,7 @@ describe('EventBus', () => {
 
     describe('Memory Management and Cleanup', () => {
         test('should reset all listeners and stats', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('test-event', handler);
             eventBus.emit('test-event');
             
@@ -604,7 +604,7 @@ describe('EventBus', () => {
 
         test('should handle max listeners warning', () => {
             const smallBus = new EventBus({ maxListeners: 2 });
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
 
             smallBus.subscribe('test-event', handler);
             smallBus.subscribe('test-event', handler);
@@ -613,7 +613,7 @@ describe('EventBus', () => {
         });
 
         test('should get listener summary', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('event1', handler);
             eventBus.subscribe('event1', handler);
             eventBus.subscribe('event2', handler);
@@ -629,7 +629,7 @@ describe('EventBus', () => {
 
     describe('PlatformEvents interop', () => {
         test('supports PlatformEvents constants in actual events', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, handler);
 
             const result = eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, { command: 'hello' });
@@ -657,7 +657,7 @@ describe('EventBus', () => {
 
     describe('Performance and Edge Cases', () => {
         test('should handle rapid event emissions', async () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('rapid-event', handler);
             
             for (let i = 0; i < 100; i++) {
@@ -670,7 +670,7 @@ describe('EventBus', () => {
         });
 
         test('should handle empty event name', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             eventBus.subscribe('', handler);
             
             const result = eventBus.emit('', 'data');
@@ -680,7 +680,7 @@ describe('EventBus', () => {
         });
 
         test('should handle special characters in event names', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             const eventName = 'special:event/with-chars.and_stuff';
             
             eventBus.subscribe(eventName, handler);
@@ -692,7 +692,7 @@ describe('EventBus', () => {
         });
 
         test('should handle large argument lists', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             const largeArgs = Array.from({ length: 100 }, (_, i) => i);
             
             eventBus.subscribe('large-args', handler);
@@ -702,10 +702,10 @@ describe('EventBus', () => {
         });
 
         test('should handle circular object references in arguments', async () => {
-            const handler = createMockFn(() => {
+            const handler = vi.fn(() => {
                 throw new Error('Test error');
             });
-            const errorEventHandler = createMockFn();
+            const errorEventHandler = vi.fn<(...args: unknown[]) => unknown>();
 
             const obj: { name: string; self?: unknown } = { name: 'test' };
             obj.self = obj;
@@ -725,7 +725,7 @@ describe('EventBus', () => {
         });
 
         test('should handle undefined and null arguments', () => {
-            const handler = createMockFn();
+            const handler = vi.fn<(...args: unknown[]) => unknown>();
             
             eventBus.subscribe('test-event', handler);
             eventBus.emit('test-event', undefined, null, 0, '', false);
@@ -734,12 +734,12 @@ describe('EventBus', () => {
         });
 
         test('should handle synchronous and asynchronous handlers mixed', async () => {
-            const syncHandler = createMockFn(() => 'sync');
-            const asyncHandler = createMockFn(async () => {
+            const syncHandler = vi.fn(() => 'sync');
+            const asyncHandler = vi.fn(async () => {
                 await waitForDelay(10);
                 return 'async';
             });
-            const promiseHandler = createMockFn(() => Promise.resolve('promise'));
+            const promiseHandler = vi.fn(() => Promise.resolve('promise'));
             
             eventBus.subscribe('mixed-event', syncHandler);
             eventBus.subscribe('mixed-event', asyncHandler);

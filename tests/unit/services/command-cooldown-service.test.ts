@@ -1,10 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { CommandCooldownService } from "../../../src/services/CommandCooldownService.ts";
 import { createConfigFixture } from "../../helpers/config-fixture";
@@ -55,11 +50,8 @@ type ConfigChangePayload = {
 };
 type ConfigSubscriptionHandler = (payload?: ConfigChangePayload) => void;
 type MockEventBus = {
-  emit: TestMockFn<[eventName: string, payload: unknown], void>;
-  subscribe: TestMockFn<
-    [eventName: string, handler: ConfigSubscriptionHandler],
-    () => void
-  >;
+  emit: Mock<(...args: [eventName: string, payload: unknown]) => void>;
+  subscribe: Mock<(...args: [eventName: string, handler: ConfigSubscriptionHandler]) => () => void>;
 };
 type TestConfig = ReturnType<typeof createConfigFixture>;
 
@@ -101,10 +93,8 @@ describe("CommandCooldownService", () => {
     eventSubscriptions = {};
 
     mockEventBus = {
-      emit: createMockFn<[string, unknown], void>(),
-      subscribe: createMockFn<
-        [string, ConfigSubscriptionHandler],
-        () => void
+      emit: vi.fn<(...args: [string, unknown]) => void>(),
+      subscribe: vi.fn<(...args: [string, ConfigSubscriptionHandler]) => () => void
       >((eventName, handler) => {
         eventSubscriptions[eventName] = handler;
         return () => {
@@ -126,8 +116,8 @@ describe("CommandCooldownService", () => {
     if (service) {
       service.dispose();
     }
-    restoreAllMocks();
-    clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("should require config when constructing the service", () => {

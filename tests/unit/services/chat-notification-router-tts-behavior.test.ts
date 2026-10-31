@@ -1,6 +1,6 @@
+import { vi, describe, it, beforeEach, expect } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
@@ -38,25 +38,25 @@ describe("ChatNotificationRouter TTS behavior", () => {
         tiktok: { greetingsEnabled: true, messagesEnabled: true },
       },
       displayQueue: {
-        addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>((items) => items),
+        addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+        addSequence: vi.fn<(...args: [DisplayQueueItem[]]) => readonly DisplayQueueItem[]>((items) => items),
       },
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+        getPlatformConnectionTime: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn().mockReturnValue(true),
-        updateUserCooldown: createMockFn(),
-        updateGlobalCooldown: createMockFn(),
+        checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        checkGlobalCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        updateUserCooldown: vi.fn<(...args: unknown[]) => unknown>(),
+        updateGlobalCooldown: vi.fn<(...args: unknown[]) => unknown>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockReturnValue(false),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
       },
       commandParser: {
-        getVFXConfig: createMockFn().mockReturnValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
       },
-      isFirstMessage: createMockFn().mockReturnValue(false),
+      isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
     };
 
     const runtime = { ...baseRuntime, ...runtimeOverrides };

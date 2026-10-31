@@ -1,5 +1,5 @@
-import { afterEach, describe, test, expect } from 'bun:test';
-import { createMockFn } from '../../../../helpers/bun-mock-utils';
+import { vi, afterEach, describe, test, expect } from 'bun:test';
+
 import { noOpLogger } from '../../../../helpers/mock-factories';
 import { InnertubeFactory } from '../../../../../src/factories/innertube-factory';
 import { createYouTubeConnectionFactory } from '../../../../../src/platforms/youtube/connections/youtube-connection-factory';
@@ -28,16 +28,16 @@ type YouTubeClient = {
 const createFactoryPlatform = (): FactoryPlatform => ({
     logger: noOpLogger,
     config: {},
-    isCurrentYouTubeConnection: createMockFn().mockReturnValue(true),
-    setYouTubeConnectionReady: createMockFn(),
-    disconnectFromYouTubeStream: createMockFn().mockResolvedValue(true),
-    handleChatMessage: createMockFn(),
-    logRawPlatformData: createMockFn().mockResolvedValue(undefined),
-    _validateVideoForConnection: createMockFn().mockReturnValue({ shouldConnect: true }),
-    _handleProcessingError: createMockFn(),
-    _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
-    _shouldSkipMessage: createMockFn().mockReturnValue(false),
-    _resolveChatItemAuthorName: createMockFn().mockReturnValue('Unknown User')
+    isCurrentYouTubeConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+    setYouTubeConnectionReady: vi.fn<(videoId: string, attemptId: number) => void>(),
+    disconnectFromYouTubeStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+    handleChatMessage: vi.fn<FactoryPlatform["handleChatMessage"]>(),
+    logRawPlatformData: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+    _validateVideoForConnection: vi.fn<(...args: unknown[]) => { shouldConnect: true; }>().mockReturnValue({ shouldConnect: true }),
+    _handleProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+    _extractMessagesFromChatItem: vi.fn<(...args: unknown[]) => never[]>().mockReturnValue([]),
+    _shouldSkipMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+    _resolveChatItemAuthorName: vi.fn<(...args: unknown[]) => string>().mockReturnValue('Unknown User')
 });
 
 const services: Array<{ dispose(): Promise<void> }> = [];
@@ -57,8 +57,8 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
 
     test('installs unknown renderer capture before creating live chat connections', async () => {
         const liveChat = { id: 'test-live-chat', on() {}, start() {}, stop() {} };
-        const getLiveChat = createMockFn().mockResolvedValue(liveChat);
-        const installLiveChatUnknownRendererCapture = createMockFn().mockResolvedValue(undefined);
+        const getLiveChat = vi.fn<(...args: unknown[]) => Promise<typeof liveChat>>().mockResolvedValue(liveChat);
+        const installLiveChatUnknownRendererCapture = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const info = {
             getLiveChat: () => getLiveChat(),
             actions: {
@@ -68,14 +68,14 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
                 continuation: 'test-live-chat-continuation'
             }
         };
-        const getInfo = createMockFn().mockResolvedValue(info);
+        const getInfo = vi.fn<(...args: unknown[]) => Promise<typeof info>>().mockResolvedValue(info);
         const yt: YouTubeClient = {
             getInfo: (videoId, options) => getInfo(videoId, options)
         };
         const innertubeService = createService(yt);
         const platform = createFactoryPlatform();
-        platform._validateVideoForConnection = createMockFn().mockReturnValue({ shouldConnect: true });
-        platform.logRawPlatformData = createMockFn().mockResolvedValue(undefined);
+        platform._validateVideoForConnection = vi.fn<(...args: unknown[]) => { shouldConnect: true; }>().mockReturnValue({ shouldConnect: true });
+        platform.logRawPlatformData = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
 
         const factory = createYouTubeConnectionFactory({
             platform,
@@ -103,7 +103,7 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
 
     test('supports synchronous unknown renderer capture installers', async () => {
         const liveChat = { id: 'test-live-chat-sync-installer', on() {}, start() {}, stop() {} };
-        const getLiveChat = createMockFn().mockResolvedValue(liveChat);
+        const getLiveChat = vi.fn<(...args: unknown[]) => Promise<typeof liveChat>>().mockResolvedValue(liveChat);
         const info = {
             getLiveChat: () => getLiveChat(),
             actions: {
@@ -113,14 +113,14 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
                 continuation: null
             }
         };
-        const getInfo = createMockFn().mockResolvedValue(info);
+        const getInfo = vi.fn<(...args: unknown[]) => Promise<typeof info>>().mockResolvedValue(info);
         const yt: YouTubeClient = {
             getInfo: (videoId, options) => getInfo(videoId, options)
         };
         const innertubeService = createService(yt);
         const platform = createFactoryPlatform();
-        platform._validateVideoForConnection = createMockFn().mockReturnValue({ shouldConnect: true });
-        platform.logRawPlatformData = createMockFn().mockResolvedValue(undefined);
+        platform._validateVideoForConnection = vi.fn<(...args: unknown[]) => { shouldConnect: true; }>().mockReturnValue({ shouldConnect: true });
+        platform.logRawPlatformData = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
         const installerCalls: UnknownRendererCaptureInstallerOptions[] = [];
         const installLiveChatUnknownRendererCapture: NonNullable<FactoryOptions['installLiveChatUnknownRendererCapture']> = (options) => {
             installerCalls.push({
@@ -167,7 +167,7 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
             setParserErrorHandler: (handler: (context?: Record<string, unknown>) => void) => {
                 parserErrorHandler = handler;
             },
-            parseResponse: createMockFn().mockImplementation(() => {
+            parseResponse: vi.fn(() => {
                 parserErrorHandler?.({
                     error_type: 'class_not_found',
                     classname: 'GiftMessageView'
@@ -202,25 +202,25 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
             }
         };
         const actions: LiveChatActions = {
-            execute: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue(rawResponse)
+            execute: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue(rawResponse)
         };
         const originalExecute = actions.execute;
         const liveChat = { id: 'test-live-chat-default-installer', on() {}, start() {}, stop() {} };
         const info = {
-            getLiveChat: createMockFn().mockResolvedValue(liveChat),
+            getLiveChat: vi.fn<(...args: unknown[]) => Promise<typeof liveChat>>().mockResolvedValue(liveChat),
             actions,
             livechat: {
                 continuation: 'test-live-chat-continuation'
             }
         };
-        const getInfo = createMockFn().mockResolvedValue(info);
+        const getInfo = vi.fn<(...args: unknown[]) => Promise<typeof info>>().mockResolvedValue(info);
         const yt: YouTubeClient = {
             getInfo: (videoId, options) => getInfo(videoId, options)
         };
         const platform = createFactoryPlatform();
         platform.config = { dataLoggingEnabled: true };
-        platform.logRawPlatformData = createMockFn().mockRejectedValue(new Error('disk full'));
-        platform._handleProcessingError = createMockFn();
+        platform.logRawPlatformData = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error('disk full'));
+        platform._handleProcessingError = vi.fn<(...args: unknown[]) => unknown>();
 
         const factory = createYouTubeConnectionFactory({
             platform,

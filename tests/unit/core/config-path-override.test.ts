@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from "node:fs";
 import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 
 const nodeRequire: NodeJS.Require = createRequire(import.meta.url);
 
@@ -139,7 +139,7 @@ describe("Config path override", () => {
   afterEach(() => {
     fs.readFileSync = originalReadFileSync;
     fs.existsSync = originalExistsSync;
-    restoreAllMocks();
+    vi.restoreAllMocks();
     resetConfigModule();
     if (originalConfigPath === undefined) {
       delete process.env.CHAT_BOT_CONFIG_PATH;
@@ -155,10 +155,10 @@ describe("Config path override", () => {
     });
     const testConfigPath = "/test/override/config.ini";
 
-    fs.existsSync = createMockFn(
+    fs.existsSync = vi.fn(
       (filePath) => filePath === testConfigPath,
     ) as FsLike["existsSync"];
-    fs.readFileSync = createMockFn((filePath) => {
+    fs.readFileSync = vi.fn((filePath) => {
       if (filePath === testConfigPath) return configContent;
       throw new Error(`ENOENT: no such file: ${filePath}`);
     }) as unknown as typeof fs.readFileSync;
@@ -175,10 +175,10 @@ describe("Config path override", () => {
     });
     const testConfigPath = "/test/defaults/config.ini";
 
-    fs.existsSync = createMockFn(
+    fs.existsSync = vi.fn(
       (filePath) => filePath === testConfigPath,
     ) as FsLike["existsSync"];
-    fs.readFileSync = createMockFn((filePath) => {
+    fs.readFileSync = vi.fn((filePath) => {
       if (filePath === testConfigPath) return configContent;
       throw new Error(`ENOENT: no such file: ${filePath}`);
     }) as unknown as typeof fs.readFileSync;

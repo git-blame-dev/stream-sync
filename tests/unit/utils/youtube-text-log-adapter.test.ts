@@ -1,23 +1,23 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
-import type { TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
+
 import { installYouTubeTextLogAdapter } from "../../../src/utils/youtube-text-log-adapter.ts";
 
 type LoggerFixture = {
-  debug: TestMockFn<[unknown, string?, unknown?], void>;
-  info: TestMockFn<[unknown, string?, unknown?], void>;
-  warn: TestMockFn<[unknown, string?, unknown?], void>;
-  error: TestMockFn<[unknown, string?, unknown?], void>;
+  debug: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  info: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  warn: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  error: Mock<(...args: [unknown, string?, unknown?]) => void>;
 };
-type ConsoleWarnMock = TestMockFn<Parameters<typeof console.warn>, void>;
+type ConsoleWarnMock = Mock<(...args: Parameters<typeof console.warn>) => void>;
 type InstallResult = ReturnType<typeof installYouTubeTextLogAdapter>;
 type WarningMetadata = Record<string, unknown>;
 
 const createLoggerFixture = (): LoggerFixture => ({
-  debug: createMockFn<[unknown, string?, unknown?], void>(),
-  info: createMockFn<[unknown, string?, unknown?], void>(),
-  warn: createMockFn<[unknown, string?, unknown?], void>(),
-  error: createMockFn<[unknown, string?, unknown?], void>(),
+  debug: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+  info: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+  warn: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+  error: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
 });
 
 const getMockCall = <Args extends unknown[]>(
@@ -67,9 +67,9 @@ describe("youtube text log adapter", () => {
   let logger: LoggerFixture;
 
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
     originalConsoleWarn = console.warn;
-    passthroughWarn = createMockFn<Parameters<typeof console.warn>, void>();
+    passthroughWarn = vi.fn<(...args: Parameters<typeof console.warn>) => void>();
     console.warn = passthroughWarn;
     logger = createLoggerFixture();
   });
@@ -196,10 +196,10 @@ describe("youtube text log adapter", () => {
   it("degrades gracefully when console warn cannot be wrapped", () => {
     const originalConsole = globalThis.console;
     const loggerWithErrors = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
+      debug: vi.fn<(...args: unknown[]) => unknown>(),
+      info: vi.fn<(...args: unknown[]) => unknown>(),
+      warn: vi.fn<(...args: unknown[]) => unknown>(),
+      error: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     const fakeConsole: Pick<Console, "warn"> = {} as Pick<Console, "warn">;

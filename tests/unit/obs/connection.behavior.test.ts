@@ -1,7 +1,7 @@
-import { describe, expect, afterEach, it, beforeEach } from "bun:test";
+import { vi, describe, expect, afterEach, it, beforeEach } from 'bun:test';
 import { EventEmitter } from "node:events";
 import { createHandcamConfigFixture } from "../../helpers/config-fixture";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import {
   secrets,
   _resetForTesting,
@@ -53,33 +53,25 @@ describe("OBSConnectionManager behavior", () => {
       process.env.NODE_ENV = originalNodeEnv;
     }
     resetOBSConnectionManager();
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
 
   const createMockOBS = () => ({
-    connect: createMockFn<
-      [address?: string, password?: string],
-      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
     >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-    call: createMockFn<
-      [requestType: string, requestData?: Record<string, unknown>],
-      Promise<unknown>
+    disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+    call: vi.fn<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>
     >().mockResolvedValue({}),
-    on: createMockFn<
-      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
-      void
+    on: vi.fn<(...args: [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void]) => void
     >(),
-    off: createMockFn<
-      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
-      void
+    off: vi.fn<(...args: [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void]) => void
     >(),
-    once: createMockFn(),
+    once: vi.fn<(...args: unknown[]) => unknown>(),
   });
 
   const createDeps = (

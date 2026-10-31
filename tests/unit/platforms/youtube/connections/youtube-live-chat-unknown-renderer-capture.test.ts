@@ -1,10 +1,7 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { vi, type Mock, describe, test, expect, beforeEach } from 'bun:test';
 import type { InstallYouTubeLiveChatUnknownRendererCaptureOptions } from "../../../../../src/platforms/youtube/connections/youtube-live-chat-unknown-renderer-capture";
-import {
-  createMockFn,
-  clearAllMocks,
-} from "../../../../helpers/bun-mock-utils";
-import type { TestMockFn } from "../../../../helpers/bun-mock-utils";
+
+
 
 const {
   installYouTubeParserLogAdapter,
@@ -30,11 +27,11 @@ void continuationForTypeCheck;
 type ParserError = { error_type: string; classname: string };
 type ParserErrorHandler = (error: ParserError) => void;
 type ParserApiFixture = {
-  setParserErrorHandler: TestMockFn<[ParserErrorHandler], void>;
-  parseResponse: TestMockFn<[unknown], unknown>;
+  setParserErrorHandler: Mock<(...args: [ParserErrorHandler]) => void>;
+  parseResponse: Mock<(...args: [unknown]) => unknown>;
 };
 type LiveChatActions = {
-  execute: TestMockFn<[string, CaptureActionArgs?], Promise<unknown>>;
+  execute: Mock<(...args: [string, CaptureActionArgs?]) => Promise<unknown>>;
 };
 type CapturedRendererLog = {
   videoId?: string | null;
@@ -42,14 +39,11 @@ type CapturedRendererLog = {
   parserWarnings?: unknown[];
   responseMetadata?: { captureTraversal: { visitedNodes: number; truncated: boolean } };
 };
-type LogUnknownRendererMock = TestMockFn<
-  [CapturedRendererLog],
-  Promise<void>
->;
+type LogUnknownRendererMock = Mock<(...args: [CapturedRendererLog]) => Promise<void>>;
 
 const createParserApiFixture = (): ParserApiFixture => ({
-  setParserErrorHandler: createMockFn<[ParserErrorHandler], void>(),
-  parseResponse: createMockFn<[unknown], unknown>(),
+  setParserErrorHandler: vi.fn<(...args: [ParserErrorHandler]) => void>(),
+  parseResponse: vi.fn<(...args: [unknown]) => unknown>(),
 });
 
 const getParserErrorHandler = (
@@ -64,11 +58,11 @@ const getParserErrorHandler = (
 };
 
 const createActions = (response: unknown): LiveChatActions => ({
-  execute: createMockFn<[string, CaptureActionArgs?], Promise<unknown>>().mockResolvedValue(response),
+  execute: vi.fn<(...args: [string, CaptureActionArgs?]) => Promise<unknown>>().mockResolvedValue(response),
 });
 
 const createLogUnknownRendererMock = (): LogUnknownRendererMock =>
-  createMockFn<[CapturedRendererLog], Promise<void>>().mockResolvedValue(
+  vi.fn<(...args: [CapturedRendererLog]) => Promise<void>>().mockResolvedValue(
     undefined,
   );
 
@@ -133,12 +127,12 @@ describe("YouTube live chat unknown renderer capture", () => {
   });
 
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
     logger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
+      debug: vi.fn<(...args: unknown[]) => unknown>(),
+      info: vi.fn<(...args: unknown[]) => unknown>(),
+      warn: vi.fn<(...args: unknown[]) => unknown>(),
+      error: vi.fn<(...args: unknown[]) => unknown>(),
     };
     parserApi = createParserApiFixture();
 

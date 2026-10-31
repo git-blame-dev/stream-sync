@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from "fs";
 import type { IncomingMessage } from "http";
 import https from "https";
@@ -9,8 +9,8 @@ import path from "path";
 import selfsigned from "selfsigned";
 import { EventEmitter } from "node:events";
 import tls from "node:tls";
-import { installTimerTracking } from "../../helpers/bun-timers";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { installTimerTracking, restoreTimerTracking } from "../../helpers/bun-timers";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import {
@@ -83,7 +83,7 @@ describe("oauth-flow behavior", () => {
   };
 
   const createCallbackServerStub = () => ({
-    server: { close: createMockFn() } as unknown as https.Server,
+    server: { close: vi.fn<(...args: unknown[]) => unknown>() } as unknown as https.Server,
     waitForCode: Promise.resolve("test-auth-code"),
     port: 443,
     redirectUri: "https://example.test/callback",
@@ -134,7 +134,7 @@ describe("oauth-flow behavior", () => {
   });
 
   afterEach(async () => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
     if (tempDir) {
@@ -337,6 +337,7 @@ it("exposes oauth-flow helper functions", () => {
         server.closeAllConnections();
         server.close();
         await waitForCode.catch(() => {});
+        restoreTimerTracking();
       }
     });
   }
@@ -385,6 +386,7 @@ it("exposes oauth-flow helper functions", () => {
       server.closeAllConnections();
       server.close();
       await waitForCode.catch(() => {});
+      restoreTimerTracking();
     }
   });
 
@@ -427,9 +429,9 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("physically destroys a token request and response when the byte cap is exceeded", async () => {
-    const response = Object.assign(new EventEmitter(), { statusCode: 200, complete: false, destroy: createMockFn() });
+    const response = Object.assign(new EventEmitter(), { statusCode: 200, complete: false, destroy: vi.fn<(...args: unknown[]) => unknown>() });
     const request = Object.assign(new EventEmitter(), {
-      write: createMockFn(), destroy: createMockFn(),
+      write: vi.fn<(...args: unknown[]) => unknown>(), destroy: vi.fn<(...args: unknown[]) => unknown>(),
       end: () => { response.emit("data", Buffer.alloc(65)); response.emit("end"); },
     });
     const httpsRequest = ((_options: unknown, callback: (response: IncomingMessage) => void) => {
@@ -445,7 +447,7 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("uses external-process argv without a shell and preserves manual fallback on launch failure", () => {
-    const execCommand = createMockFn((..._args: unknown[]) => { throw new Error("synthetic-launch-error"); });
+    const execCommand = vi.fn((..._args: unknown[]) => { throw new Error("synthetic-launch-error"); });
     const url = "https://example.test/authorize?state=test&scope=a%20b";
     expect(() => openBrowser(url, noOpLogger, { platform: "linux", env: {}, procVersion: "Linux", execCommand: execCommand as never })).not.toThrow();
     expect(execCommand.mock.calls[0]?.slice(0, 2)).toEqual(["xdg-open", [url]]);
@@ -710,15 +712,13 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow persists tokens and returns camelCase values", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue(
-      createCallbackServerStub(),
-    );
-    const exchangeCodeForTokens = createMockFn().mockResolvedValue({
+    const startCallbackServer = vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof createCallbackServerStub>>>().mockResolvedValue(createCallbackServerStub());
+    const exchangeCodeForTokens = vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: "test-access-token",
       refreshToken: "test-refresh-token",
       expiresIn: 3600,
     });
-    const openBrowser = createMockFn();
+    const openBrowser = vi.fn<(...args: unknown[]) => unknown>();
 
     const result = await runOAuthFlow(
       {
@@ -767,13 +767,13 @@ it("exposes oauth-flow helper functions", () => {
         persistTokens: false,
       },
       {
-        startCallbackServer: createMockFn().mockResolvedValue(createCallbackServerStub()),
-        exchangeCodeForTokens: createMockFn().mockResolvedValue({
+        startCallbackServer: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof createCallbackServerStub>>>().mockResolvedValue(createCallbackServerStub()),
+        exchangeCodeForTokens: vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
           accessToken: "test-access-token",
           refreshToken: "test-refresh-token",
           expiresIn: 3600,
         }),
-        openBrowser: createMockFn(),
+        openBrowser: vi.fn<(...args: unknown[]) => unknown>(),
       },
     );
 
@@ -782,11 +782,11 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("retires the callback through its owner API when the flow fails", async () => {
-    const callback = { ...createCallbackServerStub(), cancel: createMockFn() };
+    const callback = { ...createCallbackServerStub(), cancel: vi.fn<(...args: unknown[]) => unknown>() };
     const result = await runOAuthFlow({ clientId: "test-client", tokenStorePath, logger: noOpLogger, persistTokens: false }, {
       startCallbackServer: async () => callback,
       exchangeCodeForTokens: async () => { throw new Error("synthetic-exchange-failure"); },
-      openBrowser: createMockFn(),
+      openBrowser: vi.fn<(...args: unknown[]) => unknown>(),
     });
     expect(result).toBeNull();
     expect(callback.cancel).toHaveBeenCalledTimes(1);
@@ -795,11 +795,9 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow returns null when exchange returns null", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue(
-      createCallbackServerStub(),
-    );
+    const startCallbackServer = vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof createCallbackServerStub>>>().mockResolvedValue(createCallbackServerStub());
     const exchangeCodeForTokens = async () => null as never;
-    const openBrowser = createMockFn();
+    const openBrowser = vi.fn<(...args: unknown[]) => unknown>();
 
     const result = await runOAuthFlow(
       {
@@ -818,12 +816,10 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow returns null when accessToken is missing", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue(
-      createCallbackServerStub(),
-    );
+    const startCallbackServer = vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof createCallbackServerStub>>>().mockResolvedValue(createCallbackServerStub());
     const exchangeCodeForTokens = async () =>
       ({ refreshToken: "test-refresh-token" }) as never;
-    const openBrowser = createMockFn();
+    const openBrowser = vi.fn<(...args: unknown[]) => unknown>();
 
     const result = await runOAuthFlow(
       {

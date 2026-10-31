@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createTestUser } from "../helpers/test-setup";
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 import { CommandParser, runCommand } from "../../src/chat/commands";
 import { OBSEffectsManager } from "../../src/obs/effects";

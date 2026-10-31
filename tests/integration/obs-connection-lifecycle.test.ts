@@ -1,9 +1,5 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import {
-  clearAllMocks,
-  createMockFn,
-  restoreAllMocks,
-} from "../helpers/bun-mock-utils";
+import { vi, describe, test, beforeEach, afterEach, expect } from 'bun:test';
+
 import { useFakeTimers, useRealTimers } from "../helpers/bun-timers";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
@@ -60,8 +56,8 @@ describe("OBS Connection Lifecycle Integration", () => {
     obsManager?.dispose();
     await obsManager?.disconnect();
 
-    clearAllMocks();
-    restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("OBS Observer System", () => {
@@ -89,8 +85,8 @@ describe("OBS connection manager reconnect ownership integration", () => {
   afterEach(() => {
     resetOBSConnectionManager();
     useRealTimers();
-    clearAllMocks();
-    restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("ConnectionClosed during in-flight connect does not start overlapping reconnect attempt", async () => {
@@ -98,21 +94,21 @@ describe("OBS connection manager reconnect ownership integration", () => {
     const handlers = new Map<string, Handler>();
 
     const mockOBS = {
-      connect: createMockFn().mockResolvedValue({
+      connect: vi.fn<(...args: unknown[]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number; }>>().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((eventName: string, handler: Handler) => {
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      on: vi.fn((eventName: string, handler: Handler) => {
         handlers.set(eventName, handler);
       }),
-      off: createMockFn((eventName: string, handler: Handler) => {
+      off: vi.fn((eventName: string, handler: Handler) => {
         if (handlers.get(eventName) === handler) handlers.delete(eventName);
       }),
-      once: createMockFn(),
-      addEventListener: createMockFn(),
-      removeEventListener: createMockFn(),
+      once: vi.fn<(...args: unknown[]) => unknown>(),
+      addEventListener: vi.fn<(...args: unknown[]) => unknown>(),
+      removeEventListener: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     const manager = getOBSConnectionManager({
@@ -154,17 +150,17 @@ describe("OBS connection manager reconnect ownership integration", () => {
 function createMockOBSWebSocket() {
   return {
     connected: false,
-    call: createMockFn().mockResolvedValue({}),
-    connect: createMockFn().mockResolvedValue({
+    call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+    connect: vi.fn<(...args: unknown[]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number; }>>().mockResolvedValue({
       obsWebSocketVersion: "5.0.0",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn().mockResolvedValue(undefined),
-    on: createMockFn(),
-    off: createMockFn(),
-    once: createMockFn(),
-    addEventListener: createMockFn(),
-    removeEventListener: createMockFn(),
+    disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+    on: vi.fn<(...args: unknown[]) => unknown>(),
+    off: vi.fn<(...args: unknown[]) => unknown>(),
+    once: vi.fn<(...args: unknown[]) => unknown>(),
+    addEventListener: vi.fn<(...args: unknown[]) => unknown>(),
+    removeEventListener: vi.fn<(...args: unknown[]) => unknown>(),
     setConnected(connected: boolean) {
       this.connected = connected;
     },

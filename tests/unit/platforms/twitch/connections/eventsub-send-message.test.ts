@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
@@ -41,9 +41,10 @@ const expectFirstPostCall = (mockAxios: { post: { mock: { calls: unknown[][] } }
 describe("TwitchEventSub chat sending", () => {
   let eventSub: InstanceType<typeof TwitchEventSub> | undefined;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (eventSub?.cleanup) {
-      eventSub.cleanup().catch(() => {});
+      await eventSub.cleanup();
+      expect(eventSub.cleanupInterval).toBeNull();
     }
     _resetForTesting();
     initializeStaticSecrets();
@@ -51,9 +52,9 @@ describe("TwitchEventSub chat sending", () => {
 
   it("sends chat messages through the EventSub transport", async () => {
     const mockAxios = {
-      post: createMockFn().mockResolvedValue({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } }),
-      get: createMockFn().mockResolvedValue({ data: {} }),
-      delete: createMockFn().mockResolvedValue({ data: {} }),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { data: { message_id: string; is_sent: true; }[]; }; }>>().mockResolvedValue({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } }),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      delete: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
     };
 
     _resetForTesting();
@@ -94,9 +95,9 @@ describe("TwitchEventSub chat sending", () => {
 
   it("rejects when message is empty", async () => {
     const mockAxios = {
-      post: createMockFn().mockResolvedValue({ data: {} }),
-      get: createMockFn().mockResolvedValue({ data: {} }),
-      delete: createMockFn().mockResolvedValue({ data: {} }),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      delete: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
     };
 
     _resetForTesting();
@@ -132,9 +133,9 @@ describe("TwitchEventSub chat sending", () => {
 
   it("rejects when user ID is missing", async () => {
     const mockAxios = {
-      post: createMockFn().mockResolvedValue({ data: {} }),
-      get: createMockFn().mockResolvedValue({ data: {} }),
-      delete: createMockFn().mockResolvedValue({ data: {} }),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
+      delete: vi.fn<(...args: unknown[]) => Promise<{ data: {}; }>>().mockResolvedValue({ data: {} }),
     };
 
     _resetForTesting();

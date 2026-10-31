@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks, type TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -7,11 +7,11 @@ import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.t
 import { UserTrackingService } from "../../../src/services/UserTrackingService.ts";
 
 type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
-type ChatMessageHandlerMock = TestMockFn<[string, Record<string, unknown>], unknown>;
-type RuntimeNotificationMock = TestMockFn<[string, unknown, Record<string, unknown>], unknown>;
-type StreamDetectedHandlerMock = TestMockFn<[string, Record<string, unknown>], unknown>;
-type ViewerCountHandlerMock = TestMockFn<[string, number], unknown>;
-type NotificationManagerMock = TestMockFn<[string, string, Record<string, unknown>], unknown>;
+type ChatMessageHandlerMock = Mock<(...args: [string, Record<string, unknown>]) => unknown>;
+type RuntimeNotificationMock = Mock<(...args: [string, unknown, Record<string, unknown>]) => unknown>;
+type StreamDetectedHandlerMock = Mock<(...args: [string, Record<string, unknown>]) => unknown>;
+type ViewerCountHandlerMock = Mock<(...args: [string, number]) => unknown>;
+type NotificationManagerMock = Mock<(...args: [string, string, Record<string, unknown>]) => unknown>;
 type RuntimeFake = {
   handleChatMessage: ChatMessageHandlerMock;
   handleGiftNotification: RuntimeNotificationMock;
@@ -44,30 +44,30 @@ const firstMockCall = <Args extends unknown[]>(calls: Args[]): Args => {
 
 describe("PlatformEventRouter validation", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const buildRouter = (overrides: BuildRouterOverrides = {}) => {
     const runtime = {
-      handleChatMessage: createMockFn<[string, Record<string, unknown>], unknown>(),
-      handleGiftNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      handlePaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      handleGiftPaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      handleEnvelopeNotification: createMockFn<[string, Record<string, unknown>], unknown>(),
-      handleStreamDetected: createMockFn<[string, Record<string, unknown>], unknown>(),
-      handleRaidNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      handleShareNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      handleFollowNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
-      updateViewerCount: createMockFn<[string, number], unknown>(),
+      handleChatMessage: vi.fn<(...args: [string, Record<string, unknown>]) => unknown>(),
+      handleGiftNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      handlePaypiggyNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      handleGiftPaypiggyNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      handleEnvelopeNotification: vi.fn<(...args: [string, Record<string, unknown>]) => unknown>(),
+      handleStreamDetected: vi.fn<(...args: [string, Record<string, unknown>]) => unknown>(),
+      handleRaidNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      handleShareNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      handleFollowNotification: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => unknown>(),
+      updateViewerCount: vi.fn<(...args: [string, number]) => unknown>(),
       ...overrides.runtime,
     };
     const config = overrides.config || createConfigFixture();
     const notificationManager = {
-      handleNotification: createMockFn<[string, string, Record<string, unknown>], unknown>(),
+      handleNotification: vi.fn<(...args: [string, string, Record<string, unknown>]) => unknown>(),
       ...overrides.notificationManager,
     };
     const eventBus = {
-      subscribe: createMockFn(() => createMockFn()),
+      subscribe: vi.fn(() => vi.fn<(...args: unknown[]) => unknown>()),
     };
     const userTrackingService = overrides.userTrackingService || new UserTrackingService();
 
@@ -806,7 +806,7 @@ describe("PlatformEventRouter validation", () => {
     });
     const { router } = buildRouter({
       runtime: {
-        updateViewerCount: createMockFn<[string, number], unknown>(() => updatePromise),
+        updateViewerCount: vi.fn<(...args: [string, number]) => unknown>(() => updatePromise),
       },
     });
 

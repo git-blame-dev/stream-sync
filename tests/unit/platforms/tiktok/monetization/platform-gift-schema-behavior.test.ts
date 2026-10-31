@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import {
   useFakeTimers,
   useRealTimers,
@@ -94,7 +94,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

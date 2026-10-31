@@ -1,11 +1,11 @@
-import { describe, expect, beforeEach, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformInitializationManager } from "../../../src/utils/platform-initialization-manager";
 import { PlatformErrorHandler } from "../../../src/utils/platform-error-handler";
 type MockPlatformErrorHandler = PlatformErrorHandler & {
-  handleEventProcessingError: ReturnType<typeof createMockFn>;
-  logOperationalError: ReturnType<typeof createMockFn>;
+  handleEventProcessingError: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  logOperationalError: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 describe("PlatformInitializationManager", () => {
@@ -13,8 +13,8 @@ describe("PlatformInitializationManager", () => {
 
   beforeEach(() => {
     mockHandler = {
-      handleEventProcessingError: createMockFn(),
-      logOperationalError: createMockFn(),
+      handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      logOperationalError: vi.fn<(...args: unknown[]) => unknown>(),
     } as unknown as MockPlatformErrorHandler;
   });
 

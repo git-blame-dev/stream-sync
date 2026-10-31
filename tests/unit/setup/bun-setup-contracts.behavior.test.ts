@@ -1,12 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { isMockFunction } from "../../helpers/bun-mock-utils";
+import { dirname } from "node:path";
+import { withNativeChildEnvironment } from "../../helpers/native-child-environment";
 
-import {
-  registerModuleMocks,
-  createWebSocketMock,
-  createAxiosMock,
-  createYoutubeiMock,
-} from "../../setup/bun.setup";
 
 type TestGlobal = typeof globalThis & {
   originalConsole: Console;
@@ -14,45 +9,26 @@ type TestGlobal = typeof globalThis & {
 };
 
 describe("bun setup contracts behavior", () => {
-  it("allows repeated module mock registration and retains usable registered mocks", async () => {
-    expect(() => registerModuleMocks()).not.toThrow();
-    // Axios has distinct ESM/CJS entries; consume the ESM entry registered by mock.module.
-    const firstRegistration = await import("axios") as unknown as ReturnType<typeof createAxiosMock>;
-    if (!isMockFunction(firstRegistration.get)) throw new Error("Expected registered mock HTTP boundary");
-    const firstGet = firstRegistration.get;
-    expect(() => registerModuleMocks()).not.toThrow();
-    const registered = await import("axios") as unknown as ReturnType<typeof createAxiosMock>;
-    if (!isMockFunction(registered.get)) throw new Error("Expected registered mock HTTP boundary");
-    expect(registered.get).not.toBe(firstGet);
-    expect(await registered.get()).toEqual({ data: { data: [] } });
-    expect(registered.get).toHaveBeenCalledTimes(1);
+  it("leaves external packages available without test-wide substitutes", async () => {
+    const [websocket, axios, youtube] = await Promise.all([
+      import("ws"), import("axios"), import("youtubei.js"),
+    ]);
+    expect(typeof websocket.WebSocket).toBe("function");
+    expect(('mock' in websocket.WebSocket)).toBe(false);
+    expect(typeof axios.default).toBe("function");
+    expect(('mock' in axios.default.get)).toBe(false);
+    expect(('mock' in youtube.Innertube.create)).toBe(false);
   });
 
-  it("builds websocket mock factory contract", () => {
-    const webSocketFactory = createWebSocketMock();
-    const socket = webSocketFactory();
-
-    expect(webSocketFactory.CONNECTING).toBe(0);
-    expect(webSocketFactory.OPEN).toBe(1);
-    expect(socket.readyState).toBe(1);
-    expect(typeof socket.on).toBe("function");
-  });
-
-  it("builds axios mock factory contract", async () => {
-    const axiosMock = createAxiosMock();
-
-    expect((await axiosMock.get()).data.data).toEqual([]);
-    expect((await axiosMock.post()).data.data).toEqual([]);
-    const axiosInstance = axiosMock.create();
-    expect((await axiosInstance.delete()).data.data).toEqual([]);
-  });
-
-  it("builds the youtube mock module contract", async () => {
-    const youtubeMock = createYoutubeiMock();
-
-    const innertube = await youtubeMock.Innertube.create();
-    expect(innertube.session.context.client.clientName).toBe("WEB");
-    expect((await innertube.getBasicInfo()).basic_info.view_count).toBe(1000);
+  it("prerun preserves native process exit", async () => {
+    expect(('mock' in process.exit)).toBe(false);
+    await withNativeChildEnvironment(async (env) => {
+      const child = Bun.spawnSync([process.execPath, "--no-env-file", "--eval", `
+        await import(${JSON.stringify(import.meta.resolve("../../setup/bun.prerun.ts"))});
+        process.exit(23);
+      `], { cwd: dirname(env.CHAT_BOT_CONFIG_PATH!), env, stdout: "pipe", stderr: "pipe", timeout: 5000 });
+      expect(child.exitCode).toBe(23);
+    });
   });
 
   it("restores console through global helper", () => {

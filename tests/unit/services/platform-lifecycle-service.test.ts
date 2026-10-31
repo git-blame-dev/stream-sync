@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
-import type { TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../../src/services/PlatformLifecycleService.ts";
 import type {
@@ -20,8 +20,8 @@ import {
 } from "../../../src/core/secrets";
 
 type MockEventBus = {
-  emit: TestMockFn<[string, unknown], void>;
-  subscribe: TestMockFn<[string, (...args: unknown[]) => unknown], () => void>;
+  emit: Mock<(...args: [string, unknown]) => void>;
+  subscribe: Mock<(...args: [string, (...args: unknown[]) => unknown]) => () => void>;
 };
 
 type TestConfigFixture = Record<string, PlatformConfig>;
@@ -68,12 +68,10 @@ const createNoopHandlers = (): PlatformEventHandlers => ({
 });
 
 const createDefaultPlatformInstance = (): PlatformInstance => ({
-  initialize: createMockFn<
-    [PlatformEventHandlers],
-    Promise<boolean>
+  initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
   >().mockResolvedValue(true),
-  cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+  cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
 });
 
 const createPlatformConstructor = (
@@ -148,10 +146,8 @@ describe("PlatformLifecycleService", () => {
 
   beforeEach(() => {
     mockEventBus = {
-      emit: createMockFn<[string, unknown], void>(),
-      subscribe: createMockFn<
-        [string, (...args: unknown[]) => unknown],
-        () => void
+      emit: vi.fn<(...args: [string, unknown]) => void>(),
+      subscribe: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => () => void
       >().mockReturnValue(() => {}),
     };
 
@@ -180,14 +176,12 @@ describe("PlatformLifecycleService", () => {
       };
 
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<void>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<void>
         >().mockImplementation(async (handlers) => {
           await handlers.onChat({ message: { text: "ready" } });
         }),
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -202,14 +196,12 @@ describe("PlatformLifecycleService", () => {
       configFixture.youtube = { enabled: true, username: "channel" };
 
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<never>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<never>
         >().mockRejectedValue(
           new Error("connect failed"),
         ),
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ youtube: mockPlatformClass });
@@ -234,14 +226,14 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
       const recoveryError = new Error("temporary DNS failure");
-      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn().mockResolvedValue({
+        initialize: vi.fn<(...args: unknown[]) => Promise<{ state: string; error: Error; }>>().mockResolvedValue({
           state: "recovering",
           error: recoveryError,
         }),
         cleanup,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -263,11 +255,11 @@ describe("PlatformLifecycleService", () => {
 
     it("reports monitoring platforms as initialized without degradation", async () => {
       configFixture.tiktok = { enabled: true, username: "streamer" };
-      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn().mockResolvedValue({ state: "monitoring" }),
+        initialize: vi.fn<(...args: unknown[]) => Promise<{ state: string; }>>().mockResolvedValue({ state: "monitoring" }),
         cleanup,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: mockPlatformClass });
@@ -284,16 +276,16 @@ describe("PlatformLifecycleService", () => {
     it("retains a failed platform until asynchronous cleanup completes", async () => {
       configFixture.youtube = { enabled: true, username: "channel" };
       let resolveCleanup!: () => void;
-      const cleanup = createMockFn(
+      const cleanup = vi.fn(
         () => new Promise<void>((resolve) => {
           resolveCleanup = resolve;
         }),
       );
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<[PlatformEventHandlers], Promise<never>>()
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<never>>()
           .mockRejectedValue(new Error("connect failed")),
         cleanup,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       const initialization = service.initializeAllPlatforms({ youtube: mockPlatformClass });
@@ -318,22 +310,22 @@ describe("PlatformLifecycleService", () => {
     it("does not remove a replacement platform when stale failure cleanup completes", async () => {
       configFixture.youtube = { enabled: true, username: "channel" };
       let resolveCleanup!: () => void;
-      const failedCleanup = createMockFn(
+      const failedCleanup = vi.fn(
         () => new Promise<void>((resolve) => {
           resolveCleanup = resolve;
         }),
       );
       const failedPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<[PlatformEventHandlers], Promise<never>>()
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<never>>()
           .mockRejectedValue(new Error("old failure")),
         cleanup: failedCleanup,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
-      const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const replacementCleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const replacementPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<[PlatformEventHandlers], Promise<void>>().mockResolvedValue(),
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<void>>().mockResolvedValue(),
         cleanup: replacementCleanup,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       const failedInitialization = service.initializePlatform("youtube", failedPlatformClass);
@@ -378,7 +370,7 @@ describe("PlatformLifecycleService", () => {
         await entered.promise;
         const old = service.getPlatform(platformName);
         await service.markPlatformFailure(platformName, new Error("test-auth-invalid"), { expectedInstance: old ?? undefined });
-        const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+        const replacementCleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
         await service.initializePlatform(platformName, createPlatformConstructor(() => ({
           ...createDefaultPlatformInstance(), cleanup: replacementCleanup,
         })));
@@ -411,7 +403,7 @@ describe("PlatformLifecycleService", () => {
       const initializing = service.initializePlatform("twitch", oldClass);
       await cleaning.promise;
       ready = true;
-      const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const replacementCleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       await service.initializePlatform("twitch", createPlatformConstructor(() => ({ ...createDefaultPlatformInstance(), cleanup: replacementCleanup })));
       const replacement = service.getPlatform("twitch");
       const health = structuredClone(service.platformHealth.twitch);
@@ -438,7 +430,7 @@ describe("PlatformLifecycleService", () => {
       configFixture.twitch = { enabled: true };
       let ready = true;
       service.sharedDependencies.twitchAuth = { isReady: () => ready };
-      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const Platform = createPlatformConstructor(() => {
         ready = false;
         return { ...createDefaultPlatformInstance(), cleanup };
@@ -451,15 +443,15 @@ describe("PlatformLifecycleService", () => {
 
     it("shares failed-platform cleanup with concurrent shutdown", async () => {
       let resolveCleanup!: () => void;
-      const cleanup = createMockFn(
+      const cleanup = vi.fn(
         () => new Promise<void>((resolve) => {
           resolveCleanup = resolve;
         }),
       );
       service.platforms.youtube = {
-        initialize: createMockFn(),
+        initialize: vi.fn<(...args: unknown[]) => unknown>(),
         cleanup,
-        on: createMockFn(),
+        on: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       const failure = service.markPlatformFailure("youtube", new Error("startup failed"));
@@ -511,7 +503,7 @@ describe("PlatformLifecycleService", () => {
     if (service) {
       service.dispose();
     }
-    clearAllMocks();
+    vi.clearAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
@@ -596,9 +588,7 @@ describe("PlatformLifecycleService", () => {
       const timestamp = new Date().toISOString();
 
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockImplementation((handlers) => {
           handlers.onChat({
             message: { text: "hello" },
@@ -620,8 +610,8 @@ describe("PlatformLifecycleService", () => {
           });
           return Promise.resolve(true);
         }),
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       const platformModules = { twitch: mockPlatformClass };
@@ -677,9 +667,7 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      service.createPlatformInstance = createMockFn<
-        [string, PlatformConstructor, PlatformConfig],
-        Promise<PlatformInstance>
+      service.createPlatformInstance = vi.fn<(...args: [string, PlatformConstructor, PlatformConfig]) => Promise<PlatformInstance>
       >().mockRejectedValue(null);
 
       await service.initializeAllPlatforms({
@@ -699,12 +687,10 @@ describe("PlatformLifecycleService", () => {
 
     it("rethrows original non-Error values from initializePlatformConnection without secondary crashes", async () => {
       const platformInstance: PlatformInstance = {
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<never>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<never>
         >().mockRejectedValue(null),
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       };
 
       await expect(
@@ -808,9 +794,7 @@ describe("PlatformLifecycleService", () => {
       const mockDependencies = { auth: "mock" };
       const mockFactory = {
         createTwitchDependencies:
-          createMockFn<
-            [PlatformConfig, Record<string, unknown> | undefined],
-            Record<string, unknown>
+          vi.fn<(...args: [PlatformConfig, Record<string, unknown> | undefined]) => Record<string, unknown>
           >().mockReturnValue(mockDependencies),
       };
 
@@ -826,14 +810,10 @@ describe("PlatformLifecycleService", () => {
       class TestPlatform implements PlatformInstance {
         readonly platformConfig: PlatformConfig;
         readonly dependencies: Record<string, unknown>;
-        initialize = createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true);
-        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
-        on = createMockFn<
-          [string, (...args: unknown[]) => unknown],
-          unknown
+        cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        on = vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown
         >();
 
         constructor(platformConfig: PlatformConfig, dependencies?: unknown) {
@@ -882,14 +862,10 @@ describe("PlatformLifecycleService", () => {
       class TestPlatform implements PlatformInstance {
         readonly platformConfig: PlatformConfig;
         readonly dependencies: Record<string, unknown>;
-        initialize = createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true);
-        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
-        on = createMockFn<
-          [string, (...args: unknown[]) => unknown],
-          unknown
+        cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        on = vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown
         >();
 
         constructor(platformConfig: PlatformConfig, dependencies?: unknown) {
@@ -932,9 +908,7 @@ describe("PlatformLifecycleService", () => {
     it("uses dynamically named dependency factories for non-core platforms", async () => {
       const mockDependencies = { streamElementsClient: "mock-client" };
       const mockFactory = {
-        createStreamelementsDependencies: createMockFn<
-          [PlatformConfig, Record<string, unknown> | undefined],
-          Record<string, unknown>
+        createStreamelementsDependencies: vi.fn<(...args: [PlatformConfig, Record<string, unknown> | undefined]) => Record<string, unknown>
         >().mockReturnValue(mockDependencies),
       };
 
@@ -949,14 +923,10 @@ describe("PlatformLifecycleService", () => {
 
       class TestPlatform implements PlatformInstance {
         readonly dependencies: Record<string, unknown>;
-        initialize = createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true);
-        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
-        on = createMockFn<
-          [string, (...args: unknown[]) => unknown],
-          unknown
+        cleanup = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        on = vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown
         >();
 
         constructor(_platformConfig: PlatformConfig, dependencies?: unknown) {
@@ -1032,14 +1002,12 @@ describe("PlatformLifecycleService", () => {
     it("should connect YouTube directly (platform-managed detection)", async () => {
       configFixture.youtube = { enabled: true, username: "test-channel" };
 
-      const platformInitSpy = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const platformInitSpy = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockResolvedValue(true);
       const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ youtube: mockPlatformClass });
@@ -1056,14 +1024,12 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const platformInitSpy = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const platformInitSpy = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockResolvedValue(true);
       const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -1079,16 +1045,14 @@ describe("PlatformLifecycleService", () => {
       configFixture.tiktok = { enabled: true, username: "streamer" };
 
       const deferred = createDeferred<boolean>();
-      const platformInitSpy = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const platformInitSpy = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockImplementation(
         () => deferred.promise,
       );
       const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: mockPlatformClass });
@@ -1113,15 +1077,11 @@ describe("PlatformLifecycleService", () => {
       const twitchInitDeferred = createDeferred<boolean>();
       const youtubeInitDeferred = createDeferred<boolean>();
 
-      const twitchInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const twitchInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockImplementation(
         () => twitchInitDeferred.promise,
       );
-      const youtubeInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const youtubeInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockImplementation(
         () => youtubeInitDeferred.promise,
       );
@@ -1129,13 +1089,13 @@ describe("PlatformLifecycleService", () => {
       const platformModules = {
         twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
         youtube: createPlatformConstructor(() => ({
           initialize: youtubeInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
       };
 
@@ -1163,28 +1123,24 @@ describe("PlatformLifecycleService", () => {
 
       const twitchInitDeferred = createDeferred<void>();
       const twitchError = new Error("twitch connect failed");
-      const twitchInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<never>
+      const twitchInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<never>
       >().mockImplementation(async () => {
         await twitchInitDeferred.promise;
         throw twitchError;
       });
-      const youtubeInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const youtubeInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockResolvedValue(true);
 
       const platformModules = {
         twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
         youtube: createPlatformConstructor(() => ({
           initialize: youtubeInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
       };
 
@@ -1223,15 +1179,11 @@ describe("PlatformLifecycleService", () => {
 
       const twitchInitDeferred = createDeferred<boolean>();
       const tiktokInitDeferred = createDeferred<boolean>();
-      const twitchInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const twitchInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockImplementation(
         () => twitchInitDeferred.promise,
       );
-      const tiktokInit = createMockFn<
-        [PlatformEventHandlers],
-        Promise<boolean>
+      const tiktokInit = vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
       >().mockImplementation(
         () => tiktokInitDeferred.promise,
       );
@@ -1239,13 +1191,13 @@ describe("PlatformLifecycleService", () => {
       const platformModules = {
         twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
         tiktok: createPlatformConstructor(() => ({
           initialize: tiktokInit,
-          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+          cleanup: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
         })),
       };
 
@@ -1285,14 +1237,12 @@ describe("PlatformLifecycleService", () => {
     it("should cleanup all platforms gracefully on service shutdown", async () => {
       configFixture.twitch = { enabled: true };
 
-      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanupSpy = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true),
         cleanup: cleanupSpy,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -1313,16 +1263,14 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const cleanupSpy = createMockFn<[], Promise<void>>().mockRejectedValue(
+      const cleanupSpy = vi.fn<(...args: []) => Promise<void>>().mockRejectedValue(
         new Error("cleanup failed"),
       );
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true),
         cleanup: cleanupSpy,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -1336,16 +1284,14 @@ describe("PlatformLifecycleService", () => {
     it("prefers cleanup even when a disconnect method exists", async () => {
       configFixture.twitch = { enabled: true };
 
-      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
-      const disconnectSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanupSpy = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+      const disconnectSpy = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const mockPlatformClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockResolvedValue(true),
         cleanup: cleanupSpy,
         disconnect: disconnectSpy,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -1360,14 +1306,12 @@ describe("PlatformLifecycleService", () => {
       configFixture.tiktok = { enabled: true, username: "test-streamer" };
 
       const deferred = createDeferred<boolean>();
-      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanupSpy = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const tiktokClass = createPlatformConstructor(() => ({
-        initialize: createMockFn<
-          [PlatformEventHandlers],
-          Promise<boolean>
+        initialize: vi.fn<(...args: [PlatformEventHandlers]) => Promise<boolean>
         >().mockImplementation(() => deferred.promise),
         cleanup: cleanupSpy,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: tiktokClass });
@@ -1388,11 +1332,11 @@ describe("PlatformLifecycleService", () => {
         state: "recovering";
         error: Error;
       }>();
-      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const cleanupSpy = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
       const tiktokClass = createPlatformConstructor(() => ({
-        initialize: createMockFn().mockImplementation(() => deferred.promise),
+        initialize: vi.fn(() => deferred.promise),
         cleanup: cleanupSpy,
-        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+        on: vi.fn<(...args: [string, (...args: unknown[]) => unknown]) => unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: tiktokClass });

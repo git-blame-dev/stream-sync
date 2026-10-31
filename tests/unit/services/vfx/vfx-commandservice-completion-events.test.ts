@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, spyOn } from "bun:test";
-import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, spyOn } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 
 import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
@@ -36,21 +36,21 @@ function createMockEffectsManager(): OBSEffectsManager {
   };
   const effectsManager = new OBSEffectsManager(
     {
-      ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
-      call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+      ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
     },
     {
       logger: obsLogger,
       retrySystem: { delay: () => Promise.resolve() },
     },
   );
-  effectsManager.playMediaInOBS = createMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>()
+  effectsManager.playMediaInOBS = vi.fn<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>()
     .mockResolvedValue(undefined);
   return effectsManager;
 }
 
 function createExternalOBSFixture() {
-  const call = createMockFn<[string, Record<string, unknown>?], Promise<unknown>>()
+  const call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>()
     .mockResolvedValue({});
   const effectsManager = new OBSEffectsManager({
     ensureConnected: async () => {},
@@ -111,7 +111,7 @@ describe("VFXCommandService completion events", () => {
       duration: 5000,
     };
 
-    service.selectVFXCommand = createMockFn().mockResolvedValue(vfxConfig);
+    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<typeof vfxConfig>>().mockResolvedValue(vfxConfig);
 
     await service.executeCommand("!hello", {
       username: "testViewer",
@@ -145,7 +145,7 @@ describe("VFXCommandService completion events", () => {
     const service = new VFXCommandService(createConfig(), eventBus, {
       effectsManager: mockEffectsManager,
     });
-    service.selectVFXCommand = createMockFn().mockResolvedValue({
+    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; filename: string; mediaSource: string; vfxFilePath: string; command: string; duration: number; }>>().mockResolvedValue({
       commandKey: "greetings",
       filename: "synthetic-automatic",
       mediaSource: "Synthetic VFX Source",
@@ -295,9 +295,7 @@ describe("VFXCommandService completion events", () => {
       effectsManager: mockEffectsManager,
     });
 
-    service.selectVFXCommand = createMockFn().mockRejectedValue(
-      "plain-string-failure",
-    );
+    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue("plain-string-failure");
 
     const result = await service.executeCommand("!hello", {
       username: "testViewer",

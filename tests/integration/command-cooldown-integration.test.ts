@@ -1,18 +1,10 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createRequire } from "node:module";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import testClock from "../helpers/test-clock";
 
 const load = createRequire(import.meta.url);
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 const testWithTimeout = (name: string, fn: () => void | Promise<void>) =>
   test(name, fn, { timeout: TEST_TIMEOUTS.MEDIUM });
@@ -59,7 +51,6 @@ describe("Command Cooldown Integration", () => {
       clearExpiredGlobalCooldowns(-1);
     } finally {
       testClock.useRealTime();
-      restoreAllMocks();
     }
   });
 

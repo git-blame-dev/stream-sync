@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { vi, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
 import disk from 'node:fs';
 import path from 'node:path';
 import { TwitchAuth } from '../../../src/auth/TwitchAuth';
 import { TWITCH_OAUTH_SCOPES } from '../../../src/auth/twitch-oauth-scopes';
 import { secrets, _resetForTesting } from '../../../src/core/secrets';
-import { createMockFn } from '../../helpers/bun-mock-utils';
+
 import { noOpLogger } from '../../helpers/mock-factories';
 import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../../helpers/bun-timers';
 import testClock from '../../helpers/test-clock';
@@ -69,9 +69,9 @@ describe('TwitchAuth validation monitoring', () => {
     let tokenStorePath: string;
     let auth: TwitchAuth;
     let restoreTokenIo: () => void;
-    const get = createMockFn<unknown[], Promise<{ data?: unknown }>>();
-    const post = createMockFn<unknown[], Promise<{ data?: unknown }>>();
-    const oauthFlow = createMockFn<[], Promise<null>>();
+    const get = vi.fn<(...args: unknown[]) => Promise<{ data?: unknown }>>();
+    const post = vi.fn<(...args: unknown[]) => Promise<{ data?: unknown }>>();
+    const oauthFlow = vi.fn<(...args: []) => Promise<null>>();
 
     beforeEach(async () => {
         restoreTokenIo = () => {};
@@ -108,7 +108,7 @@ describe('TwitchAuth validation monitoring', () => {
         expect(get.mock.calls.length).toBe(1);
         let resolve!: (value: ReturnType<typeof valid>) => void;
         get.mockReturnValueOnce(new Promise<ReturnType<typeof valid>>(done => { resolve = done; }));
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR - 1001);
@@ -129,7 +129,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('recovers transient validation and starts a fresh grace window on the next outage', async () => {
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         get.mockRejectedValueOnce({ response: { status: 503 } }).mockResolvedValueOnce(valid());
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -149,7 +149,7 @@ describe('TwitchAuth validation monitoring', () => {
         ['server', { response: { status: 503 } }],
         ['rate-limit', { response: { status: 429 } }],
     ])('bounds %s outages to five minutes, invalidates once and preserves durable credentials', async (_label, failure) => {
-        const onInvalidated = createMockFn<unknown[], void>();
+        const onInvalidated = vi.fn<(...args: unknown[]) => void>();
         const before = await fs.readFile(tokenStorePath, 'utf8');
         get.mockRejectedValue(failure);
         auth.startValidationMonitoring({ onInvalidated });
@@ -172,7 +172,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('treats malformed successful validation as bounded unavailability, not revocation', async () => {
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         get.mockResolvedValue({ data: { login: 'test-user' } });
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -187,7 +187,7 @@ describe('TwitchAuth validation monitoring', () => {
         { user_id: 'test-another-id' }, { login: 'test-another-login' },
         { client_id: 'test-another-client' }, { scopes: [] },
     ])('immediately suspends identity/client/scope mismatches: %j', async invalid => {
-        const onInvalidated = createMockFn<unknown[], void>();
+        const onInvalidated = vi.fn<(...args: unknown[]) => void>();
         get.mockResolvedValue(valid(invalid));
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -198,7 +198,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('immediately suspends a confirmed 401 without refresh or interactive fallback', async () => {
-        const onInvalidated = createMockFn<unknown[], void>();
+        const onInvalidated = vi.fn<(...args: unknown[]) => void>();
         get.mockRejectedValue({ response: { status: 401 } });
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -212,7 +212,7 @@ describe('TwitchAuth validation monitoring', () => {
     it('aborts stopped validation and joins its eventual completion without applying stale results', async () => {
         let resolve!: (value: ReturnType<typeof valid>) => void;
         get.mockReturnValueOnce(new Promise<ReturnType<typeof valid>>(done => { resolve = done; }));
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
         const config = get.mock.calls[1]?.[1] as { signal: AbortSignal };
@@ -228,7 +228,7 @@ describe('TwitchAuth validation monitoring', () => {
 
     it('bounds hung validations and never overlaps retry requests logically', async () => {
         get.mockReturnValue(new Promise<{ data?: unknown }>(() => undefined));
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
         expect(get.mock.calls.length).toBe(2);
@@ -255,7 +255,7 @@ describe('TwitchAuth validation monitoring', () => {
     it('stops pending callback ownership promptly and supplies cancellation to the callback', async () => {
         let signal!: AbortSignal;
         let finish!: () => void;
-        const onInvalidated = createMockFn<[{ signal: AbortSignal }], Promise<void>>().mockImplementation(event => {
+        const onInvalidated = vi.fn<(...args: [{ signal: AbortSignal }]) => Promise<void>>().mockImplementation(event => {
             signal = event.signal;
             return new Promise<void>(resolve => { finish = resolve; });
         });
@@ -314,7 +314,7 @@ describe('TwitchAuth validation monitoring', () => {
                 await cleanup;
             }
         });
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
         let settled = false;
@@ -359,7 +359,7 @@ describe('TwitchAuth validation monitoring', () => {
         const failingLogger = { ...noOpLogger, warn: () => { throw new Error('test-logger-failure'); } };
         auth = new TwitchAuth({ tokenStorePath, clientId: 'test-client', expectedUsername: 'test-user', logger: failingLogger, httpClient: { get, post }, monitoringNow: testClock.now });
         await auth.initialize();
-        const onInvalidated = createMockFn<[], Promise<void>>().mockRejectedValue(new Error('test-callback-failure'));
+        const onInvalidated = vi.fn<(...args: []) => Promise<void>>().mockRejectedValue(new Error('test-callback-failure'));
         get.mockRejectedValue({ response: { status: 401 } });
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -372,7 +372,7 @@ describe('TwitchAuth validation monitoring', () => {
         let resolve!: (value: ReturnType<typeof valid>) => void;
         let reject!: (reason: unknown) => void;
         get.mockReturnValueOnce(new Promise<ReturnType<typeof valid>>((done, fail) => { resolve = done; reject = fail; }));
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
         await advance(1000);
@@ -395,7 +395,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('repeated start/stop clears scheduled work and permits a fresh monitoring lifetime', async () => {
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         await auth.stopValidationMonitoring();
         await auth.stopValidationMonitoring();
@@ -411,7 +411,7 @@ describe('TwitchAuth validation monitoring', () => {
     it('explicit validated recovery retires old callback admission and requires a fresh monitor start', async () => {
         let signal!: AbortSignal;
         let finish!: () => void;
-        const onInvalidated = createMockFn<[{ signal: AbortSignal }], Promise<void>>().mockImplementation(event => {
+        const onInvalidated = vi.fn<(...args: [{ signal: AbortSignal }]) => Promise<void>>().mockImplementation(event => {
             signal = event.signal;
             return new Promise<void>(resolve => { finish = resolve; });
         });
@@ -440,7 +440,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('resets old outage grace when a new credential generation is accepted during retry sleep', async () => {
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         get.mockRejectedValueOnce({ response: { status: 503 } });
         await advance(HOUR);
@@ -455,7 +455,7 @@ describe('TwitchAuth validation monitoring', () => {
     });
 
     it('cancels outage retry sleep immediately on stop', async () => {
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         get.mockRejectedValue({ response: { status: 503 } });
         auth.startValidationMonitoring({ onInvalidated });
         await advance(HOUR);
@@ -469,7 +469,7 @@ describe('TwitchAuth validation monitoring', () => {
     it('coalesces API refresh while monitor is active and does not own or restart that independent refresh', async () => {
         let resolve!: (value: { data?: unknown }) => void;
         post.mockReturnValue(new Promise<{ data?: unknown }>(done => { resolve = done; }));
-        const onInvalidated = createMockFn<[], void>();
+        const onInvalidated = vi.fn<(...args: []) => void>();
         auth.startValidationMonitoring({ onInvalidated });
         const first = auth.refreshTokens();
         const second = auth.refreshTokens();

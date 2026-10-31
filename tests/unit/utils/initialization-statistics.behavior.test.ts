@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach, beforeEach, spyOn } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach, beforeEach, spyOn } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import testClock from "../../helpers/test-clock";
 import { InitializationStatistics } from "../../../src/utils/initialization-statistics.ts";
@@ -8,7 +8,7 @@ describe("InitializationStatistics behavior", () => {
     spyOn(performance, 'now').mockImplementation(() => testClock.now());
   });
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('keeps elapsed and success age monotonic while retaining stepped wall timestamps', () => {

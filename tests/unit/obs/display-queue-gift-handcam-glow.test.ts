@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, beforeEach, afterEach } from 'bun:test';
+
 import { createHandcamConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 
@@ -20,52 +20,52 @@ describe("DisplayQueue gift effects handcam glow", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function createQueue(handcamEnabled = true) {
     const recordedTexts: string[] = [];
     const mockSourcesManager = {
-      updateTextSource: createMockFn<[string, string?], Promise<void>>((_source, text) => {
+      updateTextSource: vi.fn<(...args: [string, string?]) => Promise<void>>((_source, text) => {
         if (text !== undefined) {
         recordedTexts.push(text);
         }
         return Promise.resolve();
       }),
-      clearTextSource: createMockFn<[string], Promise<void>>(() => Promise.resolve()),
-      updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(() => Promise.resolve()),
-      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
-      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>(() => Promise.resolve()),
-      setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(() => Promise.resolve()),
-      setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(() => Promise.resolve()),
-      hideAllDisplays: createMockFn<[], Promise<void>>(() => Promise.resolve()),
-      setPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
-      setNotificationPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
-      hideAllPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
-      hideAllNotificationPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
-      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
-      setGroupSourceVisibility: createMockFn<[string, string | null | undefined, boolean], Promise<void>>(() => Promise.resolve()),
-      setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>(() => Promise.resolve()),
-      getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>(async () => ({})),
-      setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
-      clearSceneItemCache: createMockFn<[], void>(() => {}),
+      clearTextSource: vi.fn<(...args: [string]) => Promise<void>>(() => Promise.resolve()),
+      updateChatMsgText: vi.fn<(...args: [string, string, string]) => Promise<void>>(() => Promise.resolve()),
+      getSceneItemId: vi.fn<(...args: [string, string]) => Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      setSourceVisibility: vi.fn<(...args: [string, string, boolean]) => Promise<void>>(() => Promise.resolve()),
+      setNotificationDisplayVisibility: vi.fn<(...args: [boolean]) => Promise<void>>(() => Promise.resolve()),
+      setChatDisplayVisibility: vi.fn<(...args: [boolean]) => Promise<void>>(() => Promise.resolve()),
+      hideAllDisplays: vi.fn<(...args: []) => Promise<void>>(() => Promise.resolve()),
+      setPlatformLogoVisibility: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<void>>(() => Promise.resolve()),
+      setNotificationPlatformLogoVisibility: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<void>>(() => Promise.resolve()),
+      hideAllPlatformLogos: vi.fn<(...args: [Record<string, unknown>]) => Promise<void>>(() => Promise.resolve()),
+      hideAllNotificationPlatformLogos: vi.fn<(...args: [Record<string, unknown>]) => Promise<void>>(() => Promise.resolve()),
+      getGroupSceneItemId: vi.fn<(...args: [string, string]) => Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      setGroupSourceVisibility: vi.fn<(...args: [string, string | null | undefined, boolean]) => Promise<void>>(() => Promise.resolve()),
+      setSourceFilterEnabled: vi.fn<(...args: [string, string, boolean]) => Promise<void>>(() => Promise.resolve()),
+      getSourceFilterSettings: vi.fn<(...args: [string, string]) => Promise<Record<string, unknown>>>(async () => ({})),
+      setSourceFilterSettings: vi.fn<(...args: [string, string, Record<string, unknown>]) => Promise<void>>(() => Promise.resolve()),
+      clearSceneItemCache: vi.fn<(...args: []) => void>(() => {}),
     };
 
     const obsManager = {
-      ensureConnected: createMockFn<[], Promise<void>>(async () => {}),
-      call: createMockFn().mockResolvedValue({}),
+      ensureConnected: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
       isConnected: () => true,
       isReady: () => Promise.resolve(true),
     };
 
     const mockGoalsManager = {
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      initializeGoalDisplay: createMockFn<[], Promise<void>>(() => Promise.resolve()),
-      updateAllGoalDisplays: createMockFn<[], Promise<void>>(() => Promise.resolve()),
-      updateGoalDisplay: createMockFn<[string, string?], Promise<void>>(() => Promise.resolve()),
-      getCurrentGoalStatus: createMockFn<[string], Record<string, unknown> | null>(() => null),
-      getAllCurrentGoalStatuses: createMockFn<[], Record<string, unknown>>(() => ({})),
+      processDonationGoal: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
+      processPaypiggyGoal: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
+      initializeGoalDisplay: vi.fn<(...args: []) => Promise<void>>(() => Promise.resolve()),
+      updateAllGoalDisplays: vi.fn<(...args: []) => Promise<void>>(() => Promise.resolve()),
+      updateGoalDisplay: vi.fn<(...args: [string, string?]) => Promise<void>>(() => Promise.resolve()),
+      getCurrentGoalStatus: vi.fn<(...args: [string]) => Record<string, unknown> | null>(() => null),
+      getAllCurrentGoalStatuses: vi.fn<(...args: []) => Record<string, unknown>>(() => ({})),
     };
 
     const queue = new DisplayQueue(

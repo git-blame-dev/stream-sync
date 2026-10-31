@@ -1,12 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/behavior-validation";
 import { createNotificationData } from "../../helpers/notification-test-utils";
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 describe("User-Facing Content Validation", () => {
   describe("Template Placeholder Elimination", () => {

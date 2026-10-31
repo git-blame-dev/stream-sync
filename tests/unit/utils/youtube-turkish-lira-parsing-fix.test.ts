@@ -1,20 +1,17 @@
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import type { TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, beforeEach, it } from "bun:test";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { YouTubeiCurrencyParser } from "../../../src/platforms/youtube/youtubei-currency-parser";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import { createTextProcessingManager } from "../../../src/utils/text-processing";
 import * as constants from "../../../src/core/constants";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 
 type NotificationDependencies = NonNullable<
   ConstructorParameters<typeof NotificationManager>[0]
 >;
 type DisplayQueueFixture = NonNullable<NotificationDependencies["displayQueue"]> & {
-  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
+  addItem: Mock<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>;
 };
 type NotificationResult = Awaited<
   ReturnType<NotificationManager["handleNotification"]>
@@ -22,18 +19,14 @@ type NotificationResult = Awaited<
 type NotificationData = Record<string, unknown>;
 
 const createDisplayQueueFixture = (): DisplayQueueFixture => ({
-  addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-  getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+  addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+  getQueueLength: vi.fn<() => number>().mockReturnValue(0),
 });
 
 const expectNotificationSucceeded = (result: NotificationResult) => {
   expect(result.success).toBe(true);
   expect(result.filtered).not.toBe(true);
 };
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-});
 
 const createTestConfig = () =>
   createConfigFixture({
@@ -45,10 +38,6 @@ const createTestConfig = () =>
   });
 
 describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
   describe("YouTubei Currency Parser - TRY Format Support", () => {
     let parser: YouTubeiCurrencyParser;
     let mockLogger: typeof noOpLogger;
@@ -271,13 +260,13 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
       mockConfig = createTestConfig();
 
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       createTextProcessingManager({ logger: mockLogger });
       const vfxCommandService = {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn().mockResolvedValue(null),
       };
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
@@ -442,14 +431,14 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
 
       const mockDisplayQueue = createDisplayQueueFixture();
       const mockEventBus = {
-        emit: createMockFn(),
-        on: createMockFn(),
-        off: createMockFn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const logger = noOpLogger;
       createTextProcessingManager({ logger });
       const vfxCommandService = {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn().mockResolvedValue(null),
       };
       const notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,

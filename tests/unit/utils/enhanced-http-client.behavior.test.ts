@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
 import { HttpRetryExecutor } from "../../../src/utils/http-retry-executor";
@@ -9,10 +9,10 @@ type RetryExecutorAdapter = EnhancedHttpClientConfig["retryExecutor"];
 type RequestConfig = { headers: Record<string, string>; timeout?: unknown };
 
 const createHttpAdapter = (overrides: Partial<NonNullable<HttpClientAdapter>> = {}): NonNullable<HttpClientAdapter> => ({
-  get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
-  post: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
-  put: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
-  delete: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
+  get: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
+  post: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
+  put: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
+  delete: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 }),
   ...overrides,
 });
 
@@ -20,7 +20,7 @@ const asRequestConfig = (config: Record<string, unknown>): RequestConfig => conf
 
 describe("EnhancedHttpClient behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("admits only positive scalar integer timeouts and retains native timer ceiling semantics", async () => {
@@ -39,7 +39,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("protects generated request headers from every caller spelling while retaining unrelated options", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
     const headers = { authorization: "caller-a", AUTHORIZATION: "caller-b", Authorization: "caller-c", " Authorization ": "caller-d", "user-agent": "caller-a", "USER-AGENT": "caller-b", "User-Agent": "caller-c", " User-Agent ": "caller-d", Accept: "application/json", "X-Synthetic": "retained" };
     await client.get("https://synthetic.example.invalid/headers", {
@@ -54,7 +54,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("preserves deliberate caller authorization when no generated credential owns the request", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger, userAgents: [] });
     await client.get("https://synthetic.example.invalid/caller-auth", { headers: { authorization: "Bearer synthetic-caller-token", "user-agent": " ", Accept: "application/json" } });
     expect(asRequestConfig(get.mock.calls[0]?.[1] ?? {}).headers).toEqual({ authorization: "Bearer synthetic-caller-token", Accept: "application/json" });
@@ -63,7 +63,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("explicitly nulls Axios Basic auth only when generated credentials own the request", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
     const auth = { username: "synthetic-user", password: "synthetic-password" };
     const options = { auth, authToken: "synthetic-owned-token" };
@@ -80,7 +80,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("leaves malformed URL handling to the adapter instead of changing it during authentication checks", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
     const url = "https://%ZZ.invalid/synthetic";
     await client.get(url, { authToken: "synthetic-owned-token", baseURL: "synthetic relative base" });
@@ -90,7 +90,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("trims direct UA pools, omits empty pools, and honors an explicitly blank UA", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger, userAgents: [" ", " SyntheticAgent/1 ", "", "SyntheticAgent/2"] });
     await client.get("https://synthetic.example.invalid/one");
     await client.get("https://synthetic.example.invalid/two");
@@ -102,7 +102,7 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("normalizes supported schemes and rejects unknown schemes without reflecting their contents", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
     for (const [authType, scheme] of [[" OAuth ", "OAuth"], [" BEARER ", "Bearer"], [" APP ", "Bearer"], [null, "Bearer"], [undefined, "Bearer"]] as const) {
       await client.get("https://synthetic.example.invalid/scheme", { authToken: "synthetic-token", authType });
@@ -116,7 +116,7 @@ describe("EnhancedHttpClient behavior", () => {
 
   for (const method of ["post", "put"] as const) {
     it(`encodes ${method} plain form records without replacing explicit falsy fields`, async () => {
-      const send = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+      const send = vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
       const client = new EnhancedHttpClient({ axios: createHttpAdapter({ [method]: send }), logger: noOpLogger });
       const headers = { "Content-Type": "application/json", " cOnTeNt-TyPe ": "Application/X-WWW-Form-Urlencoded; charset=utf-8" };
       await client[method]("https://synthetic.example.invalid/form", { zero: 0, flag: false, empty: "", absent: null, missing: undefined, words: "two words" }, { headers });
@@ -127,7 +127,7 @@ describe("EnhancedHttpClient behavior", () => {
     });
 
     it(`passes through ${method} non-record form bodies including an explicit empty string`, async () => {
-      const send = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+      const send = vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
       const client = new EnhancedHttpClient({ axios: createHttpAdapter({ [method]: send }), logger: noOpLogger });
       for (const body of ["", "already=encoded", 0, false, null, [], new URLSearchParams({ synthetic: "value" }), new Date(0), new Uint8Array([1, 2])]) {
         await client[method]("https://synthetic.example.invalid/passthrough", body, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
@@ -139,7 +139,7 @@ describe("EnhancedHttpClient behavior", () => {
   it("preserves the functional URL without successful request diagnostics", async () => {
     const messages: string[] = [];
     const logger = { ...noOpLogger, debug: (message: string) => { messages.push(message); } };
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger });
     const url = "https://synthetic-user:synthetic-password@synthetic.example.invalid/%ZZ?access_token=synthetic-success-token";
     await client.get(url);
@@ -150,7 +150,7 @@ describe("EnhancedHttpClient behavior", () => {
 
   it("retains the original failure when terminal reporting throws", async () => {
     const failure = new Error("synthetic request failure");
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(failure);
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockRejectedValue(failure);
     const logger = { ...noOpLogger, debug: (message: string) => {
       if (message.startsWith("HTTP GET Error:")) throw new Error("synthetic reporting failure");
     } };
@@ -160,11 +160,11 @@ describe("EnhancedHttpClient behavior", () => {
 
   it("reports opaque HTTP status failures without rendering provider bodies", async () => {
     const messages: string[] = [];
-    const render = createMockFn<[], string>(() => "synthetic-private-provider-body");
+    const render = vi.fn<(...args: []) => string>(() => "synthetic-private-provider-body");
     const failure = { response: { status: 503, data: { content: "synthetic-private-provider-body" } }, toString: render };
     const logger = { ...noOpLogger, debug: (message: string) => { messages.push(message); }, warn: (message: string) => { messages.push(message); } };
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(failure);
-    const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger, retryExecutor: new HttpRetryExecutor({ logger, safeDelay: createMockFn().mockResolvedValue(undefined) }) });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockRejectedValue(failure);
+    const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger, retryExecutor: new HttpRetryExecutor({ logger, safeDelay: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) }) });
     await expect(client.get("https://synthetic.example.invalid/status", { retryScope: "synthetic", maxAttempts: 2 })).rejects.toBe(failure);
     expect(get).toHaveBeenCalledTimes(2);
     expect(render).not.toHaveBeenCalled();
@@ -178,8 +178,8 @@ describe("EnhancedHttpClient behavior", () => {
       const logger = { ...noOpLogger, debug: (message: string) => { messages.push(message); }, warn: (message: string) => { messages.push(message); }, info: (message: string) => { messages.push(message); } };
       const failure = Object.assign(new Error("Failed https://synthetic.example.invalid/error?refresh_token=synthetic-error-token Authorization: Bearer synthetic-bearer"), { code: "ECONNRESET" });
       const url = "https://synthetic-user:synthetic-password@synthetic.example.invalid/path?access_token=synthetic-request-token&bad=%ZZ";
-      const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(failure);
-      const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger, retryExecutor: new HttpRetryExecutor({ logger, safeDelay: createMockFn().mockResolvedValue(undefined) }) });
+      const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockRejectedValue(failure);
+      const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger, retryExecutor: new HttpRetryExecutor({ logger, safeDelay: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) }) });
       await expect(client.get(url, { retryScope: "synthetic-scope", disableRetry: !retried, maxAttempts: 2 })).rejects.toBe(failure);
       expect(get).toHaveBeenCalledTimes(retried ? 2 : 1);
       expect(get.mock.calls.every(([target]) => target === url)).toBe(true);
@@ -226,12 +226,12 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("wraps requests with retry system when platform is provided", async () => {
-    const axios = createHttpAdapter({ get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 204 }) });
+    const axios = createHttpAdapter({ get: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 204 }) });
     const logger = noOpLogger;
     let executedThroughRetry = false;
 
     const retryExecutor = {
-      executeWithRetry: createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => {
+      executeWithRetry: vi.fn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => {
         executedThroughRetry = true;
         return handler();
       }),
@@ -248,7 +248,7 @@ describe("EnhancedHttpClient behavior", () => {
 
   it("forwards maxAttempts rather than maxRetries to the retry system", async () => {
     const axios = createHttpAdapter();
-    const executeWithRetry = createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>, maxAttempts?: number) => handler());
+    const executeWithRetry = vi.fn(async (_platform: string, handler: () => Promise<Record<string, unknown>>, maxAttempts?: number) => handler());
     const retryExecutor = { executeWithRetry } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
     const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retryExecutor });
 
@@ -266,9 +266,9 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("uses retryScope without leaking retry metadata to the HTTP adapter", async () => {
-    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const get = vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const axios = createHttpAdapter({ get });
-    const executeWithRetry = createMockFn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler());
+    const executeWithRetry = vi.fn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler());
     const retryExecutor = { executeWithRetry } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
     const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retryExecutor });
 
@@ -280,10 +280,10 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("does not retry POST requests without explicit unsafe-method approval", async () => {
-    const post = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>()
+    const post = vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>()
       .mockResolvedValue({ status: 201 });
     const retryExecutor = {
-      executeWithRetry: createMockFn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler()),
+      executeWithRetry: vi.fn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler()),
     } as NonNullable<RetryExecutorAdapter>;
     const client = new EnhancedHttpClient({
       axios: createHttpAdapter({ post }),
@@ -298,12 +298,12 @@ describe("EnhancedHttpClient behavior", () => {
   });
 
   it("retries POST requests only when the caller asserts idempotency", async () => {
-    const post = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>()
+    const post = vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>()
       .mockRejectedValueOnce(Object.assign(new Error("connection reset"), { code: "ECONNRESET" }))
       .mockResolvedValueOnce({ status: 201 });
     const retryExecutor = new HttpRetryExecutor({
       logger: noOpLogger,
-      safeDelay: createMockFn().mockResolvedValue(undefined),
+      safeDelay: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
     });
     const client = new EnhancedHttpClient({
       axios: createHttpAdapter({ post }),
@@ -323,11 +323,11 @@ describe("EnhancedHttpClient behavior", () => {
 
   it("bypasses retry system when disableRetry is true", async () => {
     const axios = {
-      get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkError")),
+      get: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkError")),
     };
     const logger = noOpLogger;
     const retryExecutor = {
-      executeWithRetry: createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => handler()),
+      executeWithRetry: vi.fn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => handler()),
     } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
 
     const client = new EnhancedHttpClient({ axios: createHttpAdapter(axios), logger, retryExecutor });
@@ -345,7 +345,7 @@ describe("EnhancedHttpClient behavior", () => {
     let postedBody!: string;
     let postedConfig!: { headers: Record<string, string> };
     const axios = {
-      post: createMockFn(async (_url: string, body: unknown, config: Record<string, unknown>) => {
+      post: vi.fn(async (_url: string, body: unknown, config: Record<string, unknown>) => {
         postedBody = body as string;
         postedConfig = config as { headers: Record<string, string> };
         return { status: 201 };
@@ -374,7 +374,7 @@ describe("EnhancedHttpClient behavior", () => {
   it("encodes urlencoded bodies when content type includes charset", async () => {
     let postedBody!: string;
     const axios = {
-      post: createMockFn(async (_url: string, body: unknown) => {
+      post: vi.fn(async (_url: string, body: unknown) => {
         postedBody = body as string;
         return { status: 201 };
       }),
@@ -397,7 +397,7 @@ describe("EnhancedHttpClient behavior", () => {
 
   it("returns false when reachability check fails", async () => {
     const axios = {
-      get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkFailure")),
+      get: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkFailure")),
     };
     const logger = noOpLogger;
     const client = new EnhancedHttpClient({ axios: createHttpAdapter(axios), logger });

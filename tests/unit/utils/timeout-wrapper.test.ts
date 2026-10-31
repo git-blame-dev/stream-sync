@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { vi, afterEach, describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 
-import { restoreAllMocks } from '../../helpers/bun-mock-utils';
+
+import { useFakeTimers, useRealTimers, getTimerCount, installTimerTracking, restoreTimerTracking } from '../../helpers/bun-timers';
 import { withTimeout } from '../../../src/utils/timeout-wrapper';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -15,7 +16,21 @@ const fail = (message: string) => {
 
 describe('Timeout Wrapper Utility - User Experience', () => {
     afterEach(() => {
-        restoreAllMocks();
+        vi.restoreAllMocks();
+    });
+
+    it('retires the deadline after success and rejection before resetting the clock', async () => {
+        useFakeTimers();
+        const tracked = installTimerTracking().activeTimers;
+        const before = new Set(tracked);
+        try {
+            expect(await withTimeout(Promise.resolve('synthetic-result'), 1000)).toBe('synthetic-result');
+            expect(getTimerCount()).toBe(0);
+            const failure = new Error('Synthetic operation failure');
+            await expect(withTimeout(Promise.reject(failure), 1000)).rejects.toBe(failure);
+            expect(getTimerCount()).toBe(0);
+            expect([...tracked].filter(timer => !before.has(timer))).toEqual([]);
+        } finally { restoreTimerTracking(); useRealTimers(); }
     });
 
     describe('Operation Completion Within Timeout', () => {

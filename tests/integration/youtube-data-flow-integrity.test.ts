@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
 
 import { YouTubePlatform } from "../../src/platforms/youtube";
 import { InnertubeService } from "../../src/services/innertube-service";
@@ -7,7 +7,7 @@ import { ViewerCountExtractionService } from "../../src/services/viewer-count-ex
 import { initializeTestLogging } from "../helpers/test-setup";
 import { getSyntheticFixture } from "../helpers/platform-test-data";
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 
@@ -146,7 +146,7 @@ describe("YouTube data flow integrity", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

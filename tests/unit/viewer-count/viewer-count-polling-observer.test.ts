@@ -1,6 +1,6 @@
-import { describe, expect, afterEach, it } from "bun:test";
+import { vi, describe, expect, afterEach, it } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
@@ -17,7 +17,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
   const originalEnv = process.env.NODE_ENV;
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     if (originalEnv === undefined) {
       delete process.env.NODE_ENV;
     } else {
@@ -31,7 +31,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
     const secondCount = counts[1] ?? firstCount;
 
     const platform = {
-      getViewerCount: createMockFn()
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>()
         .mockResolvedValueOnce(firstCount)
         .mockResolvedValueOnce(secondCount),
     };
@@ -120,7 +120,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
   it("preserves count when platform returns null viewer count", async () => {
     process.env.NODE_ENV = "test";
-    const platform = { getViewerCount: createMockFn().mockResolvedValue(null) };
+    const platform = { getViewerCount: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null) };
     const system = new ViewerCountSystem({
       platforms: { youtube: platform },
       logger: noOpLogger,
@@ -136,7 +136,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
   it("continues when polling throws", async () => {
     process.env.NODE_ENV = "test";
     const platform = {
-      getViewerCount: createMockFn().mockRejectedValue(new Error("boom")),
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("boom")),
     };
     const system = new ViewerCountSystem({
       platforms: { youtube: platform },

@@ -1,17 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  type TestMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 type EnhancedHttpClientConstructor =
   typeof import("../../../src/utils/enhanced-http-client").EnhancedHttpClient;
 type EnhancedHttpClientConfig = NonNullable<ConstructorParameters<EnhancedHttpClientConstructor>[0]>;
 type HttpClientAdapter = EnhancedHttpClientConfig["axios"];
 type RequestConfig = Record<string, unknown> & { headers: Record<string, string> };
-type MockFunction<Args extends unknown[]> = TestMockFn<Args, Promise<Record<string, unknown>>>;
+type MockFunction<Args extends unknown[]> = Mock<(...args: Args) => Promise<Record<string, unknown>>>;
 type MockAxios = {
   get: MockFunction<[string, Record<string, unknown>]>;
   post: MockFunction<[string, unknown, Record<string, unknown>]>;
@@ -35,10 +30,10 @@ describe("Enhanced HTTP Client", () => {
 
   beforeEach(() => {
     mockAxios = {
-      get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
-      post: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>(),
-      put: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>(),
-      delete: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
+      get: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>(),
+      post: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>(),
+      put: vi.fn<(...args: [string, unknown, Record<string, unknown>]) => Promise<Record<string, unknown>>>(),
+      delete: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<Record<string, unknown>>>(),
     };
 
     EnhancedHttpClient =
@@ -53,8 +48,8 @@ describe("Enhanced HTTP Client", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
-    clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Authentication Header Abstraction", () => {

@@ -1,11 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { createRequire } from "node:module";
 
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../helpers/bun-mock-utils";
-import type { TestMockFn } from "../helpers/bun-mock-utils";
+
+
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 
@@ -31,12 +28,12 @@ type ViewerCountSystemInstance = {
 };
 
 type ViewerCountPlatformFixture = {
-  getViewerCount: TestMockFn<[], Promise<number>>;
+  getViewerCount: Mock<(...args: []) => Promise<number>>;
 };
 
 type ViewerCountObserverFixture = {
-  getObserverId: TestMockFn<[], string>;
-  onViewerCountUpdate: TestMockFn<[payload: unknown], Promise<void>>;
+  getObserverId: Mock<(...args: []) => string>;
+  onViewerCountUpdate: Mock<(...args: [payload: unknown]) => Promise<void>>;
 };
 
 type ViewerCountSystemConstructor = new (args: {
@@ -63,18 +60,18 @@ describe("Twitch Viewer Count System Debug", () => {
     });
 
     mockTwitchPlatform = {
-      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(42),
+      getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(42),
     };
 
     mockPlatforms = {
       twitch: mockTwitchPlatform,
-      youtube: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(100) },
-      tiktok: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(25) },
+      youtube: { getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(100) },
+      tiktok: { getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(25) },
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createViewerSystem = () => {
@@ -113,8 +110,8 @@ describe("Twitch Viewer Count System Debug", () => {
     const viewerSystem = createViewerSystem();
 
     const mockObserver: ViewerCountObserverFixture = {
-      getObserverId: createMockFn<[], string>().mockReturnValue("testObserver"),
-      onViewerCountUpdate: createMockFn<[payload: unknown], Promise<void>>().mockResolvedValue(),
+      getObserverId: vi.fn<(...args: []) => string>().mockReturnValue("testObserver"),
+      onViewerCountUpdate: vi.fn<(...args: [payload: unknown]) => Promise<void>>().mockResolvedValue(),
     };
     viewerSystem.addObserver(mockObserver);
 

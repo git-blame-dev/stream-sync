@@ -1,7 +1,8 @@
+import { vi } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
 
-import { createMockFn } from './bun-mock-utils';
+
 import { createConfigFixture } from './config-fixture';
 import {
     createMockDisplayQueue,
@@ -41,31 +42,31 @@ const createEventBusStub = (): EventBusStub => {
     const emitter = new EventEmitter();
 
     return {
-        subscribe: createMockFn((event: string, handler: RuntimeEventHandler) => {
+        subscribe: vi.fn((event: string, handler: RuntimeEventHandler) => {
             emitter.on(event, handler);
             return () => emitter.removeListener(event, handler);
         }),
-        emit: createMockFn((event: string, payload: unknown) => emitter.emit(event, payload)),
-        reset: createMockFn(() => emitter.removeAllListeners())
+        emit: vi.fn((event: string, payload: unknown) => emitter.emit(event, payload)),
+        reset: vi.fn(() => emitter.removeAllListeners())
     };
 };
 
 const createPlatformLifecycleStub = (overrides: Partial<PlatformLifecycleStub> = {}): PlatformLifecycleStub => ({
-    initializePlatforms: createMockFn<[], Promise<unknown>>().mockResolvedValue({}),
-    initializeAllPlatforms: createMockFn<[Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
-    initializePlatform: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    waitForBackgroundInits: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    shutdownPlatforms: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    disconnectAll: createMockFn<[], Promise<unknown>>().mockResolvedValue(true),
-    getAllPlatforms: createMockFn<[], Record<string, never>>().mockReturnValue({}),
-    getPlatforms: createMockFn<[], Record<string, never>>().mockReturnValue({}),
-    getPlatform: createMockFn<[], null>().mockReturnValue(null),
-    getPlatformConnectionTime: createMockFn<[string], null>().mockReturnValue(null),
-    isPlatformAvailable: createMockFn<[], boolean>().mockReturnValue(false),
-    recordPlatformConnection: createMockFn<[string], void>(),
-    startPlatform: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    stopPlatform: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    refreshPlatform: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+    initializePlatforms: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue({}),
+    initializeAllPlatforms: vi.fn<(...args: [Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
+    initializePlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+    waitForBackgroundInits: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+    shutdownPlatforms: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+    disconnectAll: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(true),
+    getAllPlatforms: vi.fn<(...args: []) => Record<string, never>>().mockReturnValue({}),
+    getPlatforms: vi.fn<(...args: []) => Record<string, never>>().mockReturnValue({}),
+    getPlatform: vi.fn<(...args: []) => null>().mockReturnValue(null),
+    getPlatformConnectionTime: vi.fn<(...args: [string]) => null>().mockReturnValue(null),
+    isPlatformAvailable: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
+    recordPlatformConnection: vi.fn<(...args: [string]) => void>(),
+    startPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+    stopPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+    refreshPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
     ...overrides
 });
 
@@ -84,28 +85,28 @@ function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
     const config = createConfigFixture(configOverrides);
     const runtimeConfig = asRuntimeConfig(config);
     const vfxCommandService = options.vfxCommandService || {
-        executeCommand: createMockFn<[unknown, Record<string, unknown>], Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
-        executeCommandForKey: createMockFn<[unknown, Record<string, unknown>], Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
-        getVFXConfig: createMockFn<[string, string | null], Promise<Record<string, unknown>>>().mockResolvedValue({})
+        executeCommand: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
+        executeCommandForKey: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
+        getVFXConfig: vi.fn<(...args: [string, string | null]) => Promise<Record<string, unknown>>>().mockResolvedValue({})
     };
     const userTrackingService = options.userTrackingService || {
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>?], boolean>().mockReturnValue(true)
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>?]) => boolean>().mockReturnValue(true)
     };
     const commandCooldownService = options.commandCooldownService || {
-        loadCooldownConfig: createMockFn<[], void>(),
-        registerConfigListeners: createMockFn<[], void>(),
-        getStatus: createMockFn<[], Record<string, unknown>>().mockReturnValue({ commands: {} }),
-        checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
-        updateUserCooldown: createMockFn<[unknown], void>()
+        loadCooldownConfig: vi.fn<(...args: []) => void>(),
+        registerConfigListeners: vi.fn<(...args: []) => void>(),
+        getStatus: vi.fn<(...args: []) => Record<string, unknown>>().mockReturnValue({ commands: {} }),
+        checkUserCooldown: vi.fn<(...args: [unknown, number, number]) => boolean>().mockReturnValue(true),
+        updateUserCooldown: vi.fn<(...args: [unknown]) => void>()
     };
     const platformLifecycleService = options.platformLifecycleService ||
         createPlatformLifecycleStub();
     const commandParser = options.commandParser || {
-        getVFXConfig: createMockFn<[string?, string?], null>().mockReturnValue(null)
+        getVFXConfig: vi.fn<(...args: [string?, string?]) => null>().mockReturnValue(null)
     };
     const dependencyFactory = options.dependencyFactory || {
-        createYoutubeDependencies: createMockFn<[], { streamDetectionService: { isLive: () => unknown } }>().mockReturnValue({
-            streamDetectionService: { isLive: createMockFn() }
+        createYoutubeDependencies: vi.fn<(...args: []) => { streamDetectionService: { isLive: () => unknown } }>().mockReturnValue({
+            streamDetectionService: { isLive: vi.fn<(...args: unknown[]) => unknown>() }
         })
     };
 
@@ -122,17 +123,17 @@ function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
         platformLifecycleService,
         commandParser,
         dependencyFactory,
-        timestampService: options.timestampService || { now: createMockFn((): number => testClock.now()) },
+        timestampService: options.timestampService || { now: vi.fn((): number => testClock.now()) },
         obsManager: options.obsManager || null,
         twitchAuth: options.twitchAuth || null,
         obs: options.obs || {},
-        obsEventService: options.obsEventService || { start: createMockFn(), stop: createMockFn() },
-        sceneManagementService: options.sceneManagementService || { start: createMockFn(), stop: createMockFn() },
+        obsEventService: options.obsEventService || { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() },
+        sceneManagementService: options.sceneManagementService || { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() },
         gracefulExitService: options.gracefulExitService || {
-            isEnabled: createMockFn<[], boolean>().mockReturnValue(false),
-            getTargetMessageCount: createMockFn<[], number>().mockReturnValue(0),
-            incrementMessageCount: createMockFn<[], boolean>().mockReturnValue(false),
-            triggerExit: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined)
+            isEnabled: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
+            getTargetMessageCount: vi.fn<(...args: []) => number>().mockReturnValue(0),
+            incrementMessageCount: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
+            triggerExit: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined)
         },
         ...overrides
     } as RuntimeDependenciesForTest;

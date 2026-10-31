@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, afterEach, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -20,17 +20,17 @@ const createDisplayQueueStub = () => {
 
 describe("NotificationManager monetization error path", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("queues gift error notifications with placeholder values", async () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
       logger: noOpLogger,
       constants,
@@ -67,10 +67,10 @@ describe("NotificationManager monetization error path", () => {
     };
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
       logger: noOpLogger,
       constants,

@@ -1,5 +1,5 @@
-import { describe, expect, afterEach, it, beforeEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { vi, describe, expect, afterEach, it, beforeEach } from 'bun:test';
+
 import { createConfigFixture } from "../../../helpers/config-fixture";
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
 
@@ -15,11 +15,11 @@ describe("VFXCommandService failure paths", () => {
     });
 
   beforeEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("returns friendly error when parser is missing", async () => {
@@ -40,7 +40,7 @@ describe("VFXCommandService failure paths", () => {
   it("returns friendly error when parser finds no VFX command", async () => {
     const service = new VFXCommandService(createConfig(), null);
     service.commandParser = {
-      getVFXConfig: createMockFn().mockReturnValue(null),
+      getVFXConfig: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
     };
 
     const result = await service.executeCommand("not-a-command", {
@@ -57,7 +57,7 @@ describe("VFXCommandService failure paths", () => {
   it("returns friendly error when parser throws while selecting command", async () => {
     const service = new VFXCommandService(createConfig(), null);
     service.commandParser = {
-      getVFXConfig: createMockFn(() => {
+      getVFXConfig: vi.fn(() => {
         throw new Error("parser explode");
       }),
     };
@@ -90,7 +90,7 @@ describe("VFXCommandService failure paths", () => {
   it("returns friendly error when command is whitespace only", async () => {
     const service = new VFXCommandService(createConfig(), null);
     service.commandParser = {
-      getVFXConfig: createMockFn().mockReturnValue(null),
+      getVFXConfig: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
     };
 
     const result = await service.executeCommand("   ", {

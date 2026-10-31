@@ -1,5 +1,5 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
+
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 
@@ -30,7 +30,7 @@ describe("Twitch emote chat parts pipeline (integration)", () => {
     const presentation = activePresentation;
     activePresentation = null;
     try {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     } finally {
       if (presentation) {
         await presentation.dispose();

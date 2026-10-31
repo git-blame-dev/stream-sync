@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { createMockFn } from './bun-mock-utils';
+
 import {
     expectValidNotification,
     expectNotificationContent,
@@ -60,8 +60,8 @@ const createGiftNotification = (overrides = {}) => {
 };
 
 const createFactoryMock = () => {
-    const primary = createMockFn();
-    const secondary = createMockFn();
+    const primary = vi.fn<(...args: unknown[]) => unknown>();
+    const secondary = vi.fn<(...args: unknown[]) => unknown>();
     return {
         _mockType: 'test-mock',
         _validMethods: ['primary', 'secondary'],
@@ -145,7 +145,7 @@ describe('assertion-helpers behavior', () => {
         await expect(synchronous()).rejects.toThrow('asynchronously');
         const rejection = new Error('synthetic message-processing rejection');
         await expect(expectValidPlatformBehavior({ processMessage: async () => { throw rejection; } }, 'message_processing', { shouldReturnBoolean: true })).rejects.toBe(rejection);
-        await expectValidPlatformBehavior({ processMessage: createMockFn(async () => false) }, 'message_processing', { shouldProcessAsync: true, shouldReturnBoolean: true });
+        await expectValidPlatformBehavior({ processMessage: vi.fn(async () => false) }, 'message_processing', { shouldProcessAsync: true, shouldReturnBoolean: true });
     });
 
     it('awaits actual platform rejection and distinguishes it from successful resolution', async () => {
@@ -388,7 +388,7 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectValidGiftNotification({ ...validGift, amount: 0 }, { platform: 'tiktok' })).toThrow('amount must be positive');
 
         const messagePlatform = {
-            processMessage: createMockFn(() => true),
+            processMessage: vi.fn(() => true),
             handleNotification: () => {}
         };
         await expectValidPlatformBehavior(messagePlatform, 'message_processing', { requiredMethods: ['processMessage'], shouldReturnBoolean: true });
@@ -544,7 +544,7 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectCrossPlatformContentConsistency({ youtube: 'one platform only' })).toThrow('Need at least 2 platforms');
 
         const nonBooleanPlatform = {
-            processMessage: createMockFn(() => 'not-boolean')
+            processMessage: vi.fn(() => 'not-boolean')
         };
         await expect(expectValidPlatformBehavior(nonBooleanPlatform, 'message_processing', { shouldReturnBoolean: true }))
             .rejects.toThrow('should return boolean or Promise<boolean>');

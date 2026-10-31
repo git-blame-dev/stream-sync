@@ -1,10 +1,10 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
 import { YouTubePlatform } from "../../src/platforms/youtube";
 import { InnertubeService } from "../../src/services/innertube-service";
 import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service";
 import { ViewerCountExtractionService } from "../../src/services/viewer-count-extraction-service";
 import { getSyntheticFixture } from "../helpers/platform-test-data";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 
@@ -31,7 +31,7 @@ describe("YouTube Gift Purchase Smoke (Canonical Author)", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

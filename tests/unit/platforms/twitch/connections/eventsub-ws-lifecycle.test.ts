@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createRecordingLogger } from "../../../../helpers/recording-logger";
 import {
@@ -182,7 +182,7 @@ describe("Twitch EventSub WS lifecycle", () => {
 
     const state: LifecycleState = {
       logger: noOpLogger,
-      twitchAuth: { isReady: createMockFn(() => true) },
+      twitchAuth: { isReady: vi.fn(() => true) },
       config: { clientId: "testClientId" },
       userId: "testUserId",
       ws: new MockWebSocket("wss://initial.invalid"),
@@ -203,9 +203,9 @@ describe("Twitch EventSub WS lifecycle", () => {
         pushOptionalValue(emittedEvent, "payload", payload);
         emitCalls.push(emittedEvent);
       },
-      handleWebSocketMessage: createMockFn(async () => {}),
-      _validateConnectionForSubscriptions: createMockFn(() => true),
-      _setupEventSubscriptions: createMockFn<[boolean?], Promise<SubscriptionSetupResult>>(async () => ({ failures: [] })),
+      handleWebSocketMessage: vi.fn(async () => {}),
+      _validateConnectionForSubscriptions: vi.fn(() => true),
+      _setupEventSubscriptions: vi.fn<(...args: [boolean?]) => Promise<SubscriptionSetupResult>>(async () => ({ failures: [] })),
       scheduleReconnectCalls,
       _scheduleReconnect: () => scheduleReconnectCalls.push(true),
       reconnectCalls,
@@ -519,7 +519,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => setupPromise),
+      _setupEventSubscriptions: vi.fn(async () => setupPromise),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
     let connectResolved = false;
@@ -580,7 +580,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
 
@@ -626,7 +626,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({
+      _setupEventSubscriptions: vi.fn(async () => ({
         failures: [{ subscription: "Follows" }],
       })),
     });
@@ -674,7 +674,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({
+      _setupEventSubscriptions: vi.fn(async () => ({
         failures: [],
         aborted: true,
         abortReason: "connection-lost",
@@ -719,7 +719,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({
+      _setupEventSubscriptions: vi.fn(async () => ({
         failures: [
           {
             subscription: "Chat",
@@ -787,7 +787,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       retryDelay: 1000,
     });
     state._reconnect = () => lifecycle.reconnect(state);
-    state._connectWebSocket = createMockFn(async () => {
+    state._connectWebSocket = vi.fn(async () => {
       state._isConnected = true;
       state.emitCalls.push({
         event: "eventSubConnected",
@@ -817,7 +817,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
     state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
     state._reconnect = () => lifecycle.reconnect(state);
-    state._connectWebSocket = createMockFn(async () => {
+    state._connectWebSocket = vi.fn(async () => {
       state._isConnected = true;
     });
 
@@ -894,7 +894,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _validateConnectionForSubscriptions: createMockFn(() => false),
+      _validateConnectionForSubscriptions: vi.fn(() => false),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
 
@@ -930,7 +930,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => {
+      _setupEventSubscriptions: vi.fn(async () => {
         throw new Error("API error");
       }),
     });
@@ -1095,7 +1095,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       resolveMessage = resolve;
     });
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => { await messageHandlingPromise; return { failures: [] }; }),
+      _setupEventSubscriptions: vi.fn(async () => { await messageHandlingPromise; return { failures: [] }; }),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
 
@@ -1131,7 +1131,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => setupPromise),
+      _setupEventSubscriptions: vi.fn(async () => setupPromise),
       isInitialized: false,
     });
     const connectPromise = lifecycle.connectWebSocket(state);
@@ -1177,7 +1177,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => setupPromise),
+      _setupEventSubscriptions: vi.fn(async () => setupPromise),
       isInitialized: false,
     });
     const connectPromise = lifecycle.connectWebSocket(state);
@@ -1218,7 +1218,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
 
@@ -1257,7 +1257,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
       isInitialized: true,
     });
     const connectPromise = lifecycle.connectWebSocket(state);
@@ -1293,7 +1293,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
       isInitialized: true,
       retryAttempts: 0,
       maxRetryAttempts: 5,
@@ -1301,7 +1301,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
     state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
     state._reconnect = () => lifecycle.reconnect(state);
-    state._connectWebSocket = createMockFn(async () => {
+    state._connectWebSocket = vi.fn(async () => {
       state._isConnected = true;
     });
 
@@ -1333,13 +1333,13 @@ describe("Twitch EventSub WS lifecycle", () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
       isInitialized: true,
       retryAttempts: 0,
       maxRetryAttempts: 5,
       retryDelay: 1000,
-      _deleteAllSubscriptions: createMockFn(async () => {}),
-      _connectWebSocket: createMockFn(async () => {
+      _deleteAllSubscriptions: vi.fn(async () => {}),
+      _connectWebSocket: vi.fn(async () => {
         state._isConnected = true;
       }),
     });
@@ -1392,7 +1392,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       const lifecycle = buildLifecycle();
 
       const state = createState({
-        _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+        _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
         isInitialized: true,
       });
       const connectPromise = lifecycle.connectWebSocket(state);
@@ -1434,7 +1434,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       retryDelay: 5000,
     });
     state._reconnect = () => lifecycle.reconnect(state);
-    state._connectWebSocket = createMockFn(async () => {
+    state._connectWebSocket = vi.fn(async () => {
       state._isConnected = true;
     });
 
@@ -1488,8 +1488,8 @@ describe("Twitch EventSub WS lifecycle", () => {
       isInitialized: true,
       ws: existingWs,
       sessionId: "old-session-id",
-      _deleteAllSubscriptions: createMockFn(async () => {}),
-      _connectWebSocket: createMockFn(async () => {}),
+      _deleteAllSubscriptions: vi.fn(async () => {}),
+      _connectWebSocket: vi.fn(async () => {}),
     });
 
     await lifecycle.reconnect(state);
@@ -1534,7 +1534,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     const state = createState({
       reconnectUrl: "wss://reconnect-session",
       sessionId: null,
-      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      _setupEventSubscriptions: vi.fn(async () => ({ failures: [] })),
     });
 
     const connectPromise = lifecycle.connectWebSocket(state);
@@ -1568,10 +1568,10 @@ describe("Twitch EventSub WS lifecycle", () => {
     const state = createState({
       isInitialized: true,
       sessionId: "old-session-id",
-      _deleteAllSubscriptions: createMockFn(async () => {
+      _deleteAllSubscriptions: vi.fn(async () => {
         throw new Error("cleanup failed");
       }),
-      _connectWebSocket: createMockFn(async () => {}),
+      _connectWebSocket: vi.fn(async () => {}),
     });
 
     await lifecycle.reconnect(state);
@@ -1596,7 +1596,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     state._reconnect = () => lifecycle.reconnect(state);
 
     let shouldFail = true;
-    state._connectWebSocket = createMockFn(async () => {
+    state._connectWebSocket = vi.fn(async () => {
       if (shouldFail) {
         shouldFail = false;
         throw new Error("Connection failed");
@@ -1622,7 +1622,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       isInitialized: true,
       retryAttempts: 2,
       maxRetryAttempts: 3,
-      _connectWebSocket: createMockFn(async () => {
+      _connectWebSocket: vi.fn(async () => {
         throw new Error("Connection failed");
       }),
     });
@@ -1654,7 +1654,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       isInitialized: true,
       retryAttempts: 2,
       maxRetryAttempts: 5,
-      _connectWebSocket: createMockFn(async () => {}),
+      _connectWebSocket: vi.fn(async () => {}),
     });
 
     await lifecycle.reconnect(state);
@@ -1669,7 +1669,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       retryAttempts: 0,
       maxRetryAttempts: 2,
       retryDelay: 1000,
-      _connectWebSocket: createMockFn(async () => {
+      _connectWebSocket: vi.fn(async () => {
         state._isConnected = true;
       }),
     });

@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { vi, spyOn, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import { createMockFn, restoreAllMocks, spyOn } from '../../helpers/bun-mock-utils';
+
 import {
     safeSetInterval,
     safeDelay,
@@ -26,7 +26,7 @@ describe('Timeout Validator', () => {
     });
 
     afterEach(() => {
-        restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('validateTimeout', () => {
@@ -138,7 +138,7 @@ describe('Timeout Validator', () => {
             expect(completedRemove).toHaveBeenCalledTimes(1);
         });
         test('should call setTimeout with validated delay', () => {
-            const mockCallback = createMockFn();
+            const mockCallback = vi.fn<(...args: unknown[]) => unknown>();
             
             safeSetTimeout(mockCallback, 2000);
             expect(timeoutSpy).toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should fix invalid delays', () => {
-            const mockCallback = createMockFn();
+            const mockCallback = vi.fn<(...args: unknown[]) => unknown>();
             
             safeSetTimeout(mockCallback, NaN);
             expect(timeoutSpy).toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should pass through additional arguments', () => {
-            const mockCallback = createMockFn();
+            const mockCallback = vi.fn<(...args: unknown[]) => unknown>();
             
             safeSetTimeoutWithArgs(mockCallback, 1000, 'arg1', 'arg2');
             expect(timeoutSpy).toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('Timeout Validator', () => {
 
     describe('safeSetInterval', () => {
         test('should call setInterval with validated interval', () => {
-            const mockCallback = createMockFn();
+            const mockCallback = vi.fn<(...args: unknown[]) => unknown>();
             
             safeSetInterval(mockCallback, 1500);
             expect(intervalSpy).toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should fix invalid intervals', () => {
-            const mockCallback = createMockFn();
+            const mockCallback = vi.fn<(...args: unknown[]) => unknown>();
             
             safeSetInterval(mockCallback, undefined);
             expect(intervalSpy).toHaveBeenCalled();

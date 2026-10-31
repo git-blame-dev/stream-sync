@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, expect } from "bun:test";
-import { type TestMockFn, createMockFn } from "../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, it, beforeEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { createRecordingLogger } from "../../helpers/recording-logger";
@@ -17,8 +17,8 @@ type VfxConfig = NonNullable<
   Awaited<ReturnType<SelectVfxCommand>>
 >;
 type QueuedItem = DisplayQueueItem;
-type AddItemMock = TestMockFn<[QueuedItem], readonly QueuedItem[]>;
-type AddSequenceMock = TestMockFn<[QueuedItem[]], readonly QueuedItem[]>;
+type AddItemMock = Mock<(...args: [QueuedItem]) => readonly QueuedItem[]>;
+type AddSequenceMock = Mock<(...args: [QueuedItem[]]) => readonly QueuedItem[]>;
 type TestRuntime = RouterRuntime & {
   displayQueue: { addItem: AddItemMock; addSequence: AddSequenceMock };
   commandCooldownService: NonNullable<RouterRuntime["commandCooldownService"]>;
@@ -96,33 +96,33 @@ describe("ChatNotificationRouter", () => {
         },
       };
     let runtime: TestRuntime;
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
-    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => {
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => [item]);
+    const addSequence = vi.fn<(...args: [QueuedItem[]]) => readonly QueuedItem[]>((items) => {
       items.forEach((item) => addItem(item));
       return items;
     });
     const baseRuntime = {
       config: baseConfig,
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn<[string], number | null>().mockReturnValue(null),
+        getPlatformConnectionTime: vi.fn<(...args: [string]) => number | null>().mockReturnValue(null),
       },
       displayQueue: {
         addItem,
         addSequence,
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn<[string, number], boolean>().mockReturnValue(true),
-        updateUserCooldown: createMockFn<[unknown], void>(),
-        updateGlobalCooldown: createMockFn<[string], void>(),
+        checkUserCooldown: vi.fn<(...args: [unknown, number, number]) => boolean>().mockReturnValue(true),
+        checkGlobalCooldown: vi.fn<(...args: [string, number]) => boolean>().mockReturnValue(true),
+        updateUserCooldown: vi.fn<(...args: [unknown]) => void>(),
+        updateGlobalCooldown: vi.fn<(...args: [string]) => void>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false),
       },
       vfxCommandService: {
-        selectVFXCommand: createMockFn<[string, string], Promise<VfxConfig | null>>().mockResolvedValue(null),
-        matchFarewell: createMockFn<[string, string], unknown>().mockReturnValue(null),
-        getVFXConfig: createMockFn<[string, string | null], Promise<VfxConfig | null>>().mockResolvedValue(null),
+        selectVFXCommand: vi.fn<(...args: [string, string]) => Promise<VfxConfig | null>>().mockResolvedValue(null),
+        matchFarewell: vi.fn<(...args: [string, string]) => unknown>().mockReturnValue(null),
+        getVFXConfig: vi.fn<(...args: [string, string | null]) => Promise<VfxConfig | null>>().mockResolvedValue(null),
       },
       prepareFarewellNotification: async (
         platform: string,
@@ -142,13 +142,13 @@ describe("ChatNotificationRouter", () => {
           },
         };
       },
-      isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
+      isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false),
     };
 
     runtime = baseRuntime;
     Object.assign(runtime, runtimeOverrides);
     if (!runtime.displayQueue.addSequence) {
-      runtime.displayQueue.addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => {
+      runtime.displayQueue.addSequence = vi.fn<(...args: [QueuedItem[]]) => readonly QueuedItem[]>((items) => {
         items.forEach((item) => runtime.displayQueue.addItem(item));
         return items;
       });
@@ -216,7 +216,7 @@ describe("ChatNotificationRouter", () => {
       runtime: {
         config: { general: { filterOldMessages: true } },
         platformLifecycleService: {
-          getPlatformConnectionTime: createMockFn<[string], number | null>()
+          getPlatformConnectionTime: vi.fn<(...args: [string]) => number | null>()
             .mockReturnValue(testClock.now()),
         },
       },
@@ -388,11 +388,11 @@ describe("ChatNotificationRouter", () => {
     const commandConfig = { command: "!testboom" };
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(commandConfig),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<typeof commandConfig>>().mockResolvedValue(commandConfig),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -407,7 +407,7 @@ describe("ChatNotificationRouter", () => {
   it("includes userId on queued greeting items for first-time messages", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
       },
     });
 
@@ -425,7 +425,7 @@ describe("ChatNotificationRouter", () => {
   it("propagates avatarUrl on queued greeting items for first-time messages", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
       },
     });
 
@@ -452,7 +452,7 @@ describe("ChatNotificationRouter", () => {
           general: { greetingsEnabled: true, messagesEnabled: true },
           twitch: { greetingsEnabled: false, messagesEnabled: true },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
       },
     });
 
@@ -484,7 +484,7 @@ describe("ChatNotificationRouter", () => {
             farewellsEnabled: true,
           },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
       },
     });
 
@@ -504,11 +504,11 @@ describe("ChatNotificationRouter", () => {
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -527,9 +527,9 @@ describe("ChatNotificationRouter", () => {
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -550,9 +550,9 @@ describe("ChatNotificationRouter", () => {
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -579,9 +579,9 @@ describe("ChatNotificationRouter", () => {
           },
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -605,11 +605,11 @@ describe("ChatNotificationRouter", () => {
             farewellsEnabled: true,
           },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -629,15 +629,15 @@ describe("ChatNotificationRouter", () => {
     const { router, runtime } = createRouter({
       runtime: {
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(false),
-          checkGlobalCooldown: createMockFn().mockReturnValue(true),
-          updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn(),
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+          checkGlobalCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          updateUserCooldown: vi.fn<(userId: unknown) => void>(),
+          updateGlobalCooldown: vi.fn<(commandName: string) => void>(),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -654,23 +654,23 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("falls back to chat without consuming state when sequence admission fails", async () => {
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
-    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>(() => {
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => [item]);
+    const addSequence = vi.fn<(...args: [QueuedItem[]]) => readonly QueuedItem[]>(() => {
       throw new Error("sequence admission failed");
     });
-    const markMessageSeen = createMockFn();
+    const markMessageSeen = vi.fn<(...args: unknown[]) => unknown>();
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem, addSequence },
         userTrackingService: {
-          hasSeenUser: createMockFn().mockReturnValue(false),
+          hasSeenUser: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
           markMessageSeen,
-          isFirstMessage: createMockFn().mockReturnValue(true),
+          isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -689,23 +689,23 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("does not duplicate admitted chat when post-admission state updates fail", async () => {
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
-    const addSequence = createMockFn<[QueuedItem[]], readonly QueuedItem[]>((items) => items);
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => [item]);
+    const addSequence = vi.fn<(...args: [QueuedItem[]]) => readonly QueuedItem[]>((items) => items);
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem, addSequence },
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn().mockReturnValue(true),
-          updateUserCooldown: createMockFn(() => {
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          checkGlobalCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          updateUserCooldown: vi.fn(() => {
             throw new Error("state update failed");
           }),
-          updateGlobalCooldown: createMockFn(),
+          updateGlobalCooldown: vi.fn<(commandName: string) => void>(),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -724,11 +724,11 @@ describe("ChatNotificationRouter", () => {
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -751,7 +751,7 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("does not consume cooldowns when command enqueue fails", async () => {
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => {
       if (item.type === "command") {
         throw new Error("queue failed");
       }
@@ -761,11 +761,11 @@ describe("ChatNotificationRouter", () => {
       runtime: {
         displayQueue: { addItem },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
@@ -781,16 +781,16 @@ describe("ChatNotificationRouter", () => {
   });
 
 it("marks first-message state only after greeting enqueue succeeds", async () => {
-    const hasSeenUser = createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false);
-    const markMessageSeen = createMockFn();
+    const hasSeenUser = vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false);
+    const markMessageSeen = vi.fn<(...args: unknown[]) => unknown>();
     const { router, runtime } = createRouter({
       runtime: {
         userTrackingService: {
           hasSeenUser,
           markMessageSeen,
-          isFirstMessage: createMockFn().mockReturnValue(true),
+          isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         },
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockImplementation(() => {
           throw new Error("runtime first-message fallback should not be used");
         }),
       },
@@ -818,9 +818,9 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
 });
 
   it("does not consume first-message state when command enqueue fails", async () => {
-    const hasSeenUser = createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false);
-    const markMessageSeen = createMockFn();
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
+    const hasSeenUser = vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockReturnValue(false);
+    const markMessageSeen = vi.fn<(...args: unknown[]) => unknown>();
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => {
       if (item.type === "command") {
         throw new Error("command enqueue failed");
       }
@@ -830,11 +830,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
       runtime: {
         displayQueue: { addItem },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
         config: {
           general: { greetingsEnabled: false, messagesEnabled: true },
@@ -852,9 +852,9 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
         userTrackingService: {
           hasSeenUser,
           markMessageSeen,
-          isFirstMessage: createMockFn().mockReturnValue(true),
+          isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         },
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockImplementation(() => {
           throw new Error("runtime first-message fallback should not be used");
         }),
       },
@@ -874,7 +874,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
       runtime: {
         platformLifecycleService: {
           getPlatformConnectionTime:
-            createMockFn().mockReturnValue(connectionTime),
+            vi.fn<(...args: unknown[]) => typeof connectionTime>().mockReturnValue(connectionTime),
         },
       },
     });
@@ -898,9 +898,9 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     };
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<typeof greetingVfx>>().mockResolvedValue(greetingVfx),
         },
       },
     });
@@ -949,11 +949,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           greetings: { command: "!hello" },
           profiles: { main: { id: "main", identities: ["twitch:test-user-gamma"], greetingCommand: "!bye" } },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
-          selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
-          matchFarewell: createMockFn().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<typeof greetingVfx>>().mockResolvedValue(greetingVfx),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<typeof secondaryVfx>>().mockResolvedValue(secondaryVfx),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1010,11 +1010,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           greetings: { command: "!hello" },
           profiles: { main: { id: "main", identities: ["youtube:test-user-yt-gamma"], greetingCommand: "!bye" } },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
-          selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
-          matchFarewell: createMockFn().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<typeof greetingVfx>>().mockResolvedValue(greetingVfx),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<typeof secondaryVfx>>().mockResolvedValue(secondaryVfx),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1071,11 +1071,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           greetings: { command: "!hello" },
           profiles: { main: { id: "main", identities: ["tiktok:test-unique-id-alpha"], greetingCommand: "!bye" } },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
-          selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
-          matchFarewell: createMockFn().mockReturnValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<typeof greetingVfx>>().mockResolvedValue(greetingVfx),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<typeof secondaryVfx>>().mockResolvedValue(secondaryVfx),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1122,7 +1122,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           greetings: { command: "!hello" },
           profiles: { main: { id: "main", identities: ["twitch:test-user-alpha", "tiktok:test-user-beta"], greetingCommand: "!bye" } },
         },
-        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation((trackingKey) => {
+        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>]) => boolean>().mockImplementation((trackingKey) => {
           if (trackedFirstMessageKeys.has(trackingKey)) {
             return false;
           }
@@ -1184,16 +1184,16 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           greetings: { command: "!hello" },
           profiles: { main: { id: "main", identities: ["twitch:test-user-gamma"], greetingCommand: "!bye" } },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
-          selectVFXCommand: createMockFn((trigger) => {
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<typeof greetingVfx>>().mockResolvedValue(greetingVfx),
+          selectVFXCommand: vi.fn((trigger) => {
             if (trigger === "!bye") {
               return Promise.resolve(secondaryVfx);
             }
             return Promise.resolve(commandVfx);
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1227,8 +1227,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1250,11 +1250,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("propagates avatarUrl to farewell notification payload options", async () => {
-    const addItem = createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => [item]);
+    const addItem = vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => [item]);
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem },
-        prepareFarewellNotification: createMockFn(
+        prepareFarewellNotification: vi.fn(
           async (
             platform: string,
             username: string | undefined,
@@ -1275,8 +1275,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         ),
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1303,10 +1303,10 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
       runtime: {
         vfxCommandService: null,
         commandParser: {
-          getVFXConfig: createMockFn().mockReturnValue({
+          getVFXConfig: vi.fn<(...args: unknown[]) => { command: string; }>().mockReturnValue({
             command: "!testboom",
           }),
-          getMatchingFarewell: createMockFn().mockReturnValue(null),
+          getMatchingFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1340,8 +1340,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1375,10 +1375,10 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1399,12 +1399,12 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   it("emits a single farewell row when farewell and command logic overlap", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1428,15 +1428,15 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   it("continues command routing when farewell notification reports failure", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        prepareFarewellNotification: createMockFn().mockResolvedValue({
+        prepareFarewellNotification: vi.fn<(...args: unknown[]) => Promise<{ success: false; error: string; }>>().mockResolvedValue({
           success: false,
           error: "Notifications disabled",
         }),
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1475,20 +1475,20 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          checkGlobalCooldown: vi.fn<(...args: [string, number]) => boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
-          updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
+          updateUserCooldown: vi.fn<(userId: unknown) => void>(),
+          updateGlobalCooldown: vi.fn<(...args: [string]) => void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1537,20 +1537,20 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          checkGlobalCooldown: vi.fn<(...args: [string, number]) => boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
-          updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
+          updateUserCooldown: vi.fn<(userId: unknown) => void>(),
+          updateGlobalCooldown: vi.fn<(...args: [string]) => void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1595,20 +1595,20 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          checkGlobalCooldown: vi.fn<(...args: [string, number]) => boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
-          updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
+          updateUserCooldown: vi.fn<(userId: unknown) => void>(),
+          updateGlobalCooldown: vi.fn<(...args: [string]) => void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue({
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<{ command: string; }>>().mockResolvedValue({
             command: "!testboom",
           }),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
         },
       },
     });
@@ -1627,10 +1627,10 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
 
   it("uses isolated farewell cooldown keys that do not block regular command cooldown keys", async () => {
     const activeCooldowns = new Set(["farewell:twitch"]);
-    const checkGlobalCooldown = createMockFn<[string, number], boolean>().mockImplementation(
+    const checkGlobalCooldown = vi.fn<(...args: [string, number]) => boolean>().mockImplementation(
       (key) => !activeCooldowns.has(key),
     );
-    const updateGlobalCooldown = createMockFn<[string], void>().mockImplementation((key) => {
+    const updateGlobalCooldown = vi.fn<(...args: [string]) => void>().mockImplementation((key) => {
       activeCooldowns.add(key);
     });
     const { router, runtime } = createRouter({
@@ -1652,19 +1652,19 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           },
         },
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
           checkGlobalCooldown,
-          updateUserCooldown: createMockFn(),
+          updateUserCooldown: vi.fn<(userId: unknown) => void>(),
           updateGlobalCooldown,
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn<[string, string], VfxConfig | null>().mockImplementation((trigger) => {
+          selectVFXCommand: vi.fn<(...args: [string, string]) => VfxConfig | null>().mockImplementation((trigger) => {
             if (trigger === "!testboom") {
               return { command: "!testboom" };
             }
             return null;
           }),
-          matchFarewell: createMockFn<[string, string], string | null>().mockImplementation(
+          matchFarewell: vi.fn<(...args: [string, string]) => string | null>().mockImplementation(
             (_message: string, trigger: string) => {
               if (trigger === "!bye") {
                 return "!bye";
@@ -1696,13 +1696,13 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn<[string, string], VfxConfig | null>().mockImplementation((trigger) => {
+          selectVFXCommand: vi.fn<(...args: [string, string]) => VfxConfig | null>().mockImplementation((trigger) => {
             if (trigger === "!testboom") {
               return { command: "!testboom" };
             }
             return null;
           }),
-          matchFarewell: createMockFn().mockReturnValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
         },
       },
     });
@@ -1799,15 +1799,15 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           throw "plain-farewell-failure";
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockResolvedValue(null),
-          matchFarewell: createMockFn().mockReturnValue("!bye"),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          selectVFXCommand: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
+          matchFarewell: vi.fn<(...args: unknown[]) => string>().mockReturnValue("!bye"),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       },
     });
 
     const capturedErrors: string[] = [];
-    router._handleRouterError = createMockFn<[string], number>((message) =>
+    router._handleRouterError = vi.fn<(...args: [string]) => number>((message) =>
       capturedErrors.push(message),
     );
 

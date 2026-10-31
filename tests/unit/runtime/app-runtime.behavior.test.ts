@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { DependencyFactory } from '../../../src/utils/dependency-factory';
 import { YouTubePlatform } from '../../../src/platforms/youtube';
+import { YouTubeStreamDetectionService } from '../../../src/services/youtube-stream-detection-service';
 import { mkdirSync, writeFileSync, renameSync, unlinkSync, readFileSync } from 'node:fs';
 import type { DisplayQueueItem } from '../../../src/interfaces/DisplayQueue';
 import { createGuiTransportService } from '../../../src/services/gui/gui-transport-service';
@@ -52,8 +53,8 @@ describe('AppRuntime with production main owners', () => {
     const enteredFlush = new Promise<void>(resolve => { entered = resolve; });
     const pendingFlush = new Promise<void>(resolve => { release = resolve; });
     useFakeTimers();
-    const exits: unknown[] = [];
-    const exit = spyOn(process, 'exit').mockImplementation(((code: unknown) => { exits.push(code); }) as never);
+    const completed: boolean[] = [];
+    h.runtime.dependencies.onShutdownComplete = () => { completed.push(true); };
     const originalFlush = h.runtime.logger.flush;
     h.runtime.logger.flush = async () => { entered(); await pendingFlush; throw new Error('Synthetic flush failure'); };
     let finished = false;
@@ -63,16 +64,14 @@ describe('AppRuntime with production main owners', () => {
         await enteredFlush;
         expect(finished).toBe(false);
         advanceTimersByTime(2500);
-        expect(exits).toEqual([]);
+        expect(completed).toEqual([]);
       } finally { release(); }
       await shutdown;
       expect(finished).toBe(true);
-      advanceTimersByTime(1999); expect(exits).toEqual([]);
-      advanceTimersByTime(1); expect(exits).toEqual([0]);
+      expect(completed).toEqual([true]);
     } finally {
       if (originalFlush) h.runtime.logger.flush = originalFlush;
       else delete h.runtime.logger.flush;
-      exit.mockRestore();
     }
   });
 
@@ -211,6 +210,42 @@ describe('AppRuntime with production main owners', () => {
     expect(Reflect.get(h.runtime, 'recordPlatformConnection')).toBeUndefined();
   });
 
+  it('contains an external YouTube discovery failure and recovers through the real reconnect path', async () => {
+    let unavailable = true;
+    const client = {
+      getInfo: async () => ({}),
+      search: async () => ({ videos: [] }),
+      getChannel: async () => {
+        if (unavailable) throw new Error('Synthetic provider unavailable');
+        return { videos: [], getLiveStreams: async () => ({ videos: [] }) };
+      }
+    };
+    const owner = new InnertubeService({ createWithTimeout: async () => client, createWithConfig: async () => client }, { logger: noOpLogger });
+    const config = { ...h.config.youtube, enabled: true, username: 'UC' + 'x'.repeat(22), dataLoggingEnabled: false };
+    const dependencies = new DependencyFactory().createYoutubeDependencies(config, { config: h.config, logger: noOpLogger, innertubeService: owner });
+    const platform = new YouTubePlatform(config, dependencies);
+    const detector = dependencies.streamDetectionService;
+    if (!(detector instanceof YouTubeStreamDetectionService)) throw new Error('Expected production discovery service');
+    const previous = h.runtime.youtube;
+    h.runtime.youtube = platform as unknown as NonNullable<AppRuntime['youtube']>;
+    const event = { eventType: 'stream-detected', newStreamIds: ['synthetic-video'] };
+    try {
+      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
+      expect(detector.getUsageMetrics().failedRequests).toBe(1);
+      expect(h.runtime.isStarted).toBe(true);
+      unavailable = false;
+      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
+      expect(detector.getUsageMetrics().successfulRequests).toBe(1);
+      expect(platform.isInitialized).toBe(true);
+      expect(h.runtime.isStarted).toBe(true);
+    } finally {
+      if (previous === undefined) delete h.runtime.youtube; else h.runtime.youtube = previous;
+      await platform.cleanup();
+      await owner.dispose();
+    }
+    expect(platform.monitoringInterval).toBeNull();
+  });
+
   it('retains the public YouTube reconnect seam with actual repeated initialization and disposal', async () => {
     const logger = noOpLogger;
     const config = { ...h.config.youtube, username: 'synthetic-channel', enabled: false,
@@ -287,24 +322,19 @@ describe('AppRuntime with production main owners', () => {
     });
   }
 
-  it('coalesces concurrent shutdown and preserves the successful-exit deadline and event order', async () => {
-    useFakeTimers();
-    const exits: unknown[] = [];
+  it('coalesces concurrent shutdown and notifies composition after its lifecycle event', async () => {
     const events: unknown[] = [];
-    const exit = spyOn(process, 'exit').mockImplementation(((code: unknown) => { exits.push(code); }) as never);
+    h.runtime.dependencies.onShutdownComplete = () => { events.push('complete'); };
     const unsubscribe = h.bus.subscribe(PlatformEvents.SYSTEM_SHUTDOWN, value => events.push(value));
     try {
       const first = h.runtime.shutdown();
       expect(h.runtime.shutdown()).toBe(first);
       await first;
-      expect(events).toEqual([{ reason: 'manual-shutdown', mode: 'exit' }]);
-      expect(process.exitCode).toBe(0);
-      expect(exits).toEqual([]);
-      advanceTimersByTime(1999); expect(exits).toEqual([]);
-      advanceTimersByTime(1); expect(exits).toEqual([0]);
+      expect(events).toEqual([{ reason: 'manual-shutdown', mode: 'exit' }, 'complete']);
       unsubscribe();
       await h.dispose();
-    } finally { await h.runtime.shutdown(); unsubscribe(); exit.mockRestore(); }
+      expect(events).toHaveLength(2);
+    } finally { await h.runtime.shutdown(); unsubscribe(); }
   });
 
   it('rejects repeated start without reacquiring the actual owners', async () => {
@@ -473,19 +503,18 @@ describe('AppRuntime with production main owners', () => {
   });
 
   for (const diagnostic of ['info', 'debug'] as const) {
-    it(`preserves resource retirement and the forced-exit deadline when ${diagnostic} logging throws`, async () => {
+    it(`preserves resource retirement and completion notification when ${diagnostic} logging throws`, async () => {
       useFakeTimers();
       const logger = h.runtime.logger;
       h.runtime.logger = { ...logger, ...noOpLogger, [diagnostic]: () => { throw new Error('synthetic logging sink failure'); } };
-      const exits: unknown[] = [];
-      const exit = spyOn(process, 'exit').mockImplementation(((code: unknown) => { exits.push(code); }) as never);
+      const completed: boolean[] = [];
+      h.runtime.dependencies.onShutdownComplete = () => { completed.push(true); };
       try {
         await h.runtime.shutdown();
         expect((h.runtime.commandCooldownService as CommandCooldownService).cleanupInterval).toBeNull();
         expect(h.runtime.viewerCountSystem.observers.size).toBe(0);
-        advanceTimersByTime(1999); expect(exits).toEqual([]);
-        advanceTimersByTime(1); expect(exits).toEqual([0]);
-      } finally { await h.runtime.shutdown(); h.runtime.logger = logger; exit.mockRestore(); }
+        expect(completed).toEqual([true]);
+      } finally { await h.runtime.shutdown(); h.runtime.logger = logger; }
     });
   }
 

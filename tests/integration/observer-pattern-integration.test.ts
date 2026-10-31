@@ -1,11 +1,6 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { vi, type Mock, describe, test, beforeEach, afterEach, expect } from 'bun:test';
 import { EventEmitter } from "node:events";
-import {
-  clearAllMocks,
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../helpers/bun-mock-utils";
+
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import { createConfigFixture } from "../helpers/config-fixture";
 import testClock from "../helpers/test-clock";
@@ -30,14 +25,14 @@ type StreamStatusUpdate = {
 
 type TestObserver = {
   getObserverId: () => string;
-  onViewerCountUpdate: TestMockFn<[ViewerCountUpdate], unknown>;
-  onStreamStatusChange: TestMockFn<[StreamStatusUpdate], unknown>;
-  initialize: TestMockFn<[], unknown>;
-  cleanup: TestMockFn<[], unknown>;
+  onViewerCountUpdate: Mock<(...args: [ViewerCountUpdate]) => Promise<void>>;
+  onStreamStatusChange: Mock<(...args: [StreamStatusUpdate]) => unknown>;
+  initialize: Mock<(...args: []) => Promise<void>>;
+  cleanup: Mock<(...args: []) => Promise<void>>;
 };
 
 class SyntheticObsSocket extends EventEmitter {
-  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+  call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<Record<string, unknown>>>()
     .mockResolvedValue({ status: "success" });
   async connect() {
     this.emit("Identified");
@@ -56,7 +51,7 @@ const createViewerCountLogger = () => ({
 });
 
 const expectFirstArg = <Args extends unknown[]>(
-  mockFn: TestMockFn<Args, unknown>,
+  mockFn: Mock<(...args: Args) => unknown>,
 ): Args[0] => {
   const firstCall = mockFn.mock.calls[0];
   expect(firstCall).toBeDefined();
@@ -67,7 +62,7 @@ const expectFirstArg = <Args extends unknown[]>(
 };
 
 const expectCallArg = <Args extends unknown[]>(
-  mockFn: TestMockFn<Args, unknown>,
+  mockFn: Mock<(...args: Args) => unknown>,
   callIndex: number,
 ): Args[0] => {
   const call = mockFn.mock.calls[callIndex];
@@ -102,10 +97,10 @@ describe("Observer Pattern Integration", () => {
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
   let platforms: {
     youtube: {
-      getViewerCount: TestMockFn<[], Promise<unknown>>;
+      getViewerCount: Mock<(...args: []) => Promise<unknown>>;
     };
     twitch: {
-      getViewerCount: TestMockFn<[], Promise<unknown>>;
+      getViewerCount: Mock<(...args: []) => Promise<unknown>>;
     };
   };
   let logger: ReturnType<typeof createViewerCountLogger>;
@@ -133,10 +128,10 @@ describe("Observer Pattern Integration", () => {
     logger = createViewerCountLogger();
     platforms = {
       youtube: {
-        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 1000),
+        getViewerCount: vi.fn<(...args: []) => Promise<unknown>>(async () => 1000),
       },
       twitch: {
-        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 2000),
+        getViewerCount: vi.fn<(...args: []) => Promise<unknown>>(async () => 2000),
       },
     };
 
@@ -160,8 +155,8 @@ describe("Observer Pattern Integration", () => {
         await obsManager.disconnect();
       }
     } finally {
-      clearAllMocks();
-      restoreAllMocks();
+      vi.clearAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -180,7 +175,7 @@ describe("Observer Pattern Integration", () => {
 
     test("should reject observers without required interface methods", () => {
       const invalidObserver = {
-        onViewerCountUpdate: createMockFn(),
+        onViewerCountUpdate: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       expect(() => {
@@ -448,8 +443,8 @@ describe("Observer Pattern Integration", () => {
     test("broadcasts all platform updates to a registered observer", async () => {
       const youtubeObserver = {
         getObserverId: () => "youtube-only-observer",
-        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], void>(),
-        onStreamStatusChange: createMockFn(),
+        onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => void>(),
+        onStreamStatusChange: vi.fn<(...args: unknown[]) => unknown>(),
       };
       viewerCountSystem.addObserver(youtubeObserver);
 
@@ -602,9 +597,9 @@ describe("Observer Pattern Integration", () => {
 function createTestObserver(id: string): TestObserver {
   return {
     getObserverId: () => id,
-    onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
-    onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
-    initialize: createMockFn<[], unknown>(),
-    cleanup: createMockFn<[], unknown>(),
+    onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => Promise<void>>(),
+    onStreamStatusChange: vi.fn<(...args: [StreamStatusUpdate]) => unknown>(),
+    initialize: vi.fn<(...args: []) => Promise<void>>(),
+    cleanup: vi.fn<(...args: []) => Promise<void>>(),
   };
 }

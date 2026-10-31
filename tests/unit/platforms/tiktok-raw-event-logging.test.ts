@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { createTikTokLifetimeFixture } from "../../helpers/tiktok-connector-fixture";
 
 type TikTokLifetimeFixture = ReturnType<typeof createTikTokLifetimeFixture>;
@@ -16,7 +16,7 @@ describe("TikTokPlatform raw event logging", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

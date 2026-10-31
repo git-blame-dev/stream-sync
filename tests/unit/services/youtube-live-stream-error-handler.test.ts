@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, beforeEach, expect } from 'bun:test';
+
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service.ts";
 
 type ChannelVideo = {
@@ -13,14 +13,14 @@ type ChannelVideo = {
 };
 type ChannelLike = { videos?: ChannelVideo[] };
 type InnertubeClient = {
-  getChannel: ReturnType<typeof createMockFn<[channelId: string], Promise<ChannelLike | null>>>;
-  search: ReturnType<typeof createMockFn<[query: string], Promise<{ videos?: ChannelVideo[] }>>>;
+  getChannel: ReturnType<typeof vi.fn<(...args: [channelId: string]) => Promise<ChannelLike | null>>>;
+  search: ReturnType<typeof vi.fn<(...args: [query: string]) => Promise<{ videos?: ChannelVideo[] }>>>;
 };
 type TestLogger = {
-  debug: ReturnType<typeof createMockFn<[message: string, scope?: string, payload?: unknown], void>>;
-  info: ReturnType<typeof createMockFn<[message: string, scope?: string, payload?: unknown], void>>;
-  warn: ReturnType<typeof createMockFn<[message: string, scope?: string, payload?: unknown], void>>;
-  error: ReturnType<typeof createMockFn<[message: string, scope?: string, payload?: unknown], void>>;
+  debug: ReturnType<typeof vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>>;
+  info: ReturnType<typeof vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>>;
+  warn: ReturnType<typeof vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>>;
+  error: ReturnType<typeof vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>>;
 };
 
 describe("YouTubeLiveStreamService error handler integration", () => {
@@ -41,14 +41,14 @@ describe("YouTubeLiveStreamService error handler integration", () => {
 
   beforeEach(() => {
     mockInnertube = {
-      getChannel: createMockFn<[channelId: string], Promise<ChannelLike | null>>(),
-      search: createMockFn<[query: string], Promise<{ videos?: ChannelVideo[] }>>(),
+      getChannel: vi.fn<(...args: [channelId: string]) => Promise<ChannelLike | null>>(),
+      search: vi.fn<(...args: [query: string]) => Promise<{ videos?: ChannelVideo[] }>>(),
     };
     mockLogger = {
-      debug: createMockFn<[message: string, scope?: string, payload?: unknown], void>(),
-      info: createMockFn<[message: string, scope?: string, payload?: unknown], void>(),
-      warn: createMockFn<[message: string, scope?: string, payload?: unknown], void>(),
-      error: createMockFn<[message: string, scope?: string, payload?: unknown], void>(),
+      debug: vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>(),
+      info: vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>(),
+      warn: vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>(),
+      error: vi.fn<(...args: [message: string, scope?: string, payload?: unknown]) => void>(),
     };
     YouTubeLiveStreamService._channelCache = new Map();
   });
@@ -65,9 +65,7 @@ describe("YouTubeLiveStreamService error handler integration", () => {
   });
 
   it("routes API failure through error handler at error level", async () => {
-    mockInnertube.getChannel = createMockFn<
-      [channelId: string],
-      Promise<ChannelLike | null>
+    mockInnertube.getChannel = vi.fn<(...args: [channelId: string]) => Promise<ChannelLike | null>
     >().mockRejectedValue(
       new Error("API timeout"),
     );

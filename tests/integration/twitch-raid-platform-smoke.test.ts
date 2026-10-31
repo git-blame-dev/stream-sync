@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
 import { join } from "node:path";
 
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
@@ -6,7 +6,7 @@ import { TwitchPlatform } from "../../src/platforms/twitch";
 import { TwitchAuth } from "../../src/auth/TwitchAuth.ts";
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { waitFor } from "../helpers/event-driven-testing";
@@ -96,7 +96,7 @@ describe("Twitch raid platform flow (smoke)", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -146,7 +146,7 @@ describe("Twitch raid platform flow (smoke)", () => {
       auth.dispose();
       await platformLifecycleService.disconnectAll();
       platformLifecycleService.dispose();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

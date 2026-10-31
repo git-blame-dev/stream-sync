@@ -1,9 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import * as testClock from "../../helpers/test-clock";
 import {
@@ -24,9 +20,9 @@ type SearchResult = Awaited<
   ReturnType<NonNullable<InnertubeClient["search"]>>
 >;
 type MockInnertubeClient = InnertubeClient & {
-  getChannel: TestMockFn<[string], Promise<ChannelLike>>;
-  resolveURL: TestMockFn<[string], Promise<ResolveUrlResult>>;
-  search: TestMockFn<[string, Record<string, unknown>?], Promise<SearchResult>>;
+  getChannel: Mock<(...args: [string]) => Promise<ChannelLike>>;
+  resolveURL: Mock<(...args: [string]) => Promise<ResolveUrlResult>>;
+  search: Mock<(...args: [string, Record<string, unknown>?]) => Promise<SearchResult>>;
 };
 type LiveStreamResult = Awaited<
   ReturnType<typeof YouTubeLiveStreamService.getLiveStreams>
@@ -90,13 +86,13 @@ const lockupView = (options: {
 
 describe("YouTube Live Stream Service - Complete User Experience", () => {
   it("never requests a channel for an invalid resolver browse ID", async () => {
-    const getChannel = createMockFn<[string], Promise<ChannelLike>>().mockResolvedValue({ videos: [] });
+    const getChannel = vi.fn<(...args: [string]) => Promise<ChannelLike>>().mockResolvedValue({ videos: [] });
     YouTubeLiveStreamService._channelCache.clear();
     const result = await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL: async () => ({ payload: { browseId: "PLsynthetic-playlist" } }) }, "@synthetic", { logger: noOpLogger });
     expect(result.observationKind).toBe("unavailable");
     expect(getChannel).not.toHaveBeenCalled();
     expect(YouTubeLiveStreamService._channelCache.size).toBe(0);
-    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>();
+    const resolveURL = vi.fn<(...args: [string]) => Promise<ResolveUrlResult>>();
     expect((await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL }, "雪".repeat(129), { logger: noOpLogger })).observationKind).toBe("unavailable");
     expect(resolveURL).not.toHaveBeenCalled();
     expect(getChannel).not.toHaveBeenCalled();
@@ -105,8 +101,8 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
   it("re-resolves a poisoned cache entry before channel acquisition", async () => {
     const channelId = "UC" + "a".repeat(22);
     YouTubeLiveStreamService._channelCache.set("synthetic", { channelId: "PLsynthetic-playlist", timestamp: testClock.now() });
-    const getChannel = createMockFn<[string], Promise<ChannelLike>>().mockResolvedValue({ videos: [], getLiveStreams: async () => ({ videos: [] }) });
-    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
+    const getChannel = vi.fn<(...args: [string]) => Promise<ChannelLike>>().mockResolvedValue({ videos: [], getLiveStreams: async () => ({ videos: [] }) });
+    const resolveURL = vi.fn<(...args: [string]) => Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
     await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL }, "@synthetic", { logger: noOpLogger });
     expect(resolveURL).toHaveBeenCalledTimes(1);
     expect(getChannel).toHaveBeenCalledWith(channelId);
@@ -116,7 +112,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
   it("bounds channel cache insertion order to 64 entries and honors the existing TTL", async () => {
     YouTubeLiveStreamService._channelCache.clear();
     const channelId = "UC" + "b".repeat(22);
-    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
+    const resolveURL = vi.fn<(...args: [string]) => Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
     const client = { resolveURL, getChannel: async () => ({ videos: [], getLiveStreams: async () => ({ videos: [] }) }) };
     for (let index = 0; index < 65; index++) await YouTubeLiveStreamService.getLiveStreams(client, `@synthetic${index}`, { logger: noOpLogger });
     expect(YouTubeLiveStreamService._channelCache.size).toBe(64);
@@ -165,17 +161,15 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
   beforeEach(() => {
     mockInnertubeClient = {
-      getChannel: createMockFn<[string], Promise<ChannelLike>>(),
-      search: createMockFn<
-        [string, Record<string, unknown>?],
-        Promise<SearchResult>
+      getChannel: vi.fn<(...args: [string]) => Promise<ChannelLike>>(),
+      search: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<SearchResult>
       >(),
-      resolveURL: createMockFn<[string], Promise<ResolveUrlResult>>(),
+      resolveURL: vi.fn<(...args: [string]) => Promise<ResolveUrlResult>>(),
     };
   });
 
   afterEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Live Stream Detection User Experience", () => {
@@ -255,7 +249,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
         },
       });
       mockInnertubeClient.getChannel.mockResolvedValue({
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { type: "LockupView"; content_type: "VIDEO"; content_id: string; metadata: { title: { text: string; }; metadata: { metadata_rows: { metadata_parts: { text: { text: string; }; }[]; badges: never[]; }[]; }; }; content_image: { overlays: { badges: ({ text: string; icon_name: string; badge_style: string; } | { text: string; badge_style: string; icon_name?: never; })[]; }[]; }; }[]; }>>().mockResolvedValue({
           videos: [apiLockup],
         }),
       });
@@ -283,7 +277,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
         title: { text: "Direct API Live B" },
         is_live: true,
       };
-      const getLiveStreams = createMockFn().mockResolvedValue({
+      const getLiveStreams = vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: boolean; }[]; }>>().mockResolvedValue({
         videos: [channelLive, apiLiveB],
       });
       mockInnertubeClient.getChannel.mockResolvedValue({
@@ -568,7 +562,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should provide stream metadata for user content discovery", async () => {
       const channelId = "UCdiverse123456789012345";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; published: string; view_count: string; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "educational123",
@@ -610,7 +604,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should accept Channel ID format directly from users", async () => {
       const channelId = "UCaBcDeFgHiJkLmNoPqRsTuV";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "channelid123",
@@ -642,7 +636,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const username = "popularcreator";
       const resolvedChannelId = "UC" + "u".repeat(22);
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "username123",
@@ -682,7 +676,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const handleInput = "@creativechannel";
       const resolvedChannelId = "UC" + "h".repeat(22);
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "handle123",
@@ -813,7 +807,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should handle international stream titles correctly for global users", async () => {
       const internationalChannelId = "UCinternational123456789";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "intl123",
@@ -848,7 +842,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should handle emoji-rich content for modern user expectations", async () => {
       const emojiChannelId = "UCemojichannel1234567890";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "emoji123",
@@ -885,7 +879,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should preserve special characters in user content", async () => {
       const specialCharChannelId = "UCspecial123456789012345";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "special123",
@@ -987,7 +981,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
           name: "successful_streams",
           setupMock: () => {
             const mockChannel = {
-              getLiveStreams: createMockFn().mockResolvedValue({
+              getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
                 videos: [
                   {
                     id: "test",
@@ -1006,7 +1000,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
           name: "no_streams",
           setupMock: () => {
             const mockChannel = {
-              getLiveStreams: createMockFn().mockResolvedValue({ videos: [] }),
+              getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: never[]; }>>().mockResolvedValue({ videos: [] }),
             };
             mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
           },
@@ -1022,7 +1016,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       ];
 
       for (const scenario of testScenarios) {
-        clearAllMocks();
+        vi.clearAllMocks();
         scenario.setupMock();
 
         const result = await YouTubeLiveStreamService.getLiveStreams(
@@ -1053,7 +1047,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should provide reliable service behavior for repeat users", async () => {
       const reliableChannelId = "UCreliable12345678901234";
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "reliable123",

@@ -1,9 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, afterEach, beforeEach, describe, expect, test } from 'bun:test';
+
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import NotificationManager from "../../../src/notifications/NotificationManager";
@@ -14,20 +10,20 @@ import { noOpLogger } from "../../helpers/mock-factories";
 type QueuedItem = DisplayQueueItem;
 
 type DisplayQueueMock = {
-  addItem: TestMockFn<[QueuedItem], readonly QueuedItem[]>;
-  getQueueLength: TestMockFn<[], number>;
+  addItem: Mock<(...args: [QueuedItem]) => readonly QueuedItem[]>;
+  getQueueLength: Mock<(...args: []) => number>;
 };
 
 type EventBusMock = {
-  emit: TestMockFn<unknown[], unknown>;
-  on: TestMockFn<unknown[], unknown>;
-  off: TestMockFn<unknown[], unknown>;
+  emit: Mock<(...args: unknown[]) => unknown>;
+  on: Mock<(...args: unknown[]) => unknown>;
+  off: Mock<(...args: unknown[]) => unknown>;
 };
 
 type VfxCommandServiceMock = {
-  getVFXConfig: TestMockFn<[string], Promise<{ commandKey: string; filename: string }>>;
-  executeCommand: TestMockFn<unknown[], Promise<{ success: boolean }>>;
-  executeCommandForKey: TestMockFn<unknown[], Promise<{ success: boolean }>>;
+  getVFXConfig: Mock<(...args: [string]) => Promise<{ commandKey: string; filename: string }>>;
+  executeCommand: Mock<(...args: unknown[]) => Promise<{ success: boolean }>>;
+  executeCommandForKey: Mock<(...args: unknown[]) => Promise<{ success: boolean }>>;
 };
 
 const requireQueuedItem = (item: QueuedItem | undefined): QueuedItem => {
@@ -40,7 +36,7 @@ const requireQueuedItem = (item: QueuedItem | undefined): QueuedItem => {
 
 describe("NotificationManager follow/raid/share behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let queuedItems: QueuedItem[];
@@ -53,11 +49,11 @@ describe("NotificationManager follow/raid/share behavior", () => {
   beforeEach(() => {
     queuedItems = [];
     displayQueue = {
-      addItem: createMockFn<[QueuedItem], readonly QueuedItem[]>((item) => {
+      addItem: vi.fn<(...args: [QueuedItem]) => readonly QueuedItem[]>((item) => {
         queuedItems.push(item);
         return [item];
       }),
-      getQueueLength: createMockFn(() => queuedItems.length),
+      getQueueLength: vi.fn(() => queuedItems.length),
     };
 
     config = createConfigFixture({
@@ -70,21 +66,19 @@ describe("NotificationManager follow/raid/share behavior", () => {
     });
 
     vfxCommandService = {
-      getVFXConfig: createMockFn<
-        [string],
-        Promise<{ commandKey: string; filename: string }>
+      getVFXConfig: vi.fn<(...args: [string]) => Promise<{ commandKey: string; filename: string }>
       >(async (commandKey) => ({
         commandKey,
         filename: `${commandKey}.mp4`,
       })),
-      executeCommand: createMockFn<unknown[], Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
-      executeCommandForKey: createMockFn<unknown[], Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
+      executeCommand: vi.fn<(...args: unknown[]) => Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
+      executeCommandForKey: vi.fn<(...args: unknown[]) => Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
     };
 
     eventBus = {
-      emit: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      on: vi.fn<(...args: unknown[]) => unknown>(),
+      off: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     manager = new NotificationManager({

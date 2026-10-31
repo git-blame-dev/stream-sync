@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, afterEach, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -33,17 +33,17 @@ const requirePaypiggyQueueItem = (
 
 describe("NotificationManager paypiggy normalization", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("processes canonical paypiggy notifications with paypiggy priority and VFX command", async () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -70,10 +70,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -97,10 +97,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -121,10 +121,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -145,10 +145,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -169,10 +169,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -193,10 +193,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue({
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; }>>().mockResolvedValue({
           commandKey: "paypiggies",
         }),
       },
@@ -231,9 +231,9 @@ describe("NotificationManager paypiggy normalization", () => {
       () =>
         new NotificationManager({
           displayQueue,
-          eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+          eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
           vfxCommandService: {
-            getVFXConfig: createMockFn().mockResolvedValue(null),
+            getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
           },
           logger: noOpLogger,
           constants,
@@ -250,10 +250,10 @@ describe("NotificationManager paypiggy normalization", () => {
     const displayQueue = createDisplayQueueStub();
     const manager = new NotificationManager({
       displayQueue,
-      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>(), subscribe: vi.fn<(...args: unknown[]) => unknown>() },
       config: createConfigFixture(),
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
       logger: noOpLogger,
       constants,

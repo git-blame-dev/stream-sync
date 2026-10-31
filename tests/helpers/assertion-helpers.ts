@@ -1,6 +1,6 @@
 
 import { expect } from 'bun:test';
-import { isMockFunction } from './bun-mock-utils';
+
 import testClock from './test-clock';
 
 type UnknownRecord = Record<string, unknown>;
@@ -691,7 +691,7 @@ const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expecte
     }
     
     const mockMethod = mockRecord[methodName];
-    if (!isMockFunction(mockMethod)) {
+    if (!(typeof mockMethod === 'function' && 'mock' in mockMethod && typeof mockMethod.mock === 'object' && mockMethod.mock !== null && 'calls' in mockMethod.mock && Array.isArray(mockMethod.mock.calls))) {
         throw new Error(`${methodName} is not a mock function`);
     }
     
@@ -712,7 +712,7 @@ const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expecte
     const validMethods = getStringArray(mockRecord._validMethods);
     const calledMethods = validMethods.filter(method => {
         const candidate = mockRecord[method];
-        return isMockFunction(candidate) && candidate.mock.calls.length > 0;
+        return (typeof candidate === 'function' && 'mock' in candidate && typeof candidate.mock === 'object' && candidate.mock !== null && 'calls' in candidate.mock && Array.isArray(candidate.mock.calls)) && candidate.mock.calls.length > 0;
     });
     
     if (calledMethods.length > 1 || (calledMethods.length === 1 && calledMethods[0] !== methodName)) {
@@ -734,12 +734,16 @@ const expectMethodCallSequence = (mockObject: unknown, expectedSequence: string[
     
     validMethods.forEach(methodName => {
         const mockMethod = mockRecord[methodName];
-        if (isMockFunction(mockMethod)) {
-            mockMethod.mock.calls.forEach((_args, callIndex) => {
+        if ((typeof mockMethod === 'function' && 'mock' in mockMethod && typeof mockMethod.mock === 'object' && mockMethod.mock !== null && 'calls' in mockMethod.mock && Array.isArray(mockMethod.mock.calls))) {
+            const mockState = mockMethod.mock;
+            const calls: unknown[] = mockMethod.mock.calls;
+            calls.forEach((_args, callIndex) => {
                 allCalls.push({
                     method: methodName,
                     callIndex: callIndex,
-                    order: mockMethod.mock.invocationCallOrder?.[callIndex] ?? allCalls.length
+                    order: 'invocationCallOrder' in mockState && Array.isArray(mockState.invocationCallOrder)
+                        ? mockState.invocationCallOrder[callIndex] ?? allCalls.length
+                        : allCalls.length
                 });
             });
         }
@@ -775,7 +779,7 @@ const expectNoUnexpectedCalls = (mockObject: unknown, allowedMethods: string[]):
     const validMethods = getStringArray(mockRecord._validMethods);
     const calledMethods = validMethods.filter(method => {
         const candidate = mockRecord[method];
-        return isMockFunction(candidate) && candidate.mock.calls.length > 0;
+        return (typeof candidate === 'function' && 'mock' in candidate && typeof candidate.mock === 'object' && candidate.mock !== null && 'calls' in candidate.mock && Array.isArray(candidate.mock.calls)) && candidate.mock.calls.length > 0;
     });
     
     const unexpectedMethods = calledMethods.filter(method => !allowedMethods.includes(method));
@@ -796,7 +800,7 @@ const expectMockCallPattern = (mockObject: unknown, pattern: MockCallPattern): v
     
     Object.keys(pattern).forEach(methodName => {
         const mockMethod = mockRecord[methodName];
-        if (!isMockFunction(mockMethod)) {
+        if (!(typeof mockMethod === 'function' && 'mock' in mockMethod && typeof mockMethod.mock === 'object' && mockMethod.mock !== null && 'calls' in mockMethod.mock && Array.isArray(mockMethod.mock.calls))) {
             throw new Error(`${methodName} is not a mock function`);
         }
         

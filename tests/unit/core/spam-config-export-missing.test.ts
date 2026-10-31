@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { config } from "../../../src/core/config";
 
@@ -20,11 +19,6 @@ const getConfig = () => {
 };
 
 initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 describe("Spam Config Export Missing", () => {
   describe("when config module is imported", () => {

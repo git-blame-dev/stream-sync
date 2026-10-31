@@ -1,15 +1,9 @@
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { TwitchViewerCountProvider } from "../../../src/utils/viewer-count-providers";
 import { TwitchApiClient } from "../../../src/utils/api-clients/twitch-api-client";
 import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
 import { secrets } from "../../../src/core/secrets";
-import {
-  describe,
-  test,
-  expect,
-  beforeEach,
-  afterEach,
-} from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import {
   useFakeTimers,
   useRealTimers,
@@ -201,7 +195,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     await drain();
     expect(getTimerCount()).toBe(0);
     secrets.twitch.accessToken = savedToken;
-    restoreAllMocks();
+    vi.restoreAllMocks();
     useRealTimers();
   });
 

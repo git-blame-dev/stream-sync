@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { createMockFn, restoreAllMocks } from '../../helpers/bun-mock-utils';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { captureStderr, captureStdout } from '../../helpers/output-capture';
 import fs from 'fs';
 import * as configModule from '../../../src/core/config.ts';
@@ -94,8 +94,8 @@ describe('Config loading behavior', () => {
     let currentConfig: BuiltConfigShape;
 
     const setupConfigMocks = (content: string, configPath = testConfigPath) => {
-        fs.existsSync = createMockFn((filePath) => filePath === configPath) as unknown as typeof fs.existsSync;
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.existsSync = vi.fn((filePath) => filePath === configPath) as unknown as typeof fs.existsSync;
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === configPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
         }) as unknown as typeof fs.readFileSync;
@@ -119,7 +119,7 @@ describe('Config loading behavior', () => {
     afterEach(() => {
         fs.readFileSync = originalReadFileSync;
         fs.existsSync = originalExistsSync;
-        restoreAllMocks();
+        vi.restoreAllMocks();
         configModule._resetConfigForTesting();
         if (originalConfigPath === undefined) {
             delete process.env.CHAT_BOT_CONFIG_PATH;
@@ -138,7 +138,7 @@ describe('Config loading behavior', () => {
         const stderrCapture = captureStderr();
         process.env.NODE_ENV = 'production';
         try {
-            fs.existsSync = createMockFn(() => false);
+            fs.existsSync = vi.fn(() => false);
             process.env.CHAT_BOT_CONFIG_PATH = '/tmp/non-existent-config.ini';
 
             expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
@@ -362,8 +362,8 @@ viewerCountMethod = youtubei`
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.existsSync = vi.fn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-env-client-id\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
@@ -384,8 +384,8 @@ viewerCountMethod = youtubei`
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.existsSync = vi.fn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-env-file-client-id\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
@@ -406,8 +406,8 @@ viewerCountMethod = youtubei`
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.existsSync = vi.fn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'OTHER_KEY=value\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
@@ -438,7 +438,7 @@ viewerCountMethod = youtubei`
         setupConfigMocks(buildConfig());
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) {
                 reads += 1;
                 return buildConfig();
@@ -457,8 +457,8 @@ viewerCountMethod = youtubei`
     it('rethrows non-validation loading errors', () => {
         const stderrCapture = captureStderr();
         try {
-            fs.existsSync = createMockFn(() => true);
-            fs.readFileSync = createMockFn(() => {
+            fs.existsSync = vi.fn(() => true);
+            fs.readFileSync = vi.fn(() => {
                 throw new Error('failed to read config');
             });
             process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
@@ -476,8 +476,8 @@ viewerCountMethod = youtubei`
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.existsSync = vi.fn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) return configWithEnvEnabled;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-loaded-from-env\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
@@ -494,7 +494,7 @@ viewerCountMethod = youtubei`
             '[general]\n',
             `[general]\nenvFileReadEnabled = false\nenvFilePath = ${envPath}\n`
         );
-        fs.readFileSync = createMockFn((filePath) => {
+        fs.readFileSync = vi.fn((filePath) => {
             if (filePath === testConfigPath) return configWithEnvDisabled;
             if (filePath === envPath) {
                 throw new Error('env file should not be read when disabled');
@@ -542,8 +542,8 @@ viewerCountMethod = youtubei`
     });
 
     it('handles ENOENT and generic read failures in loadConfig catch branches', () => {
-        fs.existsSync = createMockFn(() => true);
-        fs.readFileSync = createMockFn(() => {
+        fs.existsSync = vi.fn(() => true);
+        fs.readFileSync = vi.fn(() => {
             const error = new Error('missing config file');
             (error as Error & { code?: string }).code = 'ENOENT';
             throw error;
@@ -553,7 +553,7 @@ viewerCountMethod = youtubei`
         const enoentModule = loadFreshConfigModule();
         expect(() => enoentModule.loadConfig()).toThrow('missing config file');
 
-        fs.readFileSync = createMockFn(() => {
+        fs.readFileSync = vi.fn(() => {
             throw new Error('unexpected read failure');
         });
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, spyOn, afterEach } from "bun:test";
-import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, spyOn, afterEach } from 'bun:test';
+
 import { createRecordingLogger } from "../../../helpers/recording-logger";
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
@@ -70,7 +70,7 @@ describe("YouTubePlatform internal behavior", () => {
   });
 
   it("classifies live and upcoming stream validation states", () => {
-    const info = createMockFn();
+    const info = vi.fn<(...args: unknown[]) => unknown>();
     const platform = createPlatform({ logger: { ...noOpLogger, info } });
 
     const liveResult = platform._validateVideoForConnection("video-live", {

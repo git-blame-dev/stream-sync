@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 
 import { TwitchPlatform } from "../../../../src/platforms/twitch.ts";
@@ -53,19 +53,19 @@ type TwitchEventSubFake = {
 };
 
 class TestTwitchApiClient implements TwitchApiClientFake {
-  getBroadcasterId = createMockFn<[string], Promise<string>>().mockResolvedValue("test-broadcaster-id");
-  getStreamInfo = createMockFn<[string], Promise<{ isLive: boolean; stream: unknown | null; viewerCount: number }>>()
+  getBroadcasterId = vi.fn<(...args: [string]) => Promise<string>>().mockResolvedValue("test-broadcaster-id");
+  getStreamInfo = vi.fn<(...args: [string]) => Promise<{ isLive: boolean; stream: unknown | null; viewerCount: number }>>()
     .mockResolvedValue({ isLive: false, stream: null, viewerCount: 0 });
-  getGlobalChatBadges = createMockFn<[], Promise<unknown[]>>().mockResolvedValue([]);
-  getChannelChatBadges = createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([]);
+  getGlobalChatBadges = vi.fn<(...args: []) => Promise<unknown[]>>().mockResolvedValue([]);
+  getChannelChatBadges = vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockResolvedValue([]);
 }
 
 class TestTwitchEventSub implements TwitchEventSubFake {
-  initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
-  on = createMockFn<[string, (...args: unknown[]) => void], void>();
-  isConnected = createMockFn<[], boolean>().mockReturnValue(true);
-  isActive = createMockFn<[], boolean>().mockReturnValue(true);
-  sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
+  initialize = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+  on = vi.fn<(...args: [string, (...args: unknown[]) => void]) => void>();
+  isConnected = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+  isActive = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+  sendMessage = vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue();
 }
 
 type NotificationScenarioKey = "paypiggy" | "giftpaypiggy" | "raid" | "gift";
@@ -111,9 +111,9 @@ const createApiClientFake = (
 });
 
 const createTwitchAuth = (overrides: TwitchAuthFake = {}) => ({
-  isReady: createMockFn().mockReturnValue(overrides.ready ?? true),
-  refreshTokens: createMockFn().mockResolvedValue(true),
-  getUserId: createMockFn().mockReturnValue(overrides.userId || "test-user-id"),
+  isReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(overrides.ready ?? true),
+  refreshTokens: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+  getUserId: vi.fn<(...args: unknown[]) => string>().mockReturnValue(overrides.userId || "test-user-id"),
   ...overrides,
 });
 
@@ -137,7 +137,7 @@ const baseConfig = {
 
 describe("TwitchPlatform event behaviors", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
@@ -167,6 +167,8 @@ describe("TwitchPlatform event behaviors", () => {
     expect(validation.valid).toBe(true);
     expect(validation.components.configuration.issues).toHaveLength(0);
     expect(validation.components.twitchAuth.details.ready).toBe(true);
+    await eventSub.cleanup();
+    expect(eventSub.cleanupInterval).toBeNull();
   });
 
   it("keeps stream lifecycle transitions from crashing when polling hooks are missing", async () => {
@@ -291,7 +293,7 @@ describe("TwitchPlatform event behaviors", () => {
   });
 
   it("enriches Twitch bits gifts with Helix cheermote image URL when single-type cheer metadata exists", async () => {
-    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(
+    const getCheermotes = vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockImplementation(
       async (broadcasterId) => {
         if (broadcasterId !== "test-broadcaster-id") {
           return [];
@@ -350,7 +352,7 @@ describe("TwitchPlatform event behaviors", () => {
   });
 
   it("skips Twitch cheermote image enrichment for mixed bits gifts", async () => {
-    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(async () => [
+    const getCheermotes = vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockImplementation(async () => [
       {
         prefix: "Cheer",
         tiers: [
@@ -403,7 +405,7 @@ describe("TwitchPlatform event behaviors", () => {
 
   it("reuses cached Twitch cheermote catalog across repeated bits gifts", async () => {
     let requestCount = 0;
-    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(async () => {
+    const getCheermotes = vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockImplementation(async () => {
       requestCount += 1;
       if (requestCount === 1) {
         return [
@@ -561,7 +563,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     platform.apiClient = createApiClientFake({
-      getGlobalChatBadges: createMockFn<[], Promise<unknown[]>>().mockResolvedValue([
+      getGlobalChatBadges: vi.fn<(...args: []) => Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -583,7 +585,7 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-      getChannelChatBadges: createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([
+      getChannelChatBadges: vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "founder",
           versions: [
@@ -640,7 +642,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     platform.apiClient = createApiClientFake({
-      getGlobalChatBadges: createMockFn<[], Promise<unknown[]>>().mockResolvedValue([
+      getGlobalChatBadges: vi.fn<(...args: []) => Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -652,7 +654,7 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-      getChannelChatBadges: createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([
+      getChannelChatBadges: vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -694,7 +696,7 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const getGlobalChatBadges = createMockFn<[], Promise<unknown[]>>()
+    const getGlobalChatBadges = vi.fn<(...args: []) => Promise<unknown[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
@@ -709,7 +711,7 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]);
-    const getChannelChatBadges = createMockFn<[unknown], Promise<unknown[]>>()
+    const getChannelChatBadges = vi.fn<(...args: [unknown]) => Promise<unknown[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
@@ -748,7 +750,7 @@ describe("TwitchPlatform event behaviors", () => {
 
     const lookupCalls: string[] = [];
     platform.apiClient = createApiClientFake({
-      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
+      getUserById: vi.fn<(...args: [string]) => Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
@@ -790,7 +792,7 @@ describe("TwitchPlatform event behaviors", () => {
 
     const lookupCalls: string[] = [];
     platform.apiClient = createApiClientFake({
-      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
+      getUserById: vi.fn<(...args: [string]) => Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
@@ -902,7 +904,7 @@ describe("TwitchPlatform event behaviors", () => {
 
     const lookupCalls: string[] = [];
     platform.apiClient = createApiClientFake({
-      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
+      getUserById: vi.fn<(...args: [string]) => Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
@@ -1029,7 +1031,7 @@ describe("TwitchPlatform event behaviors", () => {
 
     const lookupCalls: string[] = [];
     platform.apiClient = createApiClientFake({
-      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
+      getUserById: vi.fn<(...args: [string]) => Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return null;
       }),
@@ -1063,7 +1065,7 @@ describe("TwitchPlatform event behaviors", () => {
 
     const lookupCalls: string[] = [];
     platform.apiClient = createApiClientFake({
-      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
+      getUserById: vi.fn<(...args: [string]) => Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         throw new Error("helix unavailable");
       }),
@@ -1187,9 +1189,7 @@ describe("TwitchPlatform event behaviors", () => {
       data: unknown;
     }> = [];
     class RecordingLoggingService {
-      logRawPlatformData = createMockFn<
-        [platform: string, eventType: string, data: unknown],
-        Promise<void>
+      logRawPlatformData = vi.fn<(...args: [platform: string, eventType: string, data: unknown]) => Promise<void>
       >().mockImplementation(async (platform, eventType, data) => {
         recorded.push({ platform, eventType, data });
       });
@@ -1207,8 +1207,8 @@ describe("TwitchPlatform event behaviors", () => {
     );
 
     platform.handlers = {
-      onChat: createMockFn(),
-      onStreamStatus: createMockFn(),
+      onChat: vi.fn<(...args: unknown[]) => unknown>(),
+      onStreamStatus: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     await platform.onMessageHandler({

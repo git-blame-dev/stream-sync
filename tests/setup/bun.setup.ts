@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, vi } from 'bun:test';
 import { createRequire } from 'node:module';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -21,29 +21,14 @@ const { initializeStaticSecrets, _resetForTesting } = nodeRequire('../../src/cor
 };
 
 initializeTestLogging();
-const {
-    createMockFn,
-    clearAllMocks,
-    restoreAllMocks
-} = nodeRequire('../helpers/bun-mock-utils');
-const { mockModule } = nodeRequire('../helpers/bun-module-mocks');
-const {
-    installTimerTracking,
-    clearTrackedTimers,
-    restoreTimerTracking
-} = nodeRequire('../helpers/bun-timers');
 
 type SetupGlobalState = typeof globalThis & {
-    __ORIGINAL_PROCESS_EXIT__?: typeof process.exit;
-    __NOOP_PROCESS_EXIT__?: (code?: string | number | null) => void;
     scheduleTestTimeout: typeof scheduleTimeout;
     restoreConsole: () => void;
     originalConsole: Console;
 };
 
 const setupGlobal = global as SetupGlobalState;
-const originalProcessExit = setupGlobal.__ORIGINAL_PROCESS_EXIT__ || process.exit;
-const noopProcessExit = setupGlobal.__NOOP_PROCESS_EXIT__ || (() => {});
 const originalConsole = setupGlobal.console;
 
 setupGlobal.scheduleTestTimeout = scheduleTimeout;
@@ -51,90 +36,6 @@ setupGlobal.scheduleTestTimeout = scheduleTimeout;
 setupGlobal.restoreConsole = () => {
     setupGlobal.console = originalConsole;
 };
-
-const createWebSocketMock = () => {
-    const webSocketMock = createMockFn().mockImplementation(() => ({
-        on: createMockFn(),
-        send: createMockFn(),
-        close: createMockFn(),
-        readyState: 1,
-        CONNECTING: 0,
-        OPEN: 1,
-        CLOSING: 2,
-        CLOSED: 3
-    }));
-    webSocketMock.CONNECTING = 0;
-    webSocketMock.OPEN = 1;
-    webSocketMock.CLOSING = 2;
-    webSocketMock.CLOSED = 3;
-    return webSocketMock;
-};
-
-const createAxiosMock = () => ({
-    post: createMockFn().mockResolvedValue({ data: { data: [] } }),
-    get: createMockFn().mockResolvedValue({ data: { data: [] } }),
-    delete: createMockFn().mockResolvedValue({ data: { data: [] } }),
-    create: createMockFn(() => ({
-        post: createMockFn().mockResolvedValue({ data: { data: [] } }),
-        get: createMockFn().mockResolvedValue({ data: { data: [] } }),
-        delete: createMockFn().mockResolvedValue({ data: { data: [] } })
-    }))
-});
-
-const createYoutubeiMock = () => ({
-    Innertube: {
-        create: createMockFn().mockResolvedValue({
-            session: {
-                context: {
-                    client: {
-                        clientName: 'WEB',
-                        clientVersion: '2.0.0'
-                    }
-                }
-            },
-            call: createMockFn().mockResolvedValue({}),
-            actions: {
-                session: {
-                    getStreamingData: createMockFn().mockResolvedValue({})
-                }
-            },
-            getInfo: createMockFn().mockResolvedValue({
-                basic_info: {
-                    title: 'Mock Video Title',
-                    channel: { name: 'Mock Channel' },
-                    view_count: 1000,
-                    like_count: 100
-                },
-                player_overlays: {
-                    player_overlay_renderer: {
-                        view_count: { text: '1,234 watching' }
-                    }
-                },
-                video_details: {
-                    view_count: '1234'
-                }
-            }),
-            getBasicInfo: createMockFn().mockResolvedValue({
-                basic_info: {
-                    title: 'Mock Video Title',
-                    view_count: 1000
-                }
-            })
-        })
-    }
-});
-
-const registerModuleMocks = () => {
-    const webSocketMock = createWebSocketMock();
-
-    mockModule('ws', () => webSocketMock);
-
-    mockModule('axios', createAxiosMock);
-
-    mockModule('youtubei.js', createYoutubeiMock);
-};
-
-registerModuleMocks();
 
 beforeAll(() => {
     process.env.NODE_ENV = 'test';
@@ -149,42 +50,23 @@ beforeAll(() => {
     _resetForTesting();
     initializeStaticSecrets();
 
-    process.exit = createMockFn((code = 0) => noopProcessExit(code));
-
     setupGlobal.originalConsole = originalConsole;
-    const mockedConsole: Console = {
-        ...originalConsole,
-        log: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    };
-    setupGlobal.console = mockedConsole;
-
-    installTimerTracking();
 });
 
 beforeEach(() => {
     testClock.reset();
     resetDeterministicTestState();
-    clearAllMocks();
-});
-
-afterEach(() => {
-    clearTrackedTimers();
+    const mockedConsole: Console = {
+        ...originalConsole,
+        log: vi.fn<(...args: unknown[]) => unknown>(),
+        info: vi.fn<(...args: unknown[]) => unknown>(),
+        warn: vi.fn<(...args: unknown[]) => unknown>(),
+        error: vi.fn<(...args: unknown[]) => unknown>(),
+        debug: vi.fn<(...args: unknown[]) => unknown>()
+    };
+    setupGlobal.console = mockedConsole;
 });
 
 afterAll(() => {
-    process.exit = originalProcessExit;
     setupGlobal.console = originalConsole;
-    restoreTimerTracking();
-    restoreAllMocks();
 });
-
-export {
-    registerModuleMocks,
-    createWebSocketMock,
-    createAxiosMock,
-    createYoutubeiMock
-};

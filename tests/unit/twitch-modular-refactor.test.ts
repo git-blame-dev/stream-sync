@@ -1,17 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
+import { vi, type Mock, afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { noOpLogger } from "../helpers/mock-factories";
 import {
   initializeStaticSecrets,
   secrets,
   _resetForTesting,
 } from "../../src/core/secrets";
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 import {
   ConnectionState,
@@ -23,16 +16,15 @@ import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-provider
 
 type TwitchAuth = { refreshTokens: () => Promise<boolean> };
 type TwitchConfig = { clientId?: string; channel?: string; username?: string; enabled?: boolean; eventSub?: { isActive: () => boolean } };
-type HttpGetMock = ReturnType<typeof createMockFn> &
-  ((url: string, options?: Record<string, unknown>) => Promise<Record<string, unknown>>);
+type HttpGet = (url: string, options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
+type HttpGetMock = Mock<HttpGet>;
 type HttpClient = { get: HttpGetMock };
 const createHttpClient = (): HttpClient => ({
-  get: createMockFn() as HttpGetMock,
+  get: vi.fn<HttpGet>(),
 });
 
 describe("TwitchPlatform Modular Refactor", () => {
   afterEach(() => {
-    restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
@@ -140,7 +132,7 @@ describe("TwitchPlatform Modular Refactor", () => {
       secrets.twitch.accessToken = "test_token";
       mockLogger = noOpLogger;
       mockTwitchAuth = {
-        refreshTokens: createMockFn().mockResolvedValue(true),
+        refreshTokens: vi.fn().mockResolvedValue(true),
       };
       mockHttpClient = createHttpClient();
       apiClient = new TwitchApiClient(
@@ -255,7 +247,7 @@ describe("TwitchPlatform Modular Refactor", () => {
     beforeEach(() => {
       mockLogger = noOpLogger;
       secrets.twitch.accessToken = "synthetic-token";
-      sdkGet = createMockFn() as HttpGetMock;
+      sdkGet = vi.fn<HttpGet>();
       apiClient = new TwitchApiClient(null, { clientId: "synthetic-client" }, noOpLogger, {
         enhancedHttpClient: new EnhancedHttpClient({ logger: noOpLogger, axios: {
           get: sdkGet, post: async () => ({}), put: async () => ({}), delete: async () => ({}),
@@ -347,7 +339,7 @@ describe("connection state interface consistency", () => {
 
     it("should provide consistent viewer count interface", () => {
       const mockApiClient = new TwitchApiClient(
-        { refreshTokens: createMockFn().mockResolvedValue(true) },
+        { refreshTokens: vi.fn().mockResolvedValue(true) },
         { clientId: "test_client_id" },
         noOpLogger,
         { enhancedHttpClient: createHttpClient() },

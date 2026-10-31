@@ -1,10 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import {
   useFakeTimers,
   useRealTimers,
@@ -12,45 +7,42 @@ import {
   getTimerCount,
 } from "../../helpers/bun-timers";
 
+import { dirname } from "node:path";
+import { withNativeChildEnvironment } from "../../helpers/native-child-environment";
+
 import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
 
 type MockGracefulRuntime = {
-  shutdown: TestMockFn<[], Promise<void>>;
-  getPlatforms: TestMockFn<[], Record<string, unknown>>;
+  shutdown: Mock<(...args: []) => Promise<void>>;
+  getPlatforms: Mock<(...args: []) => Record<string, unknown>>;
 };
-type ProcessExitMock = TestMockFn<[code?: string | number | null], never>;
 
 describe("GracefulExitService", () => {
   let gracefulExitService: GracefulExitService | null;
   let mockAppRuntime: MockGracefulRuntime;
-  let originalExit: typeof process.exit;
-  let exitMock: ProcessExitMock;
 
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
     useFakeTimers();
 
     mockAppRuntime = {
-      shutdown: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
-      getPlatforms: createMockFn<[], Record<string, unknown>>().mockReturnValue({
+      shutdown: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
+      getPlatforms: vi.fn<(...args: []) => Record<string, unknown>>().mockReturnValue({
         tiktok: {},
         twitch: {},
         youtube: {},
       }),
     };
 
-    originalExit = process.exit;
-    exitMock = createMockFn<[code?: string | number | null], never>();
-    process.exit = exitMock;
   });
 
   afterEach(() => {
     if (gracefulExitService && typeof gracefulExitService.stop === "function") {
       gracefulExitService.stop();
     }
+    expect(getTimerCount()).toBe(0);
     useRealTimers();
-    restoreAllMocks();
-    process.exit = originalExit;
+    vi.restoreAllMocks();
     gracefulExitService = null;
   });
 
@@ -157,7 +149,29 @@ describe("GracefulExitService", () => {
 
       expect(getTimerCount()).toBe(0);
       advanceTimersByTime(20000);
-      expect(exitMock).not.toHaveBeenCalled();
+      expect(getTimerCount()).toBe(0);
+    });
+
+    it("stop retires a failed shutdown deadline before resetting timers", async () => {
+      mockAppRuntime.shutdown.mockRejectedValue(new Error("Synthetic shutdown failure"));
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      await gracefulExitService.triggerExit();
+      expect(getTimerCount()).toBe(1);
+      gracefulExitService.stop();
+      expect(getTimerCount()).toBe(0);
+    });
+
+    it("stop retires the deadline while shutdown is still pending", async () => {
+      const pending = Promise.withResolvers<void>();
+      mockAppRuntime.shutdown.mockImplementation(() => pending.promise);
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      const shutdown = gracefulExitService.triggerExit();
+      expect(getTimerCount()).toBe(1);
+      gracefulExitService.stop();
+      expect(getTimerCount()).toBe(0);
+      pending.resolve();
+      await shutdown;
+      expect(getTimerCount()).toBe(0);
     });
 
     it("retains only the original force-exit deadline after both shutdown attempts fail", async () => {
@@ -176,13 +190,9 @@ describe("GracefulExitService", () => {
       await gracefulExitService.triggerExit();
       expect(mockAppRuntime.shutdown).toHaveBeenCalledTimes(2);
       advanceTimersByTime(5999);
-      expect(exitMock).not.toHaveBeenCalled();
-      advanceTimersByTime(1);
-      expect(exitMock).toHaveBeenCalledTimes(1);
-      expect(exitMock.mock.calls[0]?.[0]).toBe(1);
+      expect(getTimerCount()).toBe(1);
+      gracefulExitService.stop();
       expect(getTimerCount()).toBe(0);
-      advanceTimersByTime(10000);
-      expect(exitMock).toHaveBeenCalledTimes(1);
     });
 
     it("should handle shutdown errors gracefully", async () => {
@@ -196,21 +206,31 @@ describe("GracefulExitService", () => {
       expect(gracefulExitService.isShuttingDown).toBe(true);
     });
 
-    it("should force exit after timeout if shutdown hangs", async () => {
-      mockAppRuntime.shutdown.mockImplementation(() => new Promise(() => {}));
-
-      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
-      gracefulExitService.incrementMessageCount();
-
-      gracefulExitService.triggerExit();
-
-      advanceTimersByTime(10000);
-
-      await Promise.resolve();
-
-      expect(process.exit).toHaveBeenCalledTimes(1);
-      expect(exitMock.mock.calls[0]?.[0]).toBe(1);
-    });
+    for (const outcome of ["hang", "reject"] as const) {
+      it(`uses native process exit when shutdown attempts ${outcome}`, async () => {
+        await withNativeChildEnvironment(async (env) => {
+          const script = `
+            import { GracefulExitService } from ${JSON.stringify(import.meta.resolve("../../../src/services/GracefulExitService.ts"))};
+            let attempts = 0;
+            const runtime = { shutdown() {
+              attempts++;
+              process.stdout.write('ATTEMPT:' + attempts + ';');
+              return ${outcome === "hang" ? "new Promise(() => {})" : "Promise.reject(new Error('Synthetic shutdown failure'))"};
+            } };
+            const service = new GracefulExitService(runtime, 1, { forceExitTimeoutMs: 20 });
+            void service.triggerExit();
+            process.on('exit', code => process.stdout.write('NATIVE_EXIT:' + code));
+          `;
+          const child = Bun.spawnSync([process.execPath, "--no-env-file", "--eval", script], {
+            cwd: dirname(env.CHAT_BOT_CONFIG_PATH!), env, stdout: "pipe", stderr: "pipe", timeout: 5000,
+          });
+          expect(child.exitCode).toBe(1);
+          expect(child.stdout.toString()).toContain("ATTEMPT:1");
+          expect(child.stdout.toString().includes("ATTEMPT:2")).toBe(outcome === "reject");
+          expect(child.stdout.toString()).toContain("NATIVE_EXIT:1");
+        });
+      });
+    }
   });
 
   describe("Statistics and Reporting", () => {

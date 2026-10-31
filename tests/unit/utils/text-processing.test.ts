@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import {
   TextProcessingManager,
   createTextProcessingManager,
@@ -11,12 +10,6 @@ import {
 type TextProcessingManagerInstance = InstanceType<typeof TextProcessingManager>;
 
 initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 describe("Text Processing", () => {
   let textProcessing: TextProcessingManagerInstance;

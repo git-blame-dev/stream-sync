@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { vi, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { EventEmitter } from "node:events";
 import { OBSConnectionManager } from "../../../src/obs/connection";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../../helpers/behavior-validation";
 import { OBSViewerCountObserver } from "../../../src/observers/obs-viewer-count-observer";
 import { ViewerCountObserver } from "../../../src/observers/viewer-count-observer";
 
 class SyntheticObsSocket extends EventEmitter {
-  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+  call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<Record<string, unknown>>>()
     .mockResolvedValue({ status: "success" });
   async connect() { this.emit("Identified"); return { obsWebSocketVersion: "synthetic" }; }
   async disconnect() { this.emit("ConnectionClosed"); }

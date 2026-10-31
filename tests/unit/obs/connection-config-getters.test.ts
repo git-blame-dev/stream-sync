@@ -1,10 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
-import type { TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
+
 import {
   secrets,
   _resetForTesting,
@@ -27,33 +23,30 @@ type ObsConfig = NonNullable<ConnectionDependencies["config"]>;
 type ObsSocketLike = InstanceType<NonNullable<ConnectionDependencies["OBSWebSocket"]>> & {
   identified?: boolean;
 };
-type ConnectMock = TestMockFn<
-  [address?: string, password?: string],
-  Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>
->;
+type ConnectMock = Mock<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>;
 type TestObsSocket = Omit<ObsSocketLike, "connect"> & { connect: ConnectMock };
-type ObsWebSocketCtorMock = TestMockFn<[], ObsSocketLike> & (new () => ObsSocketLike);
+type ObsWebSocketCtorMock = Mock<(...args: []) => ObsSocketLike> & (new () => ObsSocketLike);
 type IdentifiedHandler = () => void;
 
 const createObsSocketInstance = (): ObsSocketLike => ({
-  connect: createMockFn<[address?: string, password?: string], Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockResolvedValue({
+  connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockResolvedValue({
     obsWebSocketVersion: "5.0.0",
     negotiatedRpcVersion: "1",
   }),
-  disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
-  on: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
-  off: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
+  disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
+  on: vi.fn<(...args: [string, (data?: { reason?: unknown; code?: unknown }) => void]) => void>(),
+  off: vi.fn<(...args: [string, (data?: { reason?: unknown; code?: unknown }) => void]) => void>(),
   identified: false,
 });
 
 const createObsSocketConstructor = (): ObsWebSocketCtorMock =>
-  createMockFn<[], ObsSocketLike>().mockImplementation(createObsSocketInstance) as ObsWebSocketCtorMock;
+  vi.fn<(...args: []) => ObsSocketLike>().mockImplementation(createObsSocketInstance) as ObsWebSocketCtorMock;
 
 const createConnectingObsInstance = (): TestObsSocket => {
   let identifiedHandler: IdentifiedHandler | null = null;
   const mockOBSInstance: TestObsSocket = {
-    connect: createMockFn<[address?: string, password?: string], Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockImplementation(async () => {
+    connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockImplementation(async () => {
       if (identifiedHandler) {
         scheduleTestTimeout(() => identifiedHandler?.(), 10);
       }
@@ -62,14 +55,14 @@ const createConnectingObsInstance = (): TestObsSocket => {
         negotiatedRpcVersion: "1",
       };
     }),
-    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-    call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
-    on: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>().mockImplementation((event, callback) => {
+    disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+    call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
+    on: vi.fn<(...args: [string, (data?: { reason?: unknown; code?: unknown }) => void]) => void>().mockImplementation((event, callback) => {
       if (event === "Identified") {
         identifiedHandler = () => callback();
       }
     }),
-    off: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
+    off: vi.fn<(...args: [string, (data?: { reason?: unknown; code?: unknown }) => void]) => void>(),
     identified: false,
   };
   return mockOBSInstance;
@@ -87,8 +80,8 @@ describe("OBS Connection Configuration with Getter Properties", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
-    clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     resetOBSConnectionManager();
     _resetForTesting();
     initializeStaticSecrets();

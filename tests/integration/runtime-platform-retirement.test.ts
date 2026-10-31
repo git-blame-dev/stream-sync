@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { expect, spyOn, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import * as constants from '../../src/core/constants';
 import { logger } from '../../src/core/logging';
 import { EventBus } from '../../src/core/EventBus';
@@ -18,16 +18,16 @@ import { NotificationManager } from '../../src/notifications/NotificationManager
 import { ViewerCountObserver } from '../../src/observers/viewer-count-observer';
 import { createConfigFixture } from '../helpers/config-fixture';
 import { noOpLogger } from '../helpers/mock-factories';
-import { advanceTimersByTime, getTimerCount, useFakeTimers, useRealTimers } from '../helpers/bun-timers';
+import { installTimerTracking, restoreTimerTracking, useFakeTimers, useRealTimers } from '../helpers/bun-timers';
 import { createHeldTikTokLifecycle } from '../fixtures/platform-lifecycle-held-tiktok';
 
 const drain = async () => { for (let i = 0; i < 200; i++) await Promise.resolve(); };
 
 test('real chat threshold retires held platform acquisition before the graceful force deadline', async () => {
     useFakeTimers();
-    const originalExitCode = process.exitCode;
-    const exits: Array<Parameters<typeof process.exit>[0]> = [];
-    const exit = spyOn(process, 'exit').mockImplementation(code => { exits.push(code); return undefined as never; });
+    const timers = installTimerTracking().activeTimers;
+    const initialTimers = new Set(timers);
+    const completed: boolean[] = [];
     const steps: string[] = [];
     const fixture = createHeldTikTokLifecycle();
     class ExternalOBS extends EventEmitter {
@@ -85,7 +85,7 @@ test('real chat threshold retires held platform acquisition before the graceful 
         steps.push('Innertube retired');
         throw new Error('Synthetic metadata operation cancelled');
     } });
-    const dependencies = { logging: noOpLogger, eventBus: bus, displayQueue: queue,
+    const dependencies = { onShutdownComplete: () => { completed.push(true); }, logging: noOpLogger, eventBus: bus, displayQueue: queue,
         notificationManager: notifications, vfxCommandService: vfx, userTrackingService: tracking,
         commandCooldownService: cooldown, platformLifecycleService: fixture.lifecycle,
         obsEventService: obsEvents, innertubeService: innertube,
@@ -155,19 +155,13 @@ test('real chat threshold retires held platform acquisition before the graceful 
         expect(() => innertube.withMetadataOperation({}, async () => true)).toThrow('disposed');
         expect(steps).toEqual(['OBS closed', 'viewer cleaned', 'Innertube retired']);
         expect(cooldown.cleanupInterval).toBeNull();
-        expect(process.exitCode).toBe(0);
-        expect(exits).toEqual([]);
+        expect(completed).toEqual([true]);
         await runtime.shutdown();
         await graceful.triggerExit();
         expect(fixture.counters.cleanups).toBe(1);
         expect(transport.closes).toBe(1);
-        // Runtime retains its separate successful-exit fallback at 2s. Crossing
-        // 10s also expires the viewer cleanup's bounded losing 5s wait timer.
-        advanceTimersByTime(10001);
-        await drain();
-        expect(exits).toEqual([0]);
-        expect(exits).not.toContain(1);
-        expect(getTimerCount()).toBe(0);
+        expect(completed).toEqual([true]);
+        expect([...timers].filter(timer => !initialTimers.has(timer))).toEqual([]);
     } finally {
         // Also release owners if an assertion rejects before threshold entry.
         if (fixture.client.isConnecting) await fixture.platform.cleanup();
@@ -177,8 +171,7 @@ test('real chat threshold retires held platform acquisition before the graceful 
         await metadata;
         obs.dispose();
         await pendingOBS;
-        exit.mockRestore();
-        process.exitCode = originalExitCode;
+        restoreTimerTracking();
         useRealTimers();
     }
 });

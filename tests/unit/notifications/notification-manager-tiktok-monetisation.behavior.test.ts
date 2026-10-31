@@ -1,9 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -13,13 +9,13 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import type { DisplayQueueDependency, DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
 type DisplayQueueMock = DisplayQueueDependency & {
-  addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>;
-  getQueueLength: TestMockFn<[], number>;
+  addItem: Mock<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>;
+  getQueueLength: Mock<(...args: []) => number>;
 };
 
 describe("NotificationManager TikTok monetisation behavior", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let displayQueue: DisplayQueueMock;
@@ -32,16 +28,16 @@ describe("NotificationManager TikTok monetisation behavior", () => {
     eventBus: new EventEmitter(),
     constants: require("../../../src/core/constants"),
     config,
-    vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+    vfxCommandService: { getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null) },
     userTrackingService: {
-      isFirstMessage: createMockFn().mockResolvedValue(false),
+      isFirstMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false),
     },
   });
 
   beforeEach(() => {
     displayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      getQueueLength: vi.fn<(...args: []) => number>().mockReturnValue(0),
     };
     config = createConfigFixture({
       general: {
@@ -111,10 +107,10 @@ describe("NotificationManager TikTok monetisation behavior", () => {
       constants: require("../../../src/core/constants"),
       config: disabledConfig,
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
+        isFirstMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(false),
       },
     });
 

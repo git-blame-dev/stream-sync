@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
 import { join } from "node:path";
 
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
@@ -6,7 +6,7 @@ import { TwitchPlatform } from "../../src/platforms/twitch.ts";
 import { TwitchAuth } from "../../src/auth/TwitchAuth.ts";
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 
@@ -81,7 +81,7 @@ describe("Twitch bits gift platform flow (smoke)", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -118,7 +118,7 @@ describe("Twitch bits gift platform flow (smoke)", () => {
       auth.dispose();
       await platformLifecycleService.disconnectAll();
       platformLifecycleService.dispose();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

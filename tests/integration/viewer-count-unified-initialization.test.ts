@@ -1,6 +1,6 @@
-import { describe, test, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import type { TestMockFn } from "../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, afterEach, expect } from 'bun:test';
+
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { TikTokViewerCountProvider } from "../../src/utils/viewer-count-providers";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
@@ -12,8 +12,8 @@ type PlatformBehaviors = Partial<Record<PlatformName, PlatformBehavior>>;
 type ViewerCountSystemUnderTest = InstanceType<typeof ViewerCountSystem>;
 const systems = new Set<ViewerCountSystemUnderTest>();
 type PlatformProviderAdapter = {
-  getViewerCount: TestMockFn<[], Promise<number | null>>;
-  initialize: TestMockFn<[], Promise<boolean>>;
+  getViewerCount: Mock<(...args: []) => Promise<number | null>>;
+  initialize: Mock<(...args: []) => Promise<boolean>>;
   setStreamResponse: (next: () => Promise<number>) => void;
 };
 
@@ -26,10 +26,10 @@ const createConcretePlatformAdapter = (initialViewerCount: number): PlatformProv
     },
     { logger: noOpLogger },
   );
-  const getViewerCount = createMockFn<[], Promise<number | null>>(() =>
+  const getViewerCount = vi.fn<(...args: []) => Promise<number | null>>(() =>
     provider.getViewerCount(),
   );
-  const initialize = createMockFn<[], Promise<boolean>>().mockResolvedValue(true);
+  const initialize = vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true);
 
   return {
     getViewerCount,
@@ -127,7 +127,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await Promise.all([...systems].map((system) => system.cleanup()));
     } finally {
       systems.clear();
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

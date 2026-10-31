@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, beforeEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
@@ -11,7 +11,7 @@ type Runtime = RouterDependencies["runtime"];
 type Logger = RouterDependencies["logger"];
 type DisplayQueueItem = Parameters<NonNullable<Runtime["displayQueue"]>["addItem"]>[0];
 type TestRuntime = Runtime & {
-  displayQueue: { addItem: TestMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]> };
+  displayQueue: { addItem: Mock<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]> };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,22 +72,22 @@ describe("ChatNotificationRouter platform chat behavior", () => {
         youtube: { greetingsEnabled: true, messagesEnabled: true },
       }),
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+        getPlatformConnectionTime: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
       },
       displayQueue: {
-        addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>((items) => items),
+        addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+        addSequence: vi.fn<(...args: [DisplayQueueItem[]]) => readonly DisplayQueueItem[]>((items) => items),
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn().mockReturnValue(true),
-        updateUserCooldown: createMockFn(),
-        updateGlobalCooldown: createMockFn(),
+        checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        checkGlobalCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+        updateUserCooldown: vi.fn<(userId: unknown) => void>(),
+        updateGlobalCooldown: vi.fn<(commandName: string) => void>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockReturnValue(false),
+        isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
       },
-      isFirstMessage: createMockFn().mockReturnValue(false),
+      isFirstMessage: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
     };
 
     const runtime: TestRuntime = { ...baseRuntime, ...runtimeOverrides };
@@ -251,7 +251,7 @@ describe("ChatNotificationRouter platform chat behavior", () => {
         }),
         platformLifecycleService: {
           getPlatformConnectionTime:
-            createMockFn().mockReturnValue(connectionTime),
+            vi.fn<(...args: unknown[]) => typeof connectionTime>().mockReturnValue(connectionTime),
         },
       },
     });

@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach, spyOn } from "bun:test";
+import { vi, describe, test, expect, afterEach, spyOn } from 'bun:test';
 
 import { YouTubePlatform } from "../../src/platforms/youtube";
 import { InnertubeService } from "../../src/services/innertube-service.ts";
@@ -9,7 +9,7 @@ import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture
 import { getSyntheticFixture } from "../helpers/platform-test-data";
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 
 type MonetizationType =
   | "platform:gift"
@@ -71,7 +71,7 @@ describe("Raw provider monetization contract smokes", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -104,7 +104,7 @@ describe("Raw provider monetization contract smokes", () => {
     const addItemSpy = spyOn(presentation.queue, "addItem");
 
     registerCleanup(async () => {
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

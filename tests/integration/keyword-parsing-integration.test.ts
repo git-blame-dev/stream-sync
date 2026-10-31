@@ -1,5 +1,5 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, beforeEach, afterEach, expect } from 'bun:test';
+
 import testClock from "../helpers/test-clock";
 import { CommandParser } from "../../src/chat/commands";
 
@@ -63,7 +63,7 @@ describe("Keyword Parsing Integration", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Complete Flow - Keyword Parsing Enabled", () => {

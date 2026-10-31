@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { initializeTestLogging } from "../../helpers/test-setup";
 initializeTestLogging();
@@ -7,7 +7,7 @@ initializeTestLogging();
 import { YouTubeUserAgentManager } from "../../../src/platforms/youtube/youtube-user-agent-manager";
 describe("YouTube User-Agent Utility", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let userAgentManager: YouTubeUserAgentManager;

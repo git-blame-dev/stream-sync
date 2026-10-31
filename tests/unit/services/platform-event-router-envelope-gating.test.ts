@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -9,18 +9,18 @@ type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
 
 describe("PlatformEventRouter envelope gating", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createRouter = (config: RouterOptions["config"]) =>
     new PlatformEventRouter({
       eventBus: {
-        subscribe: createMockFn(() => createMockFn()),
+        subscribe: vi.fn(() => vi.fn<(...args: unknown[]) => unknown>()),
       },
       runtime: {
-        handleEnvelopeNotification: createMockFn(),
+        handleEnvelopeNotification: vi.fn<(...args: unknown[]) => unknown>(),
       },
-      notificationManager: { handleNotification: createMockFn() },
+      notificationManager: { handleNotification: vi.fn<(...args: unknown[]) => unknown>() },
       config,
       logger: noOpLogger,
     });

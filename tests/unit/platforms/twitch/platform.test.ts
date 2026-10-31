@@ -1,10 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  restoreAllMocks,
-  spyOn,
-} from "../../../helpers/bun-mock-utils";
+import { type Mock, vi, spyOn, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../../../helpers/assertion-helpers";
 import { createTwitchFollowEvent } from "../../../helpers/twitch-test-data";
@@ -49,62 +44,59 @@ type TestRuntime = {
     username: unknown,
     payload: Record<string, unknown>,
   ) => number;
-  handlePaypiggyNotification: TestMockFn;
-  handleGiftNotification: TestMockFn;
-  handleRaidNotification: TestMockFn;
+  handlePaypiggyNotification: Mock<(...args: unknown[]) => unknown>;
+  handleGiftNotification: Mock<(...args: unknown[]) => unknown>;
+  handleRaidNotification: Mock<(...args: unknown[]) => unknown>;
   _calls: RuntimeCalls;
 };
 type TestTwitchAuth = Omit<TwitchAuthLike, "isReady" | "refreshTokens"> & {
-  isReady: TestMockFn<[], boolean>;
-  refreshTokens: TestMockFn<[], Promise<boolean>>;
-  getUserId: TestMockFn<[], string>;
+  isReady: Mock<(...args: []) => boolean>;
+  refreshTokens: Mock<(...args: []) => Promise<boolean>>;
+  getUserId: Mock<(...args: []) => string>;
 };
 type TestApiClient = TwitchApiClientLike & {
-  getChannelInfo: TestMockFn<[string], Promise<{ id: string; name: string }>>;
-  sendChatMessage: TestMockFn<[string], Promise<void>>;
+  getChannelInfo: Mock<(...args: [string]) => Promise<{ id: string; name: string }>>;
+  sendChatMessage: Mock<(...args: [string]) => Promise<void>>;
 };
 type TestViewerCountProvider = Omit<ViewerCountProviderLike, "getViewerCount"> & {
-  getViewerCount: TestMockFn<[], Promise<number>>;
+  getViewerCount: Mock<(...args: []) => Promise<number>>;
 };
 type TestRetrySystem = Omit<
   RetrySystemLike,
   "isConnected" | "handleConnectionError" | "handleConnectionSuccess" | "cancelConnectionRetry"
 > & {
   isConnected: (platform: string) => boolean;
-  handleConnectionError: TestMockFn<
-    [
+  handleConnectionError: Mock<(...args: [
       string,
       Error,
       () => Promise<void>,
       () => Promise<void>,
       (platform: string, isConnected: boolean, connection: unknown, isConnecting: boolean) => void,
-    ],
-    void
-  >;
-  handleConnectionSuccess: TestMockFn<[string, unknown, string], void>;
-  cancelConnectionRetry: TestMockFn<[string], void>;
-  resetRetryCount: TestMockFn;
+    ]) => void>;
+  handleConnectionSuccess: Mock<(...args: [string, unknown, string]) => void>;
+  cancelConnectionRetry: Mock<(...args: [string]) => void>;
+  resetRetryCount: Mock<(...args: unknown[]) => unknown>;
   retryTimers: Record<string, unknown>;
 };
 type TestNotificationBridge = {
-  handleNotification?: TestMockFn<[string, string, Record<string, unknown>], unknown>;
-  handleChatMessage: TestMockFn<[string, Record<string, unknown>], unknown>;
-  handleFollowNotification: TestMockFn;
-  handlePaypiggyNotification: TestMockFn;
-  updateViewerCount: TestMockFn;
+  handleNotification?: Mock<(...args: [string, string, Record<string, unknown>]) => unknown>;
+  handleChatMessage: Mock<(...args: [string, Record<string, unknown>]) => unknown>;
+  handleFollowNotification: Mock<(...args: unknown[]) => unknown>;
+  handlePaypiggyNotification: Mock<(...args: unknown[]) => unknown>;
+  updateViewerCount: Mock<(...args: unknown[]) => unknown>;
 };
 type TestEventSub = Omit<
   TwitchEventSubLike,
   "connect" | "disconnect" | "initialize" | "on" | "isConnected" | "isActive" | "sendMessage"
 > & {
-  connect: TestMockFn<[], Promise<void>>;
-  disconnect: TestMockFn<[], Promise<void>>;
-  initialize: TestMockFn<[], Promise<void>>;
-  on: TestMockFn<[string, (...args: unknown[]) => void], unknown>;
-  emit: TestMockFn;
-  isConnected: TestMockFn<[], boolean>;
-  isActive: TestMockFn<[], boolean>;
-  sendMessage: TestMockFn<[string], Promise<void>>;
+  connect: Mock<(...args: []) => Promise<void>>;
+  disconnect: Mock<(...args: []) => Promise<void>>;
+  initialize: Mock<(...args: []) => Promise<void>>;
+  on: Mock<(...args: [string, (...args: unknown[]) => void]) => unknown>;
+  emit: Mock<(...args: unknown[]) => unknown>;
+  isConnected: Mock<(...args: []) => boolean>;
+  isActive: Mock<(...args: []) => boolean>;
+  sendMessage: Mock<(...args: [string]) => Promise<void>>;
   subscriptionsReady?: boolean;
 };
 type TestPlatform = Omit<
@@ -122,28 +114,25 @@ type EventSubCalls = { initialize: boolean[]; disconnect: boolean[] };
 type ViewerCountProviderCalls = { startPolling: boolean[]; stopPolling: boolean[] };
 
 const createRequiredApiClientMocks = () => ({
-  getBroadcasterId: createMockFn<[string], Promise<string>>().mockResolvedValue(
+  getBroadcasterId: vi.fn<(...args: [string]) => Promise<string>>().mockResolvedValue(
     "123456",
   ),
-  getStreamInfo: createMockFn<
-    [string],
-    ReturnType<TwitchApiClientLike["getStreamInfo"]>
-  >().mockResolvedValue(undefined),
-  getGlobalChatBadges: createMockFn().mockResolvedValue([]),
-  getChannelChatBadges: createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue(
+  getStreamInfo: vi.fn<(...args: [string]) => ReturnType<TwitchApiClientLike["getStreamInfo"]>>().mockResolvedValue({ isLive: false, stream: null, viewerCount: 0 }),
+  getGlobalChatBadges: vi.fn<(...args: unknown[]) => Promise<never[]>>().mockResolvedValue([]),
+  getChannelChatBadges: vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockResolvedValue(
     [],
   ),
 });
 
 const createConnectedEventSub = (): TestEventSub => ({
-  initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  connect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  on: createMockFn<[string, (...args: unknown[]) => void], unknown>(),
-  emit: createMockFn(),
-  isConnected: createMockFn<[], boolean>().mockReturnValue(true),
-  isActive: createMockFn<[], boolean>().mockReturnValue(true),
-  sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
+  initialize: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  connect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  on: vi.fn<(...args: [string, (...args: unknown[]) => void]) => unknown>(),
+  emit: vi.fn<(...args: unknown[]) => unknown>(),
+  isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+  isActive: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+  sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
 });
 
 const toRecordPayload = (payload: unknown): Record<string, unknown> => {
@@ -174,18 +163,18 @@ const spyOnPlatformEmit = (target: { emit: (eventName: string, ...args: unknown[
   spyOn(target as { emit: (eventName: string, ...args: unknown[]) => boolean }, "emit" as never);
 
 const createTestErrorHandler = (overrides: Partial<TwitchPlatform["errorHandler"]>) => ({
-  handleDataLoggingError: createMockFn(),
-  handleEventProcessingError: createMockFn(),
-  handleCleanupError: createMockFn(),
-  handleMessageSendError: createMockFn(),
-  handleConnectionError: createMockFn(),
-  logOperationalError: createMockFn(),
+  handleDataLoggingError: vi.fn<(...args: unknown[]) => unknown>(),
+  handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+  handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
+  handleMessageSendError: vi.fn<(...args: unknown[]) => unknown>(),
+  handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+  logOperationalError: vi.fn<(...args: unknown[]) => unknown>(),
   ...overrides,
 });
 
 describe("Twitch Platform", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let mockTwitchEventSub: TestEventSub;
@@ -209,65 +198,61 @@ describe("Twitch Platform", () => {
     eventSubCalls = { initialize: [], disconnect: [] };
 
     mockTwitchAuth = {
-      isReady: createMockFn<[], boolean>().mockReturnValue(true),
-      refreshTokens: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-      getUserId: createMockFn<[], string>().mockReturnValue("test-user-id"),
+      isReady: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+      refreshTokens: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+      getUserId: vi.fn<(...args: []) => string>().mockReturnValue("test-user-id"),
     };
     mockApiClient = {
       ...createRequiredApiClientMocks(),
-      getChannelInfo: createMockFn<
-        [string],
-        Promise<{ id: string; name: string }>
+      getChannelInfo: vi.fn<(...args: [string]) => Promise<{ id: string; name: string }>
       >().mockResolvedValue({
         id: "123456",
         name: "testchannel",
       }),
-      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(1500),
-      sendChatMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
+      getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(1500),
+      sendChatMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
     };
     mockViewerCountProvider = {
-      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(1500),
+      getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(1500),
       startPolling: () => viewerCountProviderCalls.startPolling.push(true),
       stopPolling: () => viewerCountProviderCalls.stopPolling.push(true),
     };
     mockRetrySystem = {
       isConnected: () => false,
-      handleConnectionError: createMockFn<
-        [
+      handleConnectionError: vi.fn<(...args: [
           string,
           Error,
           () => Promise<void>,
           () => Promise<void>,
           (platform: string, isConnected: boolean, connection: unknown, isConnecting: boolean) => void,
-        ],
-        void
+        ]) => void
       >(),
-      handleConnectionSuccess: createMockFn<[string, unknown, string], void>(),
-      cancelConnectionRetry: createMockFn<[string], void>(),
-      resetRetryCount: createMockFn(),
+      handleConnectionSuccess: vi.fn<(...args: [string, unknown, string]) => void>(),
+      cancelConnectionRetry: vi.fn<(...args: [string]) => void>(),
+      resetRetryCount: vi.fn<(...args: unknown[]) => unknown>(),
       retryTimers: {},
     };
     mockApp = {
-      handleChatMessage: createMockFn<[string, Record<string, unknown>], unknown>(),
-      handleFollowNotification: createMockFn(),
-      handlePaypiggyNotification: createMockFn(),
-      handleNotification: createMockFn(),
-      updateViewerCount: createMockFn(),
+      handleChatMessage: vi.fn<(...args: [string, Record<string, unknown>]) => unknown>(),
+      handleFollowNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      handlePaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      handleNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      updateViewerCount: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     mockTwitchEventSub = {
-      initialize: createMockFn<[], Promise<void>>(async () => {
+      initialize: vi.fn<(...args: []) => Promise<void>>(async () => {
         eventSubCalls.initialize.push(true);
       }),
-      connect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      disconnect: createMockFn<[], Promise<void>>(async () => {
+      connect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      disconnect: vi.fn<(...args: []) => Promise<void>>(async () => {
         eventSubCalls.disconnect.push(true);
       }),
-      on: createMockFn<[string, (...args: unknown[]) => void], unknown>(),
-      emit: createMockFn(),
-      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
-      isActive: createMockFn<[], boolean>().mockReturnValue(true),
-      sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
+      on: vi.fn<(...args: [string, (...args: unknown[]) => void]) => unknown>(),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+      isActive: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+      sendMessage: vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue(),
     };
 
     config = {
@@ -311,7 +296,7 @@ describe("Twitch Platform", () => {
       notificationBridge: mockApp,
       logger: noOpLogger,
       timestampService: {
-        extractTimestamp: createMockFn(() => new Date().toISOString()),
+        extractTimestamp: vi.fn(() => new Date().toISOString()),
       },
     }) as TestPlatform;
 
@@ -353,9 +338,9 @@ describe("Twitch Platform", () => {
         username: unknown,
         payload: Record<string, unknown>,
       ) => runtimeCalls.handleFollowNotification.push([platformName, username, payload]),
-      handlePaypiggyNotification: createMockFn(),
-      handleGiftNotification: createMockFn(),
-      handleRaidNotification: createMockFn(),
+      handlePaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      handleGiftNotification: vi.fn<(...args: unknown[]) => unknown>(),
+      handleRaidNotification: vi.fn<(...args: unknown[]) => unknown>(),
       _calls: runtimeCalls,
     };
 
@@ -385,7 +370,7 @@ describe("Twitch Platform", () => {
 
       platform.eventSub = {
         ...createConnectedEventSub(),
-        isActive: createMockFn<[], boolean>().mockReturnValue(true),
+        isActive: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
       };
       expect(mockRetrySystem.isConnected("twitch")).toBe(true);
     });
@@ -465,10 +450,10 @@ describe("Twitch Platform", () => {
 
     it("fails initialization when EventSub is missing an event emitter interface", async () => {
       platform.TwitchEventSub = class {
-        initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
-        isConnected = createMockFn<[], boolean>().mockReturnValue(true);
-        isActive = createMockFn<[], boolean>().mockReturnValue(true);
-        sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
+        initialize = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        isConnected = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+        isActive = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+        sendMessage = vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue();
       };
 
       await expect(platform.initialize(platformHandlerCallbacks)).rejects.toThrow(
@@ -478,10 +463,10 @@ describe("Twitch Platform", () => {
 
     it("fails initialization when EventSub is missing connectivity methods", async () => {
       platform.TwitchEventSub = class {
-        initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
-        on = createMockFn<[string, (...args: unknown[]) => void], unknown>();
-        isActive = createMockFn<[], boolean>().mockReturnValue(true);
-        sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
+        initialize = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        on = vi.fn<(...args: [string, (...args: unknown[]) => void]) => unknown>();
+        isActive = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+        sendMessage = vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue();
       };
 
       await expect(platform.initialize(platformHandlerCallbacks)).rejects.toThrow(
@@ -491,11 +476,11 @@ describe("Twitch Platform", () => {
 
     it("reports recovery when EventSub does not report an active connection", async () => {
       platform.TwitchEventSub = class {
-        initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
-        on = createMockFn<[string, (...args: unknown[]) => void], unknown>();
-        isConnected = createMockFn<[], boolean>().mockReturnValue(false);
-        isActive = createMockFn<[], boolean>().mockReturnValue(true);
-        sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
+        initialize = vi.fn<(...args: []) => Promise<void>>().mockResolvedValue();
+        on = vi.fn<(...args: [string, (...args: unknown[]) => void]) => unknown>();
+        isConnected = vi.fn<(...args: []) => boolean>().mockReturnValue(false);
+        isActive = vi.fn<(...args: []) => boolean>().mockReturnValue(true);
+        sendMessage = vi.fn<(...args: [string]) => Promise<void>>().mockResolvedValue();
       };
 
       await expect(platform.initialize(platformHandlerCallbacks)).resolves.toMatchObject({
@@ -508,9 +493,9 @@ describe("Twitch Platform", () => {
   describe("when connecting", () => {
     it("should establish connection successfully", async () => {
       const handlers = {
-        onChatMessage: createMockFn(),
-        onFollowNotification: createMockFn(),
-        onPaypiggyNotification: createMockFn(),
+        onChatMessage: vi.fn<(...args: unknown[]) => unknown>(),
+        onFollowNotification: vi.fn<(...args: unknown[]) => unknown>(),
+        onPaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       await platform.initialize(handlers);
@@ -536,9 +521,9 @@ describe("Twitch Platform", () => {
 
     it("should prepare to receive all user events after connection", async () => {
       const handlers = {
-        onChatMessage: createMockFn(),
-        onFollowNotification: createMockFn(),
-        onPaypiggyNotification: createMockFn(),
+        onChatMessage: vi.fn<(...args: unknown[]) => unknown>(),
+        onFollowNotification: vi.fn<(...args: unknown[]) => unknown>(),
+        onPaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
       };
 
       await platform.initialize(handlers);
@@ -551,12 +536,12 @@ describe("Twitch Platform", () => {
 
     it("should recover when EventSub subscriptions are not active yet", async () => {
       const handlers = {
-        onChatMessage: createMockFn(),
-        onFollowNotification: createMockFn(),
-        onPaypiggyNotification: createMockFn(),
+        onChatMessage: vi.fn<(...args: unknown[]) => unknown>(),
+        onFollowNotification: vi.fn<(...args: unknown[]) => unknown>(),
+        onPaypiggyNotification: vi.fn<(...args: unknown[]) => unknown>(),
       };
       mockTwitchEventSub.isConnected.mockReturnValue(true);
-      mockTwitchEventSub.isActive = createMockFn<[], boolean>().mockReturnValue(false);
+      mockTwitchEventSub.isActive = vi.fn<(...args: []) => boolean>().mockReturnValue(false);
       mockTwitchEventSub.subscriptionsReady = false;
 
       await expect(platform.initialize(handlers)).resolves.toMatchObject({
@@ -589,7 +574,7 @@ describe("Twitch Platform", () => {
         code: "EAI_AGAIN",
       });
       mockTwitchEventSub.initialize.mockRejectedValueOnce(connectionError);
-      const onConnection = createMockFn<[unknown], void>();
+      const onConnection = vi.fn<(...args: [unknown]) => void>();
 
       await platform.initialize({ onConnection });
       const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
@@ -612,7 +597,7 @@ describe("Twitch Platform", () => {
         code: "ENOTFOUND",
       });
       mockTwitchEventSub.initialize.mockRejectedValueOnce(connectionError);
-      const onConnection = createMockFn<[unknown], void>();
+      const onConnection = vi.fn<(...args: [unknown]) => void>();
 
       await platform.initialize({ onConnection });
       const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
@@ -642,7 +627,7 @@ describe("Twitch Platform", () => {
       mockTwitchEventSub.initialize
         .mockRejectedValueOnce(connectionError)
         .mockImplementationOnce(() => recoveryAttempt);
-      const onConnection = createMockFn<[unknown], void>();
+      const onConnection = vi.fn<(...args: [unknown]) => void>();
 
       await platform.initialize({ onConnection });
       const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
@@ -1052,8 +1037,8 @@ describe("Twitch Platform", () => {
 
     it("should block sending when EventSub connection is inactive", async () => {
       platform.eventSub = {
-        isConnected: createMockFn<[], boolean>().mockReturnValue(false),
-        isActive: createMockFn<[], boolean>().mockReturnValue(false),
+        isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
+        isActive: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
       };
 
       await expect(platform.sendMessage("hello")).rejects.toThrow(
@@ -1192,8 +1177,8 @@ describe("Twitch Platform", () => {
 
     it("reports eventsub not active when connected without active subscriptions", () => {
       platform.eventSub = {
-        isConnected: createMockFn<[], boolean>().mockReturnValue(true),
-        isActive: createMockFn<[], boolean>().mockReturnValue(false),
+        isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+        isActive: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
       };
 
       const status = platform.validateConfig();
@@ -1205,9 +1190,9 @@ describe("Twitch Platform", () => {
 
   describe("when handling utility behaviors", () => {
     it("logs operational payloads for non-Error platform issues", () => {
-      const logOperationalError = createMockFn();
+      const logOperationalError = vi.fn<(...args: unknown[]) => unknown>();
       platform.errorHandler = createTestErrorHandler({
-        handleEventProcessingError: createMockFn(),
+        handleEventProcessingError: vi.fn<(error: unknown, eventType: string, payload?: unknown, message?: string) => void>(),
         logOperationalError,
       });
 
@@ -1229,17 +1214,17 @@ describe("Twitch Platform", () => {
 
     it("skips viewer count polling when provider lacks startPolling", () => {
       platform.viewerCountProvider = {
-        getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(0),
+        getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(0),
       };
 
       expect(() => platform.initializeViewerCountProvider()).not.toThrow();
     });
 
     it("loads badge catalogs once and reuses cached broadcaster catalogs", async () => {
-      const getGlobalChatBadges = createMockFn().mockResolvedValue([
+      const getGlobalChatBadges = vi.fn<(...args: unknown[]) => Promise<{ set_id: string; versions: never[]; }[]>>().mockResolvedValue([
         { set_id: "moderator", versions: [] },
       ]);
-      const getChannelChatBadges = createMockFn().mockResolvedValue([
+      const getChannelChatBadges = vi.fn<(...args: unknown[]) => Promise<{ set_id: string; versions: never[]; }[]>>().mockResolvedValue([
         { set_id: "subscriber", versions: [] },
       ]);
       platform.apiClient = { getGlobalChatBadges, getChannelChatBadges };
@@ -1254,7 +1239,7 @@ describe("Twitch Platform", () => {
     });
 
     it("loads cheermote catalogs once and reuses cached broadcaster catalogs", async () => {
-      const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([
+      const getCheermotes = vi.fn<(...args: [unknown]) => Promise<unknown[]>>().mockResolvedValue([
         { prefix: "Cheer", tiers: [] },
       ]);
       platform.apiClient = { getCheermotes };
@@ -1299,7 +1284,7 @@ describe("Twitch Platform", () => {
     });
 
     it("reloads cheermote catalogs on a cache miss before resolving gift imagery", async () => {
-      const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>()
+      const getCheermotes = vi.fn<(...args: [unknown]) => Promise<unknown[]>>()
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           {
@@ -1327,7 +1312,7 @@ describe("Twitch Platform", () => {
     });
 
     it("resolves avatar URLs from payload, cache, and API fallbacks", async () => {
-      const getUserById = createMockFn().mockResolvedValue({
+      const getUserById = vi.fn<(...args: unknown[]) => Promise<{ profile_image_url: string; }>>().mockResolvedValue({
         profile_image_url: "https://example.test/avatar.png",
       });
       platform.apiClient = { getUserById };
@@ -1349,11 +1334,11 @@ describe("Twitch Platform", () => {
 
     it("tracks avatar lookup misses and falls back when API resolution fails", async () => {
       platform.apiClient = {
-        getUserById: createMockFn().mockRejectedValue(new Error("boom")),
+        getUserById: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("boom")),
       };
       platform.errorHandler = createTestErrorHandler({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn(),
+        handleEventProcessingError: vi.fn<(error: unknown, eventType: string, payload?: unknown, message?: string) => void>(),
+        logOperationalError: vi.fn<(message: string, platform: string, payload?: unknown) => void>(),
       });
 
       const firstAvatar = await platform._resolveAvatarUrl({
@@ -1397,9 +1382,7 @@ describe("Twitch Platform", () => {
         ...giftEvent,
         giftImageUrl: "https://example.test/gift.gif",
       };
-      platform._enrichGiftPayload = createMockFn().mockResolvedValue(
-        enrichedGiftData,
-      );
+      platform._enrichGiftPayload = vi.fn<(...args: unknown[]) => Promise<typeof enrichedGiftData>>().mockResolvedValue(enrichedGiftData);
 
       await platform.handleGiftEvent(giftEvent);
 

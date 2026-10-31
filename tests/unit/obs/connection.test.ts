@@ -1,10 +1,5 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, expect, beforeEach, afterEach, it } from 'bun:test';
+
 import { waitForDelay } from "../../helpers/time-utils";
 
 import { OBSConnectionManager } from "../../../src/obs/connection.ts";
@@ -17,12 +12,12 @@ type ConnectResult = {
 type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
 
 type ObsSocketFake = {
-  connect: TestMockFn<[address?: string, password?: string], Promise<ConnectResult>>;
-  disconnect: TestMockFn<[], Promise<void>>;
-  call: TestMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>;
-  on: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
-  once: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
-  off: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+  connect: Mock<(...args: [address?: string, password?: string]) => Promise<ConnectResult>>;
+  disconnect: Mock<(...args: []) => Promise<void>>;
+  call: Mock<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>>;
+  on: Mock<(...args: [eventName: string, handler: ObsEventHandler]) => void>;
+  once: Mock<(...args: [eventName: string, handler: ObsEventHandler]) => void>;
+  off: Mock<(...args: [eventName: string, handler: ObsEventHandler]) => void>;
 };
 
 describe("OBS Connection Race Condition - User Experience Validation", () => {
@@ -34,20 +29,20 @@ describe("OBS Connection Race Condition - User Experience Validation", () => {
     identifiedCallback = null;
 
     mockOBS = {
-      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>(),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>().mockImplementation((event, callback) => {
+      connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<ConnectResult>>(),
+      disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      call: vi.fn<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>>(),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>().mockImplementation((event, callback) => {
         if (event === "Identified") {
           identifiedCallback = callback;
         }
       }),
-      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>().mockImplementation((event, callback) => {
+      once: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>().mockImplementation((event, callback) => {
         if (event === "Identified") {
           identifiedCallback = callback;
         }
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     connectionManager = new OBSConnectionManager({
@@ -64,8 +59,8 @@ describe("OBS Connection Race Condition - User Experience Validation", () => {
   afterEach(async () => {
     connectionManager.dispose();
     await connectionManager.disconnect();
-    restoreAllMocks();
-    clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Connection Readiness Behavior", () => {

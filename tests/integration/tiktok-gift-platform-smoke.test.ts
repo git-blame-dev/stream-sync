@@ -1,4 +1,4 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
 
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
@@ -6,7 +6,7 @@ import { createMainPresentationFixture } from "../helpers/main-presentation-fixt
 import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture.ts";
 import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createTikTokConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 
@@ -62,7 +62,7 @@ describe("TikTok gift platform flow (smoke)", () => {
     try {
       await runCleanups();
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -128,7 +128,7 @@ describe("TikTok gift platform flow (smoke)", () => {
       await tiktokFixture.cleanup();
       await platformLifecycleService.disconnectAll();
       platformLifecycleService.dispose();
-      restoreAllMocks();
+      vi.restoreAllMocks();
       await presentation.dispose();
     });
 

@@ -1,9 +1,5 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import {
-  createMockFn,
-  spyOn,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { vi, spyOn, describe, expect, beforeEach, afterEach, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { IntervalManager } from "../../../src/utils/interval-manager.ts";
 import testClock from "../../helpers/test-clock";
@@ -21,7 +17,7 @@ describe("IntervalManager behavior", () => {
       () => {},
     );
     intervalIdCounter = 0;
-    mockSafeSetInterval = createMockFn((callback: () => void) => {
+    mockSafeSetInterval = vi.fn((callback: () => void) => {
       intervalIdCounter += 1;
       return { id: `interval-${intervalIdCounter}`, callback } as unknown as MockInterval;
     }) as unknown as SafeSetInterval;
@@ -29,14 +25,14 @@ describe("IntervalManager behavior", () => {
 
   afterEach(() => {
     clearIntervalSpy.mockRestore();
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("creates intervals with tracking for out-of-range durations", () => {
     const manager = new IntervalManager("platform", noOpLogger, {
       safeSetInterval: mockSafeSetInterval,
     });
-    const callback = createMockFn();
+    const callback = vi.fn<(...args: unknown[]) => unknown>();
 
     expect(() => manager.createInterval("poll", callback, 50)).not.toThrow();
     expect(manager.hasInterval("poll")).toBe(true);

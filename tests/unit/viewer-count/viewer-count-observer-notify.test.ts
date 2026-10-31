@@ -1,13 +1,13 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 describe("ViewerCountSystem stream status observer notifications", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function createSystem() {
@@ -27,7 +27,7 @@ describe("ViewerCountSystem stream status observer notifications", () => {
     }> = [];
     const observer = {
       getObserverId: () => "testObserver1",
-      onStreamStatusChange: createMockFn(
+      onStreamStatusChange: vi.fn(
         (payload: { platform: string; isLive: boolean; wasLive: boolean }) =>
           statusEvents.push(payload),
       ),
@@ -51,7 +51,7 @@ describe("ViewerCountSystem stream status observer notifications", () => {
     const system = createSystem();
     const observer = {
       getObserverId: () => "testObserver2",
-      onStreamStatusChange: createMockFn(),
+      onStreamStatusChange: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     system.addObserver(observer);
@@ -71,11 +71,11 @@ describe("ViewerCountSystem stream status observer notifications", () => {
     const countEvents: Array<{ platform: string; count: number }> = [];
     const observer = {
       getObserverId: () => "testObserver3",
-      onStreamStatusChange: createMockFn(
+      onStreamStatusChange: vi.fn(
         (payload: { platform: string; isLive: boolean; wasLive: boolean }) =>
           statusEvents.push(payload),
       ),
-      onViewerCountUpdate: createMockFn(
+      onViewerCountUpdate: vi.fn(
         (payload: { platform: string; count: number }) =>
           countEvents.push(payload),
       ),
@@ -109,8 +109,8 @@ describe("ViewerCountSystem stream status observer notifications", () => {
     const system = createSystem();
     const observer = {
       getObserverId: () => "testObserver4",
-      onStreamStatusChange: createMockFn(),
-      onViewerCountUpdate: createMockFn(),
+      onStreamStatusChange: vi.fn<(...args: unknown[]) => unknown>(),
+      onViewerCountUpdate: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     system.addObserver(observer);

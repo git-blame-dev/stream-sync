@@ -1,11 +1,11 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
 import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 
 type EventHandler = (event: unknown) => void;
 type TestEventBus = {
@@ -70,7 +70,7 @@ const createPlatform = () =>
       logger: noOpLogger,
       USER_AGENTS: ["test-agent"],
       streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
+        detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ success: true; observationKind: string; videoIds: never[]; }>>().mockResolvedValue({
           success: true,
           observationKind: "complete",
           videoIds: [],
@@ -81,7 +81,7 @@ const createPlatform = () =>
 
 describe("YouTube stream status + viewer count event bus (integration)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("emits viewer-count events through lifecycle handlers", async () => {

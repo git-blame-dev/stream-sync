@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { loadTokens, saveTokens } from "../../../src/utils/token-store.ts";
 
@@ -8,9 +8,9 @@ type Permissions = Record<string, number>;
 type WriteOptions = { mode?: number };
 type LoadTokenOptions = Parameters<typeof loadTokens>[0];
 type MockLogger = {
-  info: ReturnType<typeof createMockFn>;
-  warn: ReturnType<typeof createMockFn>;
-  error: ReturnType<typeof createMockFn>;
+  info: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  warn: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  error: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 
 const createMockFs = (fileStore: FileStore) => {
@@ -18,7 +18,7 @@ const createMockFs = (fileStore: FileStore) => {
 
   return {
     promises: {
-      readFile: createMockFn(async (path: string) => {
+      readFile: vi.fn(async (path: string) => {
         if (path in fileStore) return fileStore[path];
         const error = new Error(
           `ENOENT: no such file or directory, open '${path}'`,
@@ -26,18 +26,18 @@ const createMockFs = (fileStore: FileStore) => {
         error.code = "ENOENT";
         throw error;
       }),
-      writeFile: createMockFn(async (path: string, content: string, options?: WriteOptions) => {
+      writeFile: vi.fn(async (path: string, content: string, options?: WriteOptions) => {
         fileStore[path] = content;
         if (options && options.mode) {
           permissions[path] = options.mode;
         }
       }),
-      mkdir: createMockFn(async (dirPath: string, options?: WriteOptions) => {
+      mkdir: vi.fn(async (dirPath: string, options?: WriteOptions) => {
         if (options && options.mode) {
           permissions[dirPath] = options.mode;
         }
       }),
-      rename: createMockFn(async (oldPath: string, newPath: string) => {
+      rename: vi.fn(async (oldPath: string, newPath: string) => {
         const existingContent = fileStore[oldPath];
         if (existingContent !== undefined) {
           fileStore[newPath] = existingContent;
@@ -49,7 +49,7 @@ const createMockFs = (fileStore: FileStore) => {
           }
         }
       }),
-      unlink: createMockFn(async (path: string) => {
+      unlink: vi.fn(async (path: string) => {
         if (!(path in fileStore)) {
           const error = new Error(
             `ENOENT: no such file or directory, unlink '${path}'`,
@@ -60,10 +60,10 @@ const createMockFs = (fileStore: FileStore) => {
         delete fileStore[path];
         delete permissions[path];
       }),
-      chmod: createMockFn(async (path: string, mode: number) => {
+      chmod: vi.fn(async (path: string, mode: number) => {
         permissions[path] = mode;
       }),
-      stat: createMockFn(async (path: string) => {
+      stat: vi.fn(async (path: string) => {
         if (path in fileStore) {
           return { mode: (permissions[path] || 0o644) | 0o100000 };
         }
@@ -83,9 +83,9 @@ const loadTokensWithInvalidOptions = (options: Partial<LoadTokenOptions>) =>
   loadTokens(options as LoadTokenOptions);
 
 const createMockLogger = (): MockLogger => ({
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn(),
+  info: vi.fn<(...args: unknown[]) => unknown>(),
+  warn: vi.fn<(...args: unknown[]) => unknown>(),
+  error: vi.fn<(...args: unknown[]) => unknown>(),
 });
 
 const expectRestrictedMode = (permissions: Permissions, targetPath: string) => {

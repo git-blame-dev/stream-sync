@@ -1,7 +1,7 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 import { spawnSync } from "node:child_process";
 import { noOpLogger } from "../../../helpers/mock-factories";
-import { restoreAllMocks } from "../../../helpers/bun-mock-utils";
+
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 import { InnertubeService } from "../../../../src/services/innertube-service";
@@ -38,7 +38,7 @@ describe("YouTube Platform Event Routing", () => {
         }
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 

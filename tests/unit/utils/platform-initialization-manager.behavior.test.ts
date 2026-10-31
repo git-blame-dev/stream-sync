@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, afterEach, it, spyOn } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, afterEach, it, spyOn } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformInitializationManager } from "../../../src/utils/platform-initialization-manager.ts";
 import { createPlatformErrorHandler } from "../../../src/utils/platform-error-handler.ts";
@@ -15,7 +15,7 @@ function createObservedErrorHandler(...args: Parameters<CreatePlatformErrorHandl
 }
 type ObservedPlatformErrorHandler = ReturnType<typeof createObservedErrorHandler>;
 function observedFactory(onCreated: (owner: ObservedPlatformErrorHandler) => void) {
-  return createMockFn((...args: Parameters<CreatePlatformErrorHandler>) => {
+  return vi.fn((...args: Parameters<CreatePlatformErrorHandler>) => {
     const owner = createObservedErrorHandler(...args);
     onCreated(owner);
     return owner;

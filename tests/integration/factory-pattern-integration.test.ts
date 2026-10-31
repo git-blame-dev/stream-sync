@@ -1,11 +1,17 @@
-import { describe, afterEach, test, expect } from "bun:test";
+import { vi, describe, beforeEach, afterEach, test, expect } from 'bun:test';
 import { InnertubeFactory } from "../../src/factories/innertube-factory";
-import { clearAllMocks, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 
 describe("Factory Pattern Integration", () => {
+  beforeEach(() => {
+    InnertubeFactory.configure({ importer: async () => ({
+      Innertube: { create: async (config) => ({ syntheticClient: true, config }) },
+    }) });
+  });
   afterEach(async () => {
-    clearAllMocks();
-    restoreAllMocks();
+    InnertubeFactory.configure();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Factory Statistics and Metadata", () => {
@@ -54,6 +60,7 @@ describe("Factory Pattern Integration", () => {
 
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
+      expect(instance).toHaveProperty("syntheticClient", true);
     });
 
     test("creates configured instance successfully", async () => {
@@ -62,6 +69,7 @@ describe("Factory Pattern Integration", () => {
 
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
+      expect(instance).toHaveProperty("syntheticClient", true);
     });
 
     test("creates test instance successfully", async () => {
@@ -69,6 +77,7 @@ describe("Factory Pattern Integration", () => {
 
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
+      expect(instance).toHaveProperty("syntheticClient", true);
     });
 
     test("creates instance with timeout successfully", async () => {
@@ -76,6 +85,7 @@ describe("Factory Pattern Integration", () => {
 
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
+      expect(instance).toHaveProperty("syntheticClient", true);
     });
 
     test("creates multiple instances with different configs", async () => {
@@ -94,6 +104,7 @@ describe("Factory Pattern Integration", () => {
       instances.forEach((instance) => {
         expect(instance).toBeDefined();
         expect(typeof instance).toBe("object");
+      expect(instance).toHaveProperty("syntheticClient", true);
       });
     });
   });

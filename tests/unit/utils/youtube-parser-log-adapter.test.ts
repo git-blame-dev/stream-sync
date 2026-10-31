@@ -1,10 +1,6 @@
-import { describe, it, beforeEach, expect } from "bun:test";
+import { vi, type Mock, describe, it, beforeEach, expect } from 'bun:test';
 import { spawnSync } from "node:child_process";
-import {
-  createMockFn,
-  clearAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+
 import {
   installYouTubeParserLogAdapter,
   collectParserWarningsDuring,
@@ -25,22 +21,22 @@ type ParserWarningContext = Partial<{
 type ParserWarningHandler = (context: ParserWarningContext) => void;
 
 type ParserApiFixture = {
-  setParserErrorHandler: TestMockFn<[ParserWarningHandler], void>;
+  setParserErrorHandler: Mock<(...args: [ParserWarningHandler]) => void>;
 };
 
 type LoggerFixture = {
-  debug: TestMockFn<[unknown, string?, unknown?], void>;
-  info: TestMockFn<[unknown, string?, unknown?], void>;
-  warn: TestMockFn<[unknown, string?, unknown?], void>;
-  error: TestMockFn<[unknown, string?, unknown?], void>;
+  debug: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  info: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  warn: Mock<(...args: [unknown, string?, unknown?]) => void>;
+  error: Mock<(...args: [unknown, string?, unknown?]) => void>;
 };
 
 function createLoggerFixture(): LoggerFixture {
   return {
-    debug: createMockFn<[unknown, string?, unknown?], void>(),
-    info: createMockFn<[unknown, string?, unknown?], void>(),
-    warn: createMockFn<[unknown, string?, unknown?], void>(),
-    error: createMockFn<[unknown, string?, unknown?], void>(),
+    debug: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+    info: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+    warn: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+    error: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
   };
 }
 
@@ -48,7 +44,7 @@ function createParserApiFixture(
   implementation?: (handler: ParserWarningHandler) => void,
 ): ParserApiFixture {
   return {
-    setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(
+    setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(
       implementation,
     ),
   };
@@ -246,13 +242,13 @@ describe("youtube parser log adapter", () => {
   let logger: LoggerFixture;
 
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
     logger = createLoggerFixture();
   });
 
   it("installs once per parser API and remains idempotent", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     const firstInstall = installYouTubeParserLogAdapter({
@@ -272,7 +268,7 @@ describe("youtube parser log adapter", () => {
 
   it("collapses parser typecheck warnings into one line", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
@@ -301,7 +297,7 @@ describe("youtube parser log adapter", () => {
 
   it("collapses parse and class-not-found contexts into one line without stack output", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
@@ -348,7 +344,7 @@ describe("youtube parser log adapter", () => {
 
   it("falls back to no-op logger when logger interface is missing", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     const installResult = installYouTubeParserLogAdapter({
@@ -366,7 +362,7 @@ describe("youtube parser log adapter", () => {
 
   it("formats expected classification and summarizes string error length without its body", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
@@ -391,7 +387,7 @@ describe("youtube parser log adapter", () => {
 
   it("formats mutation counts and title counts without raw titles", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
@@ -452,10 +448,10 @@ describe("youtube parser log adapter", () => {
 
   it("degrades gracefully when parser handler installation fails", () => {
     const loggerWithErrors = {
-      debug: createMockFn<[unknown, string?, unknown?], void>(),
-      info: createMockFn<[unknown, string?, unknown?], void>(),
-      warn: createMockFn<[unknown, string?, unknown?], void>(),
-      error: createMockFn<[unknown, string?, unknown?], void>(),
+      debug: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+      info: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+      warn: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
+      error: vi.fn<(...args: [unknown, string?, unknown?]) => void>(),
     } satisfies LoggerFixture;
     const parserApi = createParserApiFixture(() => {
         throw new Error("cannot install parser handler");
@@ -478,7 +474,7 @@ describe("youtube parser log adapter", () => {
 
   it("collects normalized parser warnings during a synchronous scope without suppressing logging", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
@@ -518,7 +514,7 @@ describe("youtube parser log adapter", () => {
 
   it("keeps nested parser warning collection scopes isolated", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+      setParserErrorHandler: vi.fn<(...args: [ParserWarningHandler]) => void>(),
     } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({

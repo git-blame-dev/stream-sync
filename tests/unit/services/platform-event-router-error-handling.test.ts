@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach } from "bun:test";
-import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, expect, it, beforeEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
@@ -9,7 +9,7 @@ type PlatformEventHandler = Parameters<RouterOptions["eventBus"]["subscribe"]>[1
 type RoutedEventBus = RouterOptions["eventBus"] & {
   emit: (eventName: string, payload: unknown) => Promise<void>;
 };
-type ChatMessageHandlerMock = TestMockFn<[string, Record<string, unknown>], Promise<unknown>>;
+type ChatMessageHandlerMock = Mock<(...args: [string, Record<string, unknown>]) => Promise<unknown>>;
 type RuntimeFake = {
   handleChatMessage: ChatMessageHandlerMock;
 };
@@ -40,7 +40,7 @@ describe("PlatformEventRouter error handling", () => {
 
     subscriber = null;
     mockEventBus = {
-      subscribe: createMockFn((event, handler) => {
+      subscribe: vi.fn((event, handler) => {
         subscriber = handler;
         return () => {};
       }),
@@ -52,11 +52,11 @@ describe("PlatformEventRouter error handling", () => {
     };
 
     mockRuntime = {
-      handleChatMessage: createMockFn<[string, Record<string, unknown>], Promise<unknown>>().mockResolvedValue(),
+      handleChatMessage: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue(undefined),
     };
 
     mockNotificationManager = {
-      handleNotification: createMockFn(),
+      handleNotification: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     mockConfig = createConfigFixture({ general: { messagesEnabled: true } });
@@ -65,7 +65,7 @@ describe("PlatformEventRouter error handling", () => {
   it("continues processing events after handler throws an error", async () => {
     mockRuntime.handleChatMessage
       .mockRejectedValueOnce(new Error("first call fails"))
-      .mockResolvedValueOnce();
+      .mockResolvedValueOnce(undefined);
 
     new PlatformEventRouter({
       eventBus: mockEventBus,

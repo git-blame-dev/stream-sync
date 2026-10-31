@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect } from 'bun:test';
+
 import {
   TwitchViewerCountProvider,
   TikTokViewerCountProvider,
@@ -27,18 +27,16 @@ describe("ViewerCountProvider error handler integration", () => {
     }
   });
   const createMockLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn(),
+    debug: vi.fn<(...args: unknown[]) => unknown>(),
+    info: vi.fn<(...args: unknown[]) => unknown>(),
+    warn: vi.fn<(...args: unknown[]) => unknown>(),
+    error: vi.fn<(...args: unknown[]) => unknown>(),
   });
 
   it("logs provider errors at error level and returns unavailable", async () => {
     const mockLogger = createMockLogger();
     const apiClient = {
-      getStreamInfo: createMockFn().mockRejectedValue(
-        new Error("test network timeout"),
-      ),
+      getStreamInfo: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("test network timeout")),
     };
     const provider = new TwitchViewerCountProvider(
       apiClient,
@@ -64,7 +62,7 @@ describe("ViewerCountProvider error handler integration", () => {
     const mockLogger = createMockLogger();
     const platform = {
       connection: { isConnected: true },
-      getViewerCount: createMockFn()
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<unknown>>()
         .mockRejectedValueOnce(new Error("network fail"))
         .mockRejectedValueOnce(new Error("timeout")),
     };

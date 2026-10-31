@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   RetrySystem,
@@ -9,29 +9,29 @@ import { PlatformErrorHandler } from "../../../src/utils/platform-error-handler"
 import testClock from "../../helpers/test-clock";
 type RetryDependencies = NonNullable<ConstructorParameters<typeof RetrySystem>[0]>;
 type MockPlatformErrorHandler = PlatformErrorHandler & {
-  handleEventProcessingError: ReturnType<typeof createMockFn>;
-  logOperationalError: ReturnType<typeof createMockFn>;
+  handleEventProcessingError: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  logOperationalError: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 };
 type MutableAdaptiveRetryConfig = {
   -readonly [Key in keyof typeof ADAPTIVE_RETRY_CONFIG]: number;
 };
 
-let mockSafeSetTimeout: NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
-let mockValidateTimeout: NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof createMockFn>;
-let mockValidateExponentialBackoff: NonNullable<RetryDependencies["validateExponentialBackoff"]> & ReturnType<typeof createMockFn>;
+let mockSafeSetTimeout: NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+let mockValidateTimeout: NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+let mockValidateExponentialBackoff: NonNullable<RetryDependencies["validateExponentialBackoff"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 
 const createTimeoutMocks = () => {
-  mockSafeSetTimeout = createMockFn((fn: () => void) => {
+  mockSafeSetTimeout = vi.fn((fn: () => void) => {
     fn();
     return 1 as unknown as ReturnType<typeof setTimeout>;
-  }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
-  mockValidateTimeout = createMockFn((delay: number) => delay) as unknown as NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof createMockFn>;
-  mockValidateExponentialBackoff = createMockFn(
+  }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  mockValidateTimeout = vi.fn((delay: number) => delay) as unknown as NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
+  mockValidateExponentialBackoff = vi.fn(
     (base: number, multiplier: number, retry: number, max: number) => {
       const calculated = base * Math.pow(multiplier, retry);
       return calculated > max ? max : calculated;
     },
-  ) as unknown as NonNullable<RetryDependencies["validateExponentialBackoff"]> & ReturnType<typeof createMockFn>;
+  ) as unknown as NonNullable<RetryDependencies["validateExponentialBackoff"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 
   return {
     safeSetTimeout: mockSafeSetTimeout,
@@ -42,7 +42,7 @@ const createTimeoutMocks = () => {
 
 describe("RetrySystem", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     testClock.useRealTime();
   });
 
@@ -53,8 +53,8 @@ describe("RetrySystem", () => {
 
   function createMockErrorHandler(): MockPlatformErrorHandler {
     return {
-      handleEventProcessingError: createMockFn(),
-      logOperationalError: createMockFn(),
+      handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+      logOperationalError: vi.fn<(...args: unknown[]) => unknown>(),
     } as unknown as MockPlatformErrorHandler;
   }
 
@@ -65,8 +65,8 @@ describe("RetrySystem", () => {
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-    const cleanup = createMockFn();
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
+    const cleanup = vi.fn<(...args: unknown[]) => unknown>();
     let observedConnectionState:
       | {
           platformName: string;
@@ -115,9 +115,9 @@ describe("RetrySystem", () => {
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-    const cleanup = createMockFn();
-    const setState = createMockFn(() => {
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
+    const cleanup = vi.fn<(...args: unknown[]) => unknown>();
+    const setState = vi.fn(() => {
       throw new Error("state reset failed");
     });
 
@@ -142,7 +142,7 @@ describe("RetrySystem", () => {
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError(
       "TikTok",
@@ -163,8 +163,8 @@ describe("RetrySystem", () => {
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-    retrySystem.isConnected = createMockFn().mockReturnValue(false);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
+    retrySystem.isConnected = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
 
     retrySystem.handleConnectionError(
       "TikTok",
@@ -189,7 +189,7 @@ describe("RetrySystem", () => {
     retrySystem.errorHandler = errorHandler;
     retrySystem.platformRetryCount.TikTok = 10;
 
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
     retrySystem.handleConnectionError("TikTok", new Error("fail"), reconnect);
     await Promise.resolve();
 
@@ -207,7 +207,7 @@ describe("RetrySystem", () => {
     retrySystem.errorHandler = errorHandler;
     retrySystem.platformRetryCount.YouTube = 50;
 
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
     retrySystem.handleConnectionError("YouTube", new Error("fail"), reconnect);
     await Promise.resolve();
 
@@ -225,7 +225,7 @@ describe("RetrySystem", () => {
     retrySystem.errorHandler = createMockErrorHandler();
     retrySystem.platformRetryCount.TikTok = 50;
 
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("keep trying"),
@@ -263,8 +263,8 @@ describe("RetrySystem", () => {
   it("waits for async cleanup before scheduling reconnect", async () => {
     const retrySystem = new RetrySystem({ logger: noOpLogger });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-    const cleanup = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
+    const cleanup = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError(
       "TikTok",
@@ -280,20 +280,20 @@ describe("RetrySystem", () => {
 
   it("does not schedule reconnect after cancellation during async cleanup", async () => {
     let resolveCleanup!: () => void;
-    const cleanup = createMockFn(
+    const cleanup = vi.fn(
       () => new Promise<void>((resolve) => {
         resolveCleanup = resolve;
       }),
     );
-    const safeSetTimeout = createMockFn(
+    const safeSetTimeout = vi.fn(
       () => 1 as unknown as ReturnType<typeof setTimeout>,
-    ) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    ) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     const retrySystem = new RetrySystem({
       logger: noOpLogger,
       ...createTimeoutMocks(),
       safeSetTimeout,
     });
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError(
       "TikTok",
@@ -313,16 +313,16 @@ describe("RetrySystem", () => {
 
   it("invalidates a scheduled reconnect callback when cancelled", async () => {
     let scheduledReconnect!: () => Promise<void>;
-    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+    const safeSetTimeout = vi.fn((callback: () => Promise<void>) => {
       scheduledReconnect = callback;
       return 1 as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     const retrySystem = new RetrySystem({
       logger: noOpLogger,
       ...createTimeoutMocks(),
       safeSetTimeout,
     });
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError("TikTok", new Error("temporary failure"), reconnect);
     retrySystem.cancelConnectionRetry("TikTok");
@@ -334,18 +334,18 @@ describe("RetrySystem", () => {
 
   it("serializes cleanup before a newer retry generation reconnects", async () => {
     let resolveCleanup!: () => void;
-    const cleanup = createMockFn(
+    const cleanup = vi.fn(
       () => new Promise<void>((resolve) => {
         resolveCleanup = resolve;
       }),
     );
     const callbacks: Array<() => Promise<void>> = [];
-    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+    const safeSetTimeout = vi.fn((callback: () => Promise<void>) => {
       callbacks.push(callback);
       return callbacks.length as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks(), safeSetTimeout });
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError("TikTok", new Error("first"), reconnect, cleanup);
     retrySystem.handleConnectionError("TikTok", new Error("second"), reconnect, cleanup);
@@ -365,12 +365,12 @@ describe("RetrySystem", () => {
 
   it("keeps a newer timer registered when a stale callback runs", async () => {
     const callbacks: Array<() => Promise<void>> = [];
-    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+    const safeSetTimeout = vi.fn((callback: () => Promise<void>) => {
       callbacks.push(callback);
       return callbacks.length as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks(), safeSetTimeout });
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
 
     retrySystem.handleConnectionError("TikTok", new Error("first"), reconnect);
     retrySystem.handleConnectionError("TikTok", new Error("second"), reconnect);
@@ -387,12 +387,12 @@ describe("RetrySystem", () => {
     const errorHandler = createMockErrorHandler();
     retrySystem.errorHandler = errorHandler;
     const cleanupError = new Error("async cleanup failed");
-    const cleanup = createMockFn<[], Promise<unknown>>().mockRejectedValue(cleanupError);
+    const cleanup = vi.fn<(...args: []) => Promise<unknown>>().mockRejectedValue(cleanupError);
 
     retrySystem.handleConnectionError(
       "Twitch",
       new Error("401 Unauthorized"),
-      createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined),
       cleanup,
     );
     await Promise.resolve();
@@ -404,16 +404,16 @@ describe("RetrySystem", () => {
 
   it("disposes every scheduled connection retry", async () => {
     const callbacks: Array<() => Promise<void>> = [];
-    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+    const safeSetTimeout = vi.fn((callback: () => Promise<void>) => {
       callbacks.push(callback);
       return callbacks.length as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     const retrySystem = new RetrySystem({
       logger: noOpLogger,
       ...createTimeoutMocks(),
       safeSetTimeout,
     });
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
     retrySystem.handleConnectionError("TikTok", new Error("temporary failure"), reconnect);
     retrySystem.handleConnectionError("YouTube", new Error("temporary failure"), reconnect);
 
@@ -428,9 +428,9 @@ describe("RetrySystem", () => {
     const retrySystem = new RetrySystem({ logger: noOpLogger });
     const errorHandler = createMockErrorHandler();
     retrySystem.errorHandler = errorHandler;
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
     const cleanupError = new Error("cleanup boom");
-    const cleanup = createMockFn(() => {
+    const cleanup = vi.fn(() => {
       throw cleanupError;
     });
 
@@ -462,8 +462,8 @@ describe("RetrySystem", () => {
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
-    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
-    retrySystem.isConnected = createMockFn().mockReturnValue(true);
+    const reconnect = vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined);
+    retrySystem.isConnected = vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
 
     retrySystem.handleConnectionError(
       "YouTube",

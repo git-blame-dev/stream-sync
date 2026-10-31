@@ -1,10 +1,5 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import {
-  clearAllMocks,
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, beforeEach, afterEach, expect } from 'bun:test';
+
 
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
@@ -21,7 +16,7 @@ import { ViewerCountExtractionService } from "../../src/services/viewer-count-ex
 import { noOpLogger } from "../helpers/mock-factories";
 
 class SyntheticObsSocket extends EventEmitter {
-  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+  call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<Record<string, unknown>>>()
     .mockResolvedValue({ status: "success" });
   async connect() {
     this.emit("Identified");
@@ -75,7 +70,7 @@ type StreamStatusUpdate = {
 };
 
 type TestViewerCountPlatform = {
-  getViewerCount: TestMockFn<[], Promise<unknown>>;
+  getViewerCount: Mock<(...args: []) => Promise<unknown>>;
 };
 
 type TestPlatforms = {
@@ -84,9 +79,9 @@ type TestPlatforms = {
 
 type TestObserver = {
   getObserverId: () => string;
-  onViewerCountUpdate: TestMockFn<[ViewerCountUpdate], unknown>;
-  onStreamStatusChange: TestMockFn<[StreamStatusUpdate], unknown>;
-  cleanup?: TestMockFn<[], unknown>;
+  onViewerCountUpdate: Mock<(...args: [ViewerCountUpdate]) => unknown>;
+  onStreamStatusChange: Mock<(...args: [StreamStatusUpdate]) => unknown>;
+  cleanup?: Mock<(...args: []) => unknown>;
 };
 
 const createViewerCountLogger = () => ({
@@ -103,9 +98,9 @@ const expectExtractorInput = (
 };
 
 const createRejectedUpdateMock = <Args extends unknown[]>(error: Error) =>
-  createMockFn<Args, unknown>(() => Promise.reject(error));
+  vi.fn<(...args: Args) => unknown>(() => Promise.reject(error));
 
-const expectFirstArg = <Args extends unknown[]>(mockFn: TestMockFn<Args, unknown>): Args[0] => {
+const expectFirstArg = <Args extends unknown[]>(mockFn: Mock<(...args: Args) => unknown>): Args[0] => {
   const firstCall = mockFn.mock.calls[0];
   expect(firstCall).toBeDefined();
   if (!firstCall) {
@@ -123,7 +118,7 @@ describe("System Resilience and Error Recovery Integration", () => {
   beforeEach(async () => {
     platforms = {
       youtube: {
-        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 1000),
+        getViewerCount: vi.fn<(...args: []) => Promise<unknown>>(async () => 1000),
       },
     };
 
@@ -167,8 +162,8 @@ describe("System Resilience and Error Recovery Integration", () => {
         await obsManager.disconnect();
       }
     } finally {
-      clearAllMocks();
-      restoreAllMocks();
+      vi.clearAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -284,10 +279,15 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("Factory Resilience", () => {
     test("creates Innertube instance successfully", async () => {
-      const instance = await InnertubeFactory.createInstance();
-
-      expect(instance).toBeDefined();
-      expect(typeof instance).toBe("object");
+      const syntheticClient = { syntheticClient: true };
+      InnertubeFactory.configure({ importer: async () => ({
+        Innertube: { create: async () => syntheticClient },
+      }) });
+      try {
+        expect(await InnertubeFactory.createInstance()).toBe(syntheticClient);
+      } finally {
+        InnertubeFactory.configure();
+      }
     });
 
   });
@@ -395,8 +395,8 @@ describe("System Resilience and Error Recovery Integration", () => {
     test("should handle observer lifecycle during errors", async () => {
       const problematicObserver: TestObserver = {
         getObserverId: () => "problematic-observer",
-        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
-        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+        onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => unknown>(),
+        onStreamStatusChange: vi.fn<(...args: [StreamStatusUpdate]) => unknown>(),
         cleanup: createRejectedUpdateMock<[]>(new Error("Cleanup failed")),
       };
       viewerCountSystem.addObserver(problematicObserver);
@@ -412,8 +412,8 @@ describe("System Resilience and Error Recovery Integration", () => {
     test("should maintain user-friendly content during failures", async () => {
       const qualityObserver: TestObserver = {
         getObserverId: () => "quality-observer",
-        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
-        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+        onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => unknown>(),
+        onStreamStatusChange: vi.fn<(...args: [StreamStatusUpdate]) => unknown>(),
       };
       viewerCountSystem.addObserver(qualityObserver);
 
@@ -448,9 +448,9 @@ describe("System Resilience and Error Recovery Integration", () => {
     test("should clean up resources properly during failures", async () => {
       const resourceObserver: TestObserver = {
         getObserverId: () => "resource-observer",
-        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
-        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
-        cleanup: createMockFn<[], unknown>(),
+        onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => unknown>(),
+        onStreamStatusChange: vi.fn<(...args: [StreamStatusUpdate]) => unknown>(),
+        cleanup: vi.fn<(...args: []) => unknown>(),
       };
       viewerCountSystem.addObserver(resourceObserver);
 
@@ -472,8 +472,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       for (let i = 0; i < 10; i++) {
         const observer: TestObserver = {
           getObserverId: () => `stress-observer-${i}`,
-          onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
-          onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+          onViewerCountUpdate: vi.fn<(...args: [ViewerCountUpdate]) => unknown>(),
+          onStreamStatusChange: vi.fn<(...args: [StreamStatusUpdate]) => unknown>(),
         };
 
         viewerCountSystem.addObserver(observer);

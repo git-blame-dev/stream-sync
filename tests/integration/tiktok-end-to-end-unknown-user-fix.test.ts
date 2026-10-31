@@ -1,18 +1,11 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { describe, test, beforeEach, expect } from "bun:test";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import testClock from "../helpers/test-clock";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   extractTikTokUserData,
   extractTikTokGiftData,
 } from "../../src/utils/tiktok-data-extraction";
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 const TEST_TIMESTAMP = 1234567890000;
 const INTEGRATION_TIMEOUT_MS = TEST_TIMEOUTS.SLOW;
@@ -20,10 +13,6 @@ const INTEGRATION_TIMEOUT_MS = TEST_TIMEOUTS.SLOW;
 describe("TikTok End-to-End Unknown User Fix Integration", () => {
   beforeEach(() => {
     testClock.reset();
-  });
-
-  afterEach(() => {
-    restoreAllMocks();
   });
 
   describe("Complete TikTok Gift Processing Pipeline", () => {

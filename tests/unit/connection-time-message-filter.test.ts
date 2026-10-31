@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { vi, afterEach, describe, expect, test } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import testClock from "../helpers/test-clock";
@@ -22,7 +22,7 @@ initializeTestLogging();
 
 describe("Connection-Time Message Filter", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const buildRouter = (overrides: RouterOverrides = {}) => {
@@ -33,9 +33,7 @@ describe("Connection-Time Message Filter", () => {
       },
       twitch: { messagesEnabled: true, greetingsEnabled: true },
     });
-    const getPlatformConnectionTime = createMockFn<
-      Parameters<PlatformLifecycleService["getPlatformConnectionTime"]>,
-      ReturnType<PlatformLifecycleService["getPlatformConnectionTime"]>
+    const getPlatformConnectionTime = vi.fn<(...args: Parameters<PlatformLifecycleService["getPlatformConnectionTime"]>) => ReturnType<PlatformLifecycleService["getPlatformConnectionTime"]>
     >(() => overrides.connectionTime ?? null);
     const runtime = {
       config,
@@ -51,15 +49,15 @@ describe("Connection-Time Message Filter", () => {
       config,
     });
 
-    router.buildChatMessageItem = createMockFn<Parameters<typeof router.buildChatMessageItem>, ReturnType<typeof router.buildChatMessageItem>>((platform) => ({
+    router.buildChatMessageItem = vi.fn<(...args: Parameters<typeof router.buildChatMessageItem>) => ReturnType<typeof router.buildChatMessageItem>>((platform) => ({
       type: "chat",
       platform,
       data: {},
     }));
-    router.detectCommand = createMockFn<Parameters<typeof router.detectCommand>, ReturnType<typeof router.detectCommand>>(async () => null);
-    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => []);
-    router.isFirstMessage = createMockFn<Parameters<typeof router.isFirstMessage>, ReturnType<typeof router.isFirstMessage>>(() => false);
-    router.isGreetingEnabled = createMockFn<Parameters<typeof router.isGreetingEnabled>, ReturnType<typeof router.isGreetingEnabled>>(() => false);
+    router.detectCommand = vi.fn<(...args: Parameters<typeof router.detectCommand>) => ReturnType<typeof router.detectCommand>>(async () => null);
+    router.processCommand = vi.fn<(...args: Parameters<typeof router.processCommand>) => ReturnType<typeof router.processCommand>>(async () => []);
+    router.isFirstMessage = vi.fn<(...args: Parameters<typeof router.isFirstMessage>) => ReturnType<typeof router.isFirstMessage>>(() => false);
+    router.isGreetingEnabled = vi.fn<(...args: Parameters<typeof router.isGreetingEnabled>) => ReturnType<typeof router.isGreetingEnabled>>(() => false);
 
     return { router, runtime, getPlatformConnectionTime };
   };

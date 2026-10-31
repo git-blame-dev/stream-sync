@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { vi, type Mock, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import fs from "node:fs";
-import { createMockFn, restoreAllMocks, type TestMockFn } from "../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../helpers/mock-factories";
 import {
   initializeStaticSecrets,
@@ -25,13 +25,13 @@ type TestRequestOptions = Record<string, unknown> & {
 };
 
 type TestHttpClient = {
-  get: TestMockFn<[string, TestRequestOptions?], Promise<TestHttpResponse>>;
-  post: TestMockFn;
+  get: Mock<(...args: [string, TestRequestOptions?]) => Promise<TestHttpResponse>>;
+  post: Mock<(...args: unknown[]) => unknown>;
 };
 
 type AuthHttpClient = {
-  get: TestMockFn<[string, unknown?], Promise<{ data?: unknown }>>;
-  post: TestMockFn<[string, unknown?, unknown?], Promise<{ data?: unknown }>>;
+  get: Mock<(...args: [string, unknown?]) => Promise<{ data?: unknown }>>;
+  post: Mock<(...args: [string, unknown?, unknown?]) => Promise<{ data?: unknown }>>;
 };
 
 const IN_MEMORY_TOKEN_STORE_PATH = "/synthetic-in-memory-token-store/tokens.json";
@@ -48,12 +48,12 @@ describe("TwitchApiClient authentication", () => {
   let fsSpies: Array<{ mockRestore: () => void }>;
 
   const createMockHttpClient = (): TestHttpClient => ({
-    get: createMockFn<[string, TestRequestOptions?], Promise<TestHttpResponse>>(),
-    post: createMockFn(),
+    get: vi.fn<(...args: [string, TestRequestOptions?]) => Promise<TestHttpResponse>>(),
+    post: vi.fn<(...args: unknown[]) => unknown>(),
   });
 
   const createAuthHttpClient = (): AuthHttpClient => ({
-    get: createMockFn<[string, unknown?], Promise<{ data?: unknown }>>().mockResolvedValue({
+    get: vi.fn<(...args: [string, unknown?]) => Promise<{ data?: unknown }>>().mockResolvedValue({
       data: {
         client_id: "test-client-id",
         user_id: "test-user-id",
@@ -61,7 +61,7 @@ describe("TwitchApiClient authentication", () => {
         scopes: [...TWITCH_OAUTH_SCOPES],
       },
     }),
-    post: createMockFn<[string, unknown?, unknown?], Promise<{ data?: unknown }>>().mockResolvedValue({
+    post: vi.fn<(...args: [string, unknown?, unknown?]) => Promise<{ data?: unknown }>>().mockResolvedValue({
       data: {
         access_token: "refreshed-access-token",
         refresh_token: "refreshed-refresh-token",
@@ -196,7 +196,7 @@ describe("TwitchApiClient authentication", () => {
       for (const spy of (fsSpies ?? []).reverse()) {
         spy.mockRestore();
       }
-      restoreAllMocks();
+      vi.restoreAllMocks();
       _resetForTesting();
       initializeStaticSecrets();
     }

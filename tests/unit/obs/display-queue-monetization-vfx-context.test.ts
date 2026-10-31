@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it, afterEach } from 'bun:test';
+
 import { safeSetTimeout } from "../../../src/utils/timeout-validator";
 import { EventEmitter } from "events";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
@@ -18,10 +18,8 @@ type VfxPayload = Record<string, unknown> & {
 
 function createObsManager(): DisplayQueueObsManager {
   return {
-    isReady: createMockFn<[], Promise<boolean>>(async () => true),
-    call: createMockFn<
-      [requestType: string, payload: Record<string, unknown>],
-      Promise<unknown>
+    isReady: vi.fn<(...args: []) => Promise<boolean>>(async () => true),
+    call: vi.fn<(...args: [requestType: string, payload: Record<string, unknown>]) => Promise<unknown>
     >(async () => ({ success: true })),
   };
 }
@@ -30,17 +28,15 @@ function createSourcesManager(): NonNullable<
   DisplayQueueDependencies["sourcesManager"]
 > {
   return {
-    updateTextSource: createMockFn<[string, string?], Promise<void>>(
+    updateTextSource: vi.fn<(...args: [string, string?]) => Promise<void>>(
       async () => {},
     ),
-    clearTextSource: createMockFn<[string], Promise<void>>(async () => {}),
-    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(
+    clearTextSource: vi.fn<(...args: [string]) => Promise<void>>(async () => {}),
+    updateChatMsgText: vi.fn<(...args: [string, string, string]) => Promise<void>>(
       async () => {},
     ),
     getSceneItemId: async () => ({ sceneItemId: 1 }),
-    setSourceVisibility: createMockFn<
-      [string, string, boolean],
-      Promise<void>
+    setSourceVisibility: vi.fn<(...args: [string, string, boolean]) => Promise<void>
     >(async () => {}),
     getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
     setGroupSourceVisibility: async () => {},
@@ -48,26 +44,20 @@ function createSourcesManager(): NonNullable<
     setNotificationPlatformLogoVisibility: async () => {},
     hideAllPlatformLogos: async () => {},
     hideAllNotificationPlatformLogos: async () => {},
-    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+    setChatDisplayVisibility: vi.fn<(...args: [boolean]) => Promise<void>>(
       async () => {},
     ),
-    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+    setNotificationDisplayVisibility: vi.fn<(...args: [boolean]) => Promise<void>>(
       async () => {},
     ),
-    hideAllDisplays: createMockFn<[], Promise<void>>(async () => {}),
-    setSourceFilterEnabled: createMockFn<
-      [string, string, boolean],
-      Promise<void>
+    hideAllDisplays: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+    setSourceFilterEnabled: vi.fn<(...args: [string, string, boolean]) => Promise<void>
     >(async () => {}),
-    getSourceFilterSettings: createMockFn<
-      [string, string],
-      Promise<Record<string, unknown>>
+    getSourceFilterSettings: vi.fn<(...args: [string, string]) => Promise<Record<string, unknown>>
     >(async () => ({})),
-    setSourceFilterSettings: createMockFn<
-      [string, string, Record<string, unknown>],
-      Promise<void>
+    setSourceFilterSettings: vi.fn<(...args: [string, string, Record<string, unknown>]) => Promise<void>
     >(async () => {}),
-    clearSceneItemCache: createMockFn<[], void>(() => {}),
+    clearSceneItemCache: vi.fn<(...args: []) => void>(() => {}),
   };
 }
 
@@ -75,17 +65,13 @@ function createGoalsManager(): NonNullable<
   DisplayQueueDependencies["goalsManager"]
 > {
   return {
-    processDonationGoal: createMockFn<
-      [platform: unknown, amount: number],
-      Promise<{ success: boolean }>
+    processDonationGoal: vi.fn<(...args: [platform: unknown, amount: number]) => Promise<{ success: boolean }>
     >(async () => ({ success: true })),
-    processPaypiggyGoal: createMockFn<
-      [platform: string],
-      Promise<{ success: boolean }>
+    processPaypiggyGoal: vi.fn<(...args: [platform: string]) => Promise<{ success: boolean }>
     >(async () => ({ success: true })),
-    initializeGoalDisplay: createMockFn<[], Promise<void>>(async () => {}),
-    updateAllGoalDisplays: createMockFn<[], Promise<void>>(async () => {}),
-    updateGoalDisplay: createMockFn<[string], Promise<void>>(async () => {}),
+    initializeGoalDisplay: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+    updateAllGoalDisplays: vi.fn<(...args: []) => Promise<void>>(async () => {}),
+    updateGoalDisplay: vi.fn<(...args: [string]) => Promise<void>>(async () => {}),
     getCurrentGoalStatus: () => null,
     getAllCurrentGoalStatuses: () => ({}),
   };
@@ -105,7 +91,7 @@ describe("DisplayQueue monetization VFX context", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function createQueue(
@@ -157,7 +143,7 @@ describe("DisplayQueue monetization VFX context", () => {
       eventBus,
       mockDependencies,
     );
-    queue.effects.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+    queue.effects.playGiftVideoAndAudio = vi.fn().mockResolvedValue(false);
 
     return queue;
   }
@@ -227,7 +213,7 @@ describe("DisplayQueue monetization VFX context", () => {
           releaseDelay = resolve;
         });
       });
-      queue.effects.playGiftVideoAndAudio = createMockFn(async () => {
+      queue.effects.playGiftVideoAndAudio = vi.fn(async () => {
         timeline.push("media");
         return true;
       });

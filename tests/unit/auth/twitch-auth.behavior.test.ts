@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   initializeStaticSecrets,
@@ -55,7 +55,7 @@ describe("TwitchAuth behavior", () => {
   });
 
   afterEach(async () => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
     process.env = { ...originalEnv };
@@ -110,16 +110,16 @@ describe("TwitchAuth behavior", () => {
     });
 
   it("throws when expectedUsername is missing", async () => {
-    const httpClient = { get: createMockFn(), post: createMockFn() };
-    const oauthFlow = createMockFn();
+    const httpClient = { get: vi.fn<(...args: unknown[]) => unknown>(), post: vi.fn<(...args: unknown[]) => unknown>() };
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ expectedUsername: null, httpClient, oauthFlow });
 
     await expect(auth.initialize()).rejects.toThrow("expectedUsername");
   });
 
   it("throws when clientId is missing", async () => {
-    const httpClient = { get: createMockFn(), post: createMockFn() };
-    const oauthFlow = createMockFn();
+    const httpClient = { get: vi.fn<(...args: unknown[]) => unknown>(), post: vi.fn<(...args: unknown[]) => unknown>() };
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ clientId: null, httpClient, oauthFlow });
 
     await expect(auth.initialize()).rejects.toThrow("clientId");
@@ -127,18 +127,18 @@ describe("TwitchAuth behavior", () => {
 
   it("throws when clientSecret is missing", async () => {
     secrets.twitch.clientSecret = null;
-    const httpClient = { get: createMockFn(), post: createMockFn() };
-    const oauthFlow = createMockFn();
+    const httpClient = { get: vi.fn<(...args: unknown[]) => unknown>(), post: vi.fn<(...args: unknown[]) => unknown>() };
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     await expect(auth.initialize()).rejects.toThrow("clientSecret");
   });
 
   it("throws when oauthFlow override is not a function", () => {
-    const httpClient = { get: createMockFn(), post: createMockFn() };
+    const httpClient = { get: vi.fn<(...args: unknown[]) => unknown>(), post: vi.fn<(...args: unknown[]) => unknown>() };
 
     expect(() =>
-      createAuth({ httpClient, oauthFlow: { runOAuthFlow: createMockFn() } }),
+      createAuth({ httpClient, oauthFlow: { runOAuthFlow: vi.fn<(...args: unknown[]) => unknown>() } }),
     ).toThrow("oauthFlow must be a function when provided");
   });
 
@@ -151,10 +151,10 @@ describe("TwitchAuth behavior", () => {
     });
 
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     const userId = await auth.initialize();
@@ -170,10 +170,10 @@ describe("TwitchAuth behavior", () => {
 
   it("runs OAuth flow when tokens are missing", async () => {
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: "test-oauth-access-token",
       refreshToken: "test-oauth-refresh-token",
       expiresIn: 3600,
@@ -194,10 +194,10 @@ describe("TwitchAuth behavior", () => {
 
   it("throws when OAuth flow returns snake_case tokens", async () => {
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ access_token: string; refresh_token: string; expires_in: number; }>>().mockResolvedValue({
       access_token: "test-oauth-access-token",
       refresh_token: "test-oauth-refresh-token",
       expires_in: 3600,
@@ -217,8 +217,8 @@ describe("TwitchAuth behavior", () => {
       },
     });
 
-    const httpClient = { get: createMockFn(), post: createMockFn() };
-    const oauthFlow = createMockFn();
+    const httpClient = { get: vi.fn<(...args: unknown[]) => unknown>(), post: vi.fn<(...args: unknown[]) => unknown>() };
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     await expect(auth.initialize()).rejects.toThrow(
@@ -228,10 +228,10 @@ describe("TwitchAuth behavior", () => {
 
   it("throws when OAuth flow returns non-string accessToken", async () => {
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ accessToken: number; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: 12345,
       refreshToken: "test-oauth-refresh-token",
       expiresIn: 3600,
@@ -252,14 +252,14 @@ describe("TwitchAuth behavior", () => {
     });
 
     const httpClient = {
-      get: createMockFn()
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: { user_id: string; client_id: string; login: string; scopes: string[]; expires_in: number; }; }>>()
         .mockResolvedValueOnce(
           buildValidationResponse({ scopes: ["chat:edit"] }),
         )
         .mockResolvedValueOnce(buildValidationResponse()),
-      post: createMockFn(),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: "test-oauth-access-token",
       refreshToken: "test-oauth-refresh-token",
       expiresIn: 3600,
@@ -287,16 +287,16 @@ describe("TwitchAuth behavior", () => {
           refreshToken: "test-startup-refresh-token",
         },
       });
-      const get = createMockFn<[], Promise<{ data?: unknown }>>()
+      const get = vi.fn<(...args: []) => Promise<{ data?: unknown }>>()
         .mockRejectedValueOnce(failure)
         .mockRejectedValueOnce(failure)
         .mockResolvedValueOnce(buildValidationResponse());
       const httpClient = {
         get,
-        post: createMockFn(),
+        post: vi.fn<(...args: unknown[]) => unknown>(),
       };
-      const oauthFlow = createMockFn();
-      const retryDelay = createMockFn().mockResolvedValue(undefined);
+      const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+      const retryDelay = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
       const auth = createAuth({
         httpClient,
         oauthFlow,
@@ -320,11 +320,11 @@ describe("TwitchAuth behavior", () => {
     });
     const exhaustedError = { response: { status: 503 } };
     const httpClient = {
-      get: createMockFn().mockRejectedValue(exhaustedError),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(exhaustedError),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn();
-    const retryDelay = createMockFn().mockResolvedValue(undefined);
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+    const retryDelay = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const auth = createAuth({
       httpClient,
       oauthFlow,
@@ -348,11 +348,11 @@ describe("TwitchAuth behavior", () => {
       },
     });
     const httpClient = {
-      get: createMockFn().mockResolvedValue({ data: { login: "wrong-shape" } }),
-      post: createMockFn(),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: { login: string; }; }>>().mockResolvedValue({ data: { login: "wrong-shape" } }),
+      post: vi.fn<(...args: unknown[]) => unknown>(),
     };
-    const oauthFlow = createMockFn();
-    const retryDelay = createMockFn().mockResolvedValue(undefined);
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+    const retryDelay = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const auth = createAuth({
       httpClient,
       oauthFlow,
@@ -375,8 +375,8 @@ describe("TwitchAuth behavior", () => {
     await writeTokenStore({ twitch: { accessToken: "test-candidate", refreshToken: "test-refresh" } });
     const before = await fs.promises.readFile(tokenStorePath, "utf8");
     secrets.twitch.accessToken = "test-previous";
-    const oauthFlow = createMockFn();
-    const auth = createAuth({ httpClient: { get: createMockFn().mockResolvedValue(buildValidationResponse(invalid)), post: createMockFn() }, oauthFlow });
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+    const auth = createAuth({ httpClient: { get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse(invalid)), post: vi.fn<(...args: unknown[]) => unknown>() }, oauthFlow });
     await expect(auth.initialize()).rejects.toThrow();
     expect(secrets.twitch.accessToken).toBe("test-previous");
     expect(auth.isReady()).toBe(false);
@@ -391,12 +391,12 @@ describe("TwitchAuth behavior", () => {
         refreshToken: "test-refresh-token",
       },
     });
-    const get = createMockFn<[], Promise<{ data?: unknown }>>()
+    const get = vi.fn<(...args: []) => Promise<{ data?: unknown }>>()
       .mockRejectedValueOnce({ response: { status: 401 } })
       .mockResolvedValueOnce(buildValidationResponse());
     const httpClient = {
       get,
-      post: createMockFn().mockResolvedValue({
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: string; expires_in: number; }; }>>().mockResolvedValue({
         data: {
           access_token: "test-refreshed-access-token",
           refresh_token: "test-refresh-token",
@@ -404,8 +404,8 @@ describe("TwitchAuth behavior", () => {
         },
       }),
     };
-    const oauthFlow = createMockFn();
-    const retryDelay = createMockFn().mockResolvedValue(undefined);
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+    const retryDelay = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const auth = createAuth({
       httpClient,
       oauthFlow,
@@ -428,10 +428,10 @@ describe("TwitchAuth behavior", () => {
     });
     const transientError = { response: { status: 503 } };
     const httpClient = {
-      get: createMockFn()
+      get: vi.fn<(...args: unknown[]) => Promise<unknown>>()
         .mockRejectedValueOnce({ response: { status: 401 } })
         .mockRejectedValue(transientError),
-      post: createMockFn().mockResolvedValue({
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: string; expires_in: number; }; }>>().mockResolvedValue({
         data: {
           access_token: "test-refreshed-access-token",
           refresh_token: "test-refresh-token",
@@ -439,8 +439,8 @@ describe("TwitchAuth behavior", () => {
         },
       }),
     };
-    const oauthFlow = createMockFn();
-    const retryDelay = createMockFn().mockResolvedValue(undefined);
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
+    const retryDelay = vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined);
     const auth = createAuth({
       httpClient,
       oauthFlow,
@@ -463,10 +463,10 @@ describe("TwitchAuth behavior", () => {
     });
     const refreshError = { response: { status: 503 } };
     const httpClient = {
-      get: createMockFn().mockRejectedValue({ response: { status: 401 } }),
-      post: createMockFn().mockRejectedValue(refreshError),
+      get: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue({ response: { status: 401 } }),
+      post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(refreshError),
     };
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     await expect(auth.initialize()).rejects.toBe(refreshError);
@@ -480,8 +480,8 @@ describe("TwitchAuth behavior", () => {
     const invalidParent = path.join(tempDir, "not-a-directory");
     await fs.promises.writeFile(invalidParent, "test-only", "utf8");
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn().mockResolvedValue({
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: string; expires_in: number; }; }>>().mockResolvedValue({
         data: {
           access_token: "test-new-access-token",
           refresh_token: "test-new-refresh-token",
@@ -492,7 +492,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       tokenStorePathOverride: path.join(invalidParent, "tokens.json"),
       httpClient,
-      oauthFlow: createMockFn(),
+      oauthFlow: vi.fn<(...args: unknown[]) => unknown>(),
     });
 
     await expect(auth.refreshTokens()).resolves.toBe(false);
@@ -509,10 +509,10 @@ describe("TwitchAuth behavior", () => {
     });
 
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn().mockReturnValue(postPromise),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => typeof postPromise>().mockReturnValue(postPromise),
     };
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     const first = auth.refreshTokens();
@@ -540,15 +540,15 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.refreshToken = "test-refresh-token";
 
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn().mockResolvedValue({
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; expires_in: number; }; }>>().mockResolvedValue({
         data: {
           access_token: "test-new-access-token",
           expires_in: 3600,
         },
       }),
     };
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
 
     const result = await auth.refreshTokens();
@@ -568,12 +568,12 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.refreshToken = "test-refresh-token";
 
     const httpClient = {
-      get: createMockFn().mockResolvedValue(buildValidationResponse()),
-      post: createMockFn().mockRejectedValue({
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse()),
+      post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue({
         response: { status: 400, data: { error: "invalid_grant" } },
       }),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: "test-oauth-access-token",
       refreshToken: "test-oauth-refresh-token",
       expiresIn: 3600,
@@ -592,12 +592,12 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.accessToken = "test-old-access-token";
     secrets.twitch.refreshToken = "test-invalid-refresh-token";
     const httpClient = {
-      get: createMockFn(),
-      post: createMockFn().mockRejectedValue({
+      get: vi.fn<(...args: unknown[]) => unknown>(),
+      post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue({
         response: { status: 400, data: { error: "invalid_grant" } },
       }),
     };
-    const oauthFlow = createMockFn().mockResolvedValue({
+    const oauthFlow = vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; expiresIn: number; }>>().mockResolvedValue({
       accessToken: "test-oauth-access-token",
       expiresIn: 3600,
     });
@@ -613,8 +613,8 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.refreshToken = "test-original-refresh";
     await writeTokenStore({ twitch: { accessToken: "test-accepted", refreshToken: "test-original-refresh" } });
     const before = await fs.promises.readFile(tokenStorePath, "utf8");
-    const get = createMockFn().mockResolvedValue(buildValidationResponse());
-    const auth = createAuth({ httpClient: { get, post: createMockFn().mockResolvedValue({ data: { access_token: "test-candidate", refresh_token: refreshToken } }) } });
+    const get = vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse());
+    const auth = createAuth({ httpClient: { get, post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: "" | "   " | 123 | null; }; }>>().mockResolvedValue({ data: { access_token: "test-candidate", refresh_token: refreshToken } }) } });
     expect(await auth.refreshTokens()).toBe(false);
     expect(get.mock.calls.length).toBe(0);
     expect(secrets.twitch.accessToken).toBe("test-accepted");
@@ -623,13 +623,13 @@ describe("TwitchAuth behavior", () => {
 
   it.each(["missing", "scopes", "terminal"])("disables interactive recovery for %s", async (route) => {
     process.env.TWITCH_DISABLE_AUTH = "true";
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     if (route === "scopes") {
       await writeTokenStore({ twitch: { accessToken: "test-candidate" } });
     }
     const auth = createAuth({ oauthFlow, httpClient: {
-      get: createMockFn().mockResolvedValue(buildValidationResponse({ scopes: [] })),
-      post: createMockFn().mockRejectedValue({ response: { status: 400, data: { error: "invalid_grant" } } }),
+      get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse({ scopes: [] })),
+      post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue({ response: { status: 400, data: { error: "invalid_grant" } } }),
     } });
     if (route === "terminal") {
       secrets.twitch.refreshToken = "test-revoked";
@@ -643,8 +643,8 @@ describe("TwitchAuth behavior", () => {
   it.each([{ login: "test-wrong-user" }, { client_id: "test-wrong-client" }, { scopes: [] }])("rejects OAuth candidate before persistence: %j", async (invalid) => {
     secrets.twitch.accessToken = "test-previous";
     const auth = createAuth({
-      httpClient: { get: createMockFn().mockResolvedValue(buildValidationResponse(invalid)), post: createMockFn() },
-      oauthFlow: createMockFn().mockResolvedValue({ accessToken: "test-candidate", refreshToken: "test-refresh" }),
+      httpClient: { get: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof buildValidationResponse>>>().mockResolvedValue(buildValidationResponse(invalid)), post: vi.fn<(...args: unknown[]) => unknown>() },
+      oauthFlow: vi.fn<(...args: unknown[]) => Promise<{ accessToken: string; refreshToken: string; }>>().mockResolvedValue({ accessToken: "test-candidate", refreshToken: "test-refresh" }),
     });
     await expect(auth.initialize()).rejects.toThrow();
     expect(secrets.twitch.accessToken).toBe("test-previous");
@@ -659,8 +659,8 @@ describe("TwitchAuth behavior", () => {
     let oldStarted!: () => void;
     const started = new Promise<void>(resolve => { oldStarted = resolve; });
     const oldValidation = new Promise<ReturnType<typeof buildValidationResponse>>(resolve => { resolveOld = resolve; });
-    const get = createMockFn().mockImplementationOnce(() => { oldStarted(); return oldValidation; }).mockResolvedValue(buildValidationResponse());
-    const auth = createAuth({ httpClient: { get, post: createMockFn().mockResolvedValue({ data: { access_token: "test-new", refresh_token: "test-new-refresh" } }) } });
+    const get = vi.fn<(...args: unknown[]) => Promise<{ data: { user_id: string; client_id: string; login: string; scopes: string[]; expires_in: number; }; }>>().mockImplementationOnce(() => { oldStarted(); return oldValidation; }).mockResolvedValue(buildValidationResponse());
+    const auth = createAuth({ httpClient: { get, post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: string; }; }>>().mockResolvedValue({ data: { access_token: "test-new", refresh_token: "test-new-refresh" } }) } });
     const initialization = auth.initialize();
     await started;
     expect(await auth.refreshTokens()).toBe(true);
@@ -674,10 +674,10 @@ describe("TwitchAuth behavior", () => {
   it.each([{ login: "test-wrong" }, { client_id: "test-wrong" }, { scopes: [] }, { scopes: null }, { user_id: {} }])("keeps accepted credentials and identity when refreshed candidate fails validation: %j", async (invalid) => {
     await writeTokenStore({ twitch: { accessToken: "test-accepted", refreshToken: "test-refresh" } });
     const httpClient = {
-      get: createMockFn().mockResolvedValueOnce(buildValidationResponse()).mockResolvedValue(buildValidationResponse(invalid)),
-      post: createMockFn().mockResolvedValue({ data: { access_token: "test-rejected", refresh_token: "test-rejected-refresh" } }),
+      get: vi.fn<(...args: unknown[]) => Promise<{ data: { user_id: string; client_id: string; login: string; scopes: string[]; expires_in: number; }; }>>().mockResolvedValueOnce(buildValidationResponse()).mockResolvedValue(buildValidationResponse(invalid)),
+      post: vi.fn<(...args: unknown[]) => Promise<{ data: { access_token: string; refresh_token: string; }; }>>().mockResolvedValue({ data: { access_token: "test-rejected", refresh_token: "test-rejected-refresh" } }),
     };
-    const oauthFlow = createMockFn();
+    const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
     const auth = createAuth({ httpClient, oauthFlow });
     await auth.initialize();
     const before = await fs.promises.readFile(tokenStorePath, "utf8");

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import * as testClock from "../../../../helpers/test-clock";
 import { safeSetTimeout } from "../../../../../src/utils/timeout-validator";
@@ -68,7 +68,7 @@ class MockRawPlatformDataLoggingService {
 
 const createTwitchAuth = (overrides: TwitchAuthOverrides = {}) => ({
   isReady: () => ("ready" in overrides ? overrides.ready : true),
-  refreshTokens: createMockFn().mockResolvedValue(true),
+  refreshTokens: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
   getUserId: () => overrides.userId || "test-user-123",
   ...overrides,
 });
@@ -88,9 +88,9 @@ const createEventSub = (
       logger: noOpLogger,
       twitchAuth: createTwitchAuth(),
       axios: {
-        post: createMockFn(),
-        get: createMockFn(),
-        delete: createMockFn(),
+        post: vi.fn<(...args: unknown[]) => unknown>(),
+        get: vi.fn<(...args: unknown[]) => unknown>(),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       },
       WebSocketCtor: MockWebSocket,
       RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
@@ -188,7 +188,7 @@ describe("TwitchEventSub lifecycle", () => {
       secrets.twitch.accessToken = "test-access-token";
       eventSub = createEventSub({ broadcasterId: "" });
       eventSub.maxRetryAttempts = 0;
-      const connectWebSocketMock = createMockFn(async () => {});
+      const connectWebSocketMock = vi.fn(async () => {});
       eventSub._connectWebSocket = connectWebSocketMock;
 
       await expect(eventSub.initialize()).rejects.toThrow(
@@ -203,7 +203,7 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.maxRetryAttempts = 0;
       eventSub.initialStartupMaxAttempts = 1;
-      eventSub._connectWebSocket = createMockFn(async () => {
+      eventSub._connectWebSocket = vi.fn(async () => {
         throw new Error("ws connect failed");
       });
 
@@ -218,10 +218,10 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.initialStartupMaxAttempts = 2;
       eventSub.initialStartupRetryDelay = 1;
-      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
-      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      eventSub._cleanupAllWebSocketSubscriptions = vi.fn(async () => {});
+      eventSub._deleteAllSubscriptions = vi.fn(async () => {});
       const currentEventSub = eventSub;
-      const connectWebSocketMock = createMockFn(async () => {
+      const connectWebSocketMock = vi.fn(async () => {
         if (connectWebSocketMock.mock.calls.length === 1) {
           const error = new Error("socket hang up") as Error & { code?: string };
           error.code = "ECONNRESET";
@@ -250,10 +250,10 @@ describe("TwitchEventSub lifecycle", () => {
         eventSub = createEventSub();
         eventSub.initialStartupMaxAttempts = 2;
         eventSub.initialStartupRetryDelay = 1;
-        eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
-        eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+        eventSub._cleanupAllWebSocketSubscriptions = vi.fn(async () => {});
+        eventSub._deleteAllSubscriptions = vi.fn(async () => {});
         const currentEventSub = eventSub;
-        const connectWebSocketMock = createMockFn(async () => {
+        const connectWebSocketMock = vi.fn(async () => {
           if (connectWebSocketMock.mock.calls.length === 1) {
             const error = new Error(`getaddrinfo ${dnsCode} eventsub.wss.twitch.tv`) as Error & { code?: string };
             error.code = dnsCode;
@@ -281,10 +281,10 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.initialStartupMaxAttempts = 2;
       eventSub.initialStartupRetryDelay = 1;
-      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
+      eventSub._cleanupAllWebSocketSubscriptions = vi.fn(async () => {});
       const error = new Error("getaddrinfo ENOTFOUND eventsub.wss.twitch.tv") as Error & { code?: string };
       error.code = "ENOTFOUND";
-      const connectWebSocketMock = createMockFn(async () => {
+      const connectWebSocketMock = vi.fn(async () => {
         throw error;
       });
       eventSub._connectWebSocket = connectWebSocketMock;
@@ -302,10 +302,10 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.initialStartupMaxAttempts = 2;
       eventSub.initialStartupRetryDelay = 1;
-      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
-      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      eventSub._cleanupAllWebSocketSubscriptions = vi.fn(async () => {});
+      eventSub._deleteAllSubscriptions = vi.fn(async () => {});
       const currentEventSub = eventSub;
-      const connectWebSocketMock = createMockFn(async () => {
+      const connectWebSocketMock = vi.fn(async () => {
         if (connectWebSocketMock.mock.calls.length === 1) {
           const error = new Error("Connection closed before EventSub startup completed") as Error & { closeCode?: number };
           error.closeCode = 4006;
@@ -330,10 +330,10 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub.initialStartupMaxAttempts = 1;
       const closeCalls: CloseCall[] = [];
       const removeListenersCalls: boolean[] = [];
-      const deleteAllSubscriptionsMock = createMockFn(async () => {});
+      const deleteAllSubscriptionsMock = vi.fn(async () => {});
       eventSub._deleteAllSubscriptions = deleteAllSubscriptionsMock;
       const currentEventSub = eventSub;
-      eventSub._connectWebSocket = createMockFn(async () => {
+      eventSub._connectWebSocket = vi.fn(async () => {
         currentEventSub.ws = createWebSocket({
           readyState: 1,
           close: (code?: number, reason?: string) => { closeCalls.push({ code, reason }); },
@@ -392,8 +392,8 @@ describe("TwitchEventSub lifecycle", () => {
   describe("cleanup", () => {
     it("clears all timers and resets state", async () => {
       const mockAxios = {
-        get: createMockFn().mockResolvedValue({ data: { data: [] } }),
-        delete: createMockFn(),
+        get: vi.fn<(...args: unknown[]) => Promise<{ data: { data: never[]; }; }>>().mockResolvedValue({ data: { data: [] } }),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
       eventSub.reconnectTimeout = safeSetTimeout(() => {}, 10000);
@@ -418,8 +418,8 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("closes WebSocket and removes listeners", async () => {
       const mockAxios = {
-        get: createMockFn().mockResolvedValue({ data: { data: [] } }),
-        delete: createMockFn(),
+        get: vi.fn<(...args: unknown[]) => Promise<{ data: { data: never[]; }; }>>().mockResolvedValue({ data: { data: [] } }),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
       const closeCalled: CloseCall[] = [];
@@ -440,8 +440,8 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("handles WebSocket close errors gracefully", async () => {
       const mockAxios = {
-        get: createMockFn().mockResolvedValue({ data: { data: [] } }),
-        delete: createMockFn(),
+        get: vi.fn<(...args: unknown[]) => Promise<{ data: { data: never[]; }; }>>().mockResolvedValue({ data: { data: [] } }),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
       eventSub.ws = createWebSocket({
@@ -713,15 +713,15 @@ describe("TwitchEventSub lifecycle", () => {
     it("sends message via API and returns success", async () => {
       const postCalls: Array<{ url: string; payload: Record<string, unknown>; config: unknown }> = [];
       const mockAxios = {
-        post: createMockFn().mockImplementation((url: unknown, payload: unknown, config: unknown) => {
+        post: vi.fn((url: unknown, payload: unknown, config: unknown) => {
           if (typeof url !== "string" || !isRecord(payload)) {
             throw new Error("Expected Twitch sendMessage request payload");
           }
           postCalls.push({ url, payload, config });
           return Promise.resolve({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } });
         }),
-        get: createMockFn(),
-        delete: createMockFn(),
+        get: vi.fn<(...args: unknown[]) => unknown>(),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       secrets.twitch.accessToken = "test-token";
       eventSub = createEventSub({}, { axios: mockAxios });
@@ -737,7 +737,7 @@ describe("TwitchEventSub lifecycle", () => {
     it("retries once after refresh on 401", async () => {
       let callCount = 0;
       const mockAxios = {
-        post: createMockFn().mockImplementation(() => {
+        post: vi.fn(() => {
           callCount += 1;
           if (callCount === 1) {
             const error = new Error("Unauthorized") as Error & { response?: { status: number } };
@@ -746,8 +746,8 @@ describe("TwitchEventSub lifecycle", () => {
           }
           return Promise.resolve({ data: { data: [{ message_id: "synthetic-message", is_sent: true }] } });
         }),
-        get: createMockFn(),
-        delete: createMockFn(),
+        get: vi.fn<(...args: unknown[]) => unknown>(),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       const refreshedToken = "refreshed-token";
       const twitchAuth = createTwitchAuth({
@@ -767,9 +767,9 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("handles API error and throws", async () => {
       const mockAxios = {
-        post: createMockFn().mockRejectedValue(new Error("API error")),
-        get: createMockFn(),
-        delete: createMockFn(),
+        post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("API error")),
+        get: vi.fn<(...args: unknown[]) => unknown>(),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
 

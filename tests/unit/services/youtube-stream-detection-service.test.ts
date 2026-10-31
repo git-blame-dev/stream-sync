@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect, spyOn } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, beforeEach, afterEach, expect, spyOn } from 'bun:test';
+
 import testClock from "../../helpers/test-clock";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
@@ -43,15 +43,13 @@ function createMockInnertubeClient(
 ): DetectionClient {
   const mockChannel = {
     videos: [],
-    getLiveStreams: createMockFn<[], Promise<{ videos: ReturnType<typeof createChannelVideo>[] }>>().mockResolvedValue({
+    getLiveStreams: vi.fn<(...args: []) => Promise<{ videos: ReturnType<typeof createChannelVideo>[] }>>().mockResolvedValue({
       videos: streamData.map(createChannelVideo),
     }),
   };
 
   return {
-    search: createMockFn<
-      [string, Record<string, unknown>?],
-      Promise<{ videos?: ReturnType<typeof createSearchVideo>[]; channels?: { author: { id: string; name: string; handle: string } }[] }>
+    search: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<{ videos?: ReturnType<typeof createSearchVideo>[]; channels?: { author: { id: string; name: string; handle: string } }[] }>
     >().mockImplementation((_query, options) => {
       if (options && options.type === "channel") {
         return Promise.resolve({
@@ -70,10 +68,10 @@ function createMockInnertubeClient(
         videos: streamData.map(createSearchVideo),
       });
     }),
-    resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
+    resolveURL: vi.fn<(...args: [string]) => Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
       payload: { browseId: "UC" + "m".repeat(22) },
     }),
-    getChannel: createMockFn<[string], Promise<typeof mockChannel>>().mockResolvedValue(mockChannel),
+    getChannel: vi.fn<(...args: [string]) => Promise<typeof mockChannel>>().mockResolvedValue(mockChannel),
   };
 }
 
@@ -147,7 +145,7 @@ describe("YouTubeStreamDetectionService", () => {
   let mockClient: DetectionClient;
 
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Core Stream Detection Behavior", () => {
@@ -158,12 +156,12 @@ describe("YouTubeStreamDetectionService", () => {
         is_live: true,
       };
       mockClient = {
-        resolveURL: createMockFn().mockResolvedValue({
+        resolveURL: vi.fn<(...args: unknown[]) => Promise<{ payload: { browseId: string; }; }>>().mockResolvedValue({
           payload: { browseId: "UC" + "f".repeat(22) },
         }),
-        getChannel: createMockFn().mockResolvedValue({
+        getChannel: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: boolean; }[]; getLiveStreams: import("bun:test").Mock<() => Promise<never>>; }>>().mockResolvedValue({
           videos: [feedStream],
-          getLiveStreams: createMockFn(() => new Promise<never>(() => undefined)),
+          getLiveStreams: vi.fn(() => new Promise<never>(() => undefined)),
         }),
       } as DetectionClient;
       service = createStreamDetectionService(mockClient, 25);
@@ -236,10 +234,10 @@ describe("YouTubeStreamDetectionService", () => {
 
     it("should timeout gracefully for slow responses", async () => {
       mockClient = {
-        resolveURL: createMockFn<[string], Promise<never>>(
+        resolveURL: vi.fn<(...args: [string]) => Promise<never>>(
           () => new Promise<never>(() => undefined),
         ),
-        getChannel: createMockFn<[string], Promise<{}>>().mockResolvedValue({}),
+        getChannel: vi.fn<(...args: [string]) => Promise<{}>>().mockResolvedValue({}),
       };
       service = createStreamDetectionService(mockClient, 1);
 
@@ -255,12 +253,8 @@ describe("YouTubeStreamDetectionService", () => {
   describe("Error Recovery Behavior", () => {
     it("should handle network errors gracefully", async () => {
       mockClient = {
-        resolveURL: createMockFn().mockRejectedValue(
-          new Error("Network error"),
-        ),
-        getChannel: createMockFn().mockRejectedValue(
-          new Error("Network error"),
-        ),
+        resolveURL: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Network error")),
+        getChannel: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Network error")),
       };
       service = createStreamDetectionService(mockClient);
 
@@ -277,8 +271,8 @@ describe("YouTubeStreamDetectionService", () => {
       const rateLimitError: StatusError = new Error("Quota exceeded");
       rateLimitError.status = 429;
       mockClient = {
-        resolveURL: createMockFn().mockRejectedValue(rateLimitError),
-        getChannel: createMockFn().mockRejectedValue(rateLimitError),
+        resolveURL: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(rateLimitError),
+        getChannel: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(rateLimitError),
       };
       service = createStreamDetectionService(mockClient);
 
@@ -295,8 +289,8 @@ describe("YouTubeStreamDetectionService", () => {
       const notFoundError: StatusError = new Error("Channel not found");
       notFoundError.status = 404;
       mockClient = {
-        resolveURL: createMockFn().mockResolvedValue({ payload: {} }),
-        getChannel: createMockFn().mockRejectedValue(notFoundError),
+        resolveURL: vi.fn<(...args: unknown[]) => Promise<{ payload: {}; }>>().mockResolvedValue({ payload: {} }),
+        getChannel: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(notFoundError),
       };
       service = createStreamDetectionService(mockClient);
 
@@ -385,18 +379,16 @@ describe("YouTubeStreamDetectionService", () => {
 
     it("should handle malformed API responses gracefully", async () => {
       const malformedChannel = {
-        getLiveStreams: createMockFn().mockRejectedValue(
-          new Error("Type mismatch in YouTube.js parser"),
-        ),
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Type mismatch in YouTube.js parser")),
       };
       mockClient = {
-        resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
+        resolveURL: vi.fn<(...args: [string]) => Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
           payload: { browseId: "UC" + "p".repeat(22) },
         }),
-        search: createMockFn<[string, Record<string, unknown>?], Promise<{ videos?: ReturnType<typeof createSearchVideo>[] }>>().mockResolvedValue({
+        search: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<{ videos?: ReturnType<typeof createSearchVideo>[] }>>().mockResolvedValue({
           videos: [],
         }),
-        getChannel: createMockFn<[string], Promise<typeof malformedChannel>>().mockResolvedValue(malformedChannel),
+        getChannel: vi.fn<(...args: [string]) => Promise<typeof malformedChannel>>().mockResolvedValue(malformedChannel),
       };
       service = createStreamDetectionService(mockClient);
 

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { GlobalCommandCooldownManager } from "../../../src/utils/global-command-cooldown";
 import testClock from "../../helpers/test-clock";
@@ -55,7 +55,7 @@ describe("GlobalCommandCooldownManager behavior", () => {
   });
 
   it("resets cooldown state and statistics without routine diagnostics", () => {
-    const logger = { ...noOpLogger, debug: createMockFn() };
+    const logger = { ...noOpLogger, debug: vi.fn<(...args: unknown[]) => unknown>() };
     const manager = new GlobalCommandCooldownManager(logger);
     testClock.set(1000);
     manager.updateCommandTimestamp("!synthetic");
@@ -68,12 +68,12 @@ describe("GlobalCommandCooldownManager behavior", () => {
 
   it("fails open when internal errors occur", () => {
     const erroringLogger = {
-      debug: createMockFn(() => {
+      debug: vi.fn(() => {
         throw new Error("logger failure");
       }),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
+      info: vi.fn<(...args: unknown[]) => unknown>(),
+      warn: vi.fn<(...args: unknown[]) => unknown>(),
+      error: vi.fn<(...args: unknown[]) => unknown>(),
     };
     const manager = new GlobalCommandCooldownManager(erroringLogger);
 

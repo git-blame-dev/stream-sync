@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
@@ -18,22 +18,16 @@ type AggregatedViewerCount = {
 };
 
 const createViewerExtractionService = (
-  getAggregatedViewerCount = createMockFn<
-    [string[]],
-    Promise<AggregatedViewerCount>
+  getAggregatedViewerCount = vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>
   >(),
 ) => ({
   getAggregatedViewerCount,
-  extractViewerCount: createMockFn<
-    [string],
-    Promise<{ success: boolean; count: number }>
+  extractViewerCount: vi.fn<(...args: [string]) => Promise<{ success: boolean; count: number }>
   >(),
 });
 
 const createTwitchApiClient = (
-  getStreamInfo = createMockFn<
-    [string],
-    Promise<{ isLive: boolean; viewerCount: number }>
+  getStreamInfo = vi.fn<(...args: [string]) => Promise<{ isLive: boolean; viewerCount: number }>
   >(),
 ) => ({ getStreamInfo });
 
@@ -186,7 +180,7 @@ describe("TwitchViewerCountProvider", () => {
     expect(updates).toHaveLength(1);
   });
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("returns unavailable when not ready", async () => {
@@ -204,9 +198,7 @@ describe("TwitchViewerCountProvider", () => {
   it("returns live viewer count and resets error counters", async () => {
     const provider = new TwitchViewerCountProvider(
       createTwitchApiClient(
-        createMockFn<
-          [string],
-          Promise<{ isLive: boolean; viewerCount: number }>
+        vi.fn<(...args: [string]) => Promise<{ isLive: boolean; viewerCount: number }>
         >().mockResolvedValue({
           isLive: true,
           viewerCount: 42,
@@ -227,7 +219,7 @@ describe("TwitchViewerCountProvider", () => {
 
 describe("YouTubeViewerCountProvider", () => {
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("returns unavailable when required dependencies are missing", async () => {
@@ -240,7 +232,7 @@ describe("YouTubeViewerCountProvider", () => {
 
   it("aggregates counts across active streams via service layer", async () => {
     const viewerExtractionService = createViewerExtractionService(
-      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
+      vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: true,
         totalCount: 75,
         successfulStreams: 1,
@@ -261,7 +253,7 @@ describe("YouTubeViewerCountProvider", () => {
 
   it("returns unavailable and tracks an error when aggregation fails", async () => {
     const viewerExtractionService = createViewerExtractionService(
-      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
+      vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: false,
         totalCount: 0,
         successfulStreams: 0,
@@ -280,7 +272,7 @@ describe("YouTubeViewerCountProvider", () => {
 
   it("returns unavailable when all active stream extractions fail", async () => {
     const viewerExtractionService = createViewerExtractionService(
-      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
+      vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: false,
         totalCount: 0,
         successfulStreams: 0,
@@ -313,7 +305,7 @@ describe("YouTubeViewerCountProvider", () => {
 
   it("resets consecutive errors after successful aggregation following a failure", async () => {
     const viewerExtractionService = createViewerExtractionService(
-      createMockFn<[string[]], Promise<AggregatedViewerCount>>()
+      vi.fn<(...args: [string[]]) => Promise<AggregatedViewerCount>>()
         .mockRejectedValueOnce(new Error("network down"))
         .mockResolvedValueOnce({
           success: true,
@@ -339,7 +331,7 @@ describe("YouTubeViewerCountProvider", () => {
 
 describe("TikTokViewerCountProvider", () => {
   beforeEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("handles missing platform gracefully", async () => {
@@ -355,7 +347,7 @@ describe("TikTokViewerCountProvider", () => {
   it("returns platform viewer count when available", async () => {
     const platform = {
       connection: { isConnected: true },
-      getViewerCount: createMockFn().mockResolvedValue(33),
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(33),
     };
     const provider = new TikTokViewerCountProvider(platform, {
       logger: noOpLogger,
@@ -370,7 +362,7 @@ describe("TikTokViewerCountProvider", () => {
     let callCount = 0;
     const platform = {
       connection: { isConnected: true },
-      getViewerCount: createMockFn<[], Promise<number>>(async () => {
+      getViewerCount: vi.fn<(...args: []) => Promise<number>>(async () => {
         callCount++;
         if (callCount === 1) {
           throw new Error("network");

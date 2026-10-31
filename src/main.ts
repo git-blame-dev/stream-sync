@@ -46,7 +46,7 @@ import { clearExpiredGlobalCooldowns } from './utils/global-command-cooldown';
 import { createPlatformErrorHandler } from './utils/platform-error-handler';
 import { ensureSecrets } from './utils/secret-manager';
 import { createTextProcessingManager } from './utils/text-processing';
-import { safeSetInterval } from './utils/timeout-validator';
+import { safeSetInterval, safeSetTimeout } from './utils/timeout-validator';
 import { createOBSSubsystem } from './obs/subsystem';
 import type { MonetizationValuesConfig } from './core/monetization-values';
 import { createUsdRateService, type UsdRateService } from './services/usd-rate-service';
@@ -92,7 +92,6 @@ type ProductionDependencies = Record<string, unknown> & {
     lazyInnertube: unknown;
     axios?: TwitchHttpClient;
     WebSocketCtor?: unknown;
-    tiktokConnector?: unknown;
 };
 type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
 type AppRuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
@@ -115,12 +114,12 @@ type MainConfigChangePayload = {
 type MainGracefulExitConfig = Parameters<typeof createGracefulExitService>[2];
 
 type MainOverrides = Record<string, unknown> & {
+    onShutdownComplete?: () => void;
     cliArgs?: Partial<MainCliArgs>;
     config?: MainConfig;
     innertubeImporter?: InnertubeImporter;
     axios?: TwitchHttpClient;
     WebSocketCtor?: unknown;
-    tiktokConnector?: unknown;
     dependencyFactory?: PlatformLifecycleDependencyFactory;
     ensureSecrets?: typeof ensureSecrets;
     TwitchAuth?: typeof TwitchAuth;
@@ -432,6 +431,7 @@ const platforms = {
 };
 
 const MAIN_FUNCTION_OVERRIDE_KEYS = [
+    'onShutdownComplete',
     'ensureSecrets',
     'TwitchAuth',
     'createEventBus',
@@ -529,6 +529,18 @@ function createProductionDependencies(
         effectsFactory: { getDefaultEffectsManager },
         logging: logger,
         logger: logger,
+        onShutdownComplete: resolvedOverrides.onShutdownComplete || (() => {
+            process.exitCode = 0;
+            const forcedExitTimer = safeSetTimeout(() => {
+                try {
+                    logMainError('[Shutdown] Forced exit due to lingering handles', null, null, { eventType: 'shutdown', logContext: 'system' });
+                } catch {
+                    // Diagnostics must not prevent the termination fallback.
+                }
+                process.exit(0);
+            }, 2000);
+            forcedExitTimer.unref();
+        }),
         platforms,
         displayQueue: null,
         notificationManager: null,
@@ -536,7 +548,6 @@ function createProductionDependencies(
         lazyInnertube: InnertubeFactory.createLazyReference(),
         axios: resolvedOverrides.axios,
         WebSocketCtor: resolvedOverrides.WebSocketCtor,
-        tiktokConnector: resolvedOverrides.tiktokConnector,
         innertubeImporter: resolvedOverrides.innertubeImporter,
 
         eventBus: null,
@@ -876,8 +887,7 @@ async function main(overrides: MainOverrides = {}) {
             config,
             Innertube: dependencies.lazyInnertube,
             axios: dependencies.axios,
-            WebSocketCtor: dependencies.WebSocketCtor,
-            tiktokConnector: dependencies.tiktokConnector
+            WebSocketCtor: dependencies.WebSocketCtor
         };
 
         const commandCooldownService = new CommandCooldownService({

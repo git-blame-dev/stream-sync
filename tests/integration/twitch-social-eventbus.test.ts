@@ -1,11 +1,11 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { vi, describe, test, afterEach, expect } from 'bun:test';
 import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 import { TwitchPlatform } from "../../src/platforms/twitch";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+
 
 type PlatformEventPayload = {
   type: string;
@@ -60,13 +60,13 @@ const createPlatform = () =>
     logger: noOpLogger,
     twitchAuth: {
       isReady: () => true,
-      refreshTokens: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+      refreshTokens: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
     },
   });
 
 describe("Twitch social event bus routing (integration)", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("emits follow events through lifecycle handlers", async () => {

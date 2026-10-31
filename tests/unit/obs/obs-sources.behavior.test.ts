@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, afterEach, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   createOBSSourcesManager,
@@ -14,8 +14,8 @@ describe("OBS source operations", () => {
   });
 
   const manager = () => ({
-    ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
-    call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>(),
+    ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+    call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>(),
     isConnected: () => true,
     isReady: async () => true,
   });

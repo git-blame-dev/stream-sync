@@ -1,6 +1,6 @@
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -41,7 +41,7 @@ type ChatNotificationRouterLike = {
 
 describe("Display items avoid hardcoded durations", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("NotificationManager items", () => {
@@ -60,11 +60,11 @@ describe("Display items avoid hardcoded durations", () => {
         constants: require("../../../src/core/constants"),
         config: createConfigFixture(),
         vfxCommandService: {
-          executeCommand: createMockFn().mockResolvedValue({ success: true }),
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          executeCommand: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({ success: true }),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
         userTrackingService: {
-          isFirstMessage: createMockFn().mockResolvedValue(true),
+          isFirstMessage: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
         },
       });
     });
@@ -94,12 +94,12 @@ describe("Display items avoid hardcoded durations", () => {
         },
         config: createConfigFixture(),
         commandCooldownService: {
-          checkUserCooldown: createMockFn().mockReturnValue(true),
-          updateUserCooldown: createMockFn(),
-          checkGlobalCooldown: createMockFn().mockReturnValue(true),
+          checkUserCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
+          updateUserCooldown: vi.fn<(...args: unknown[]) => unknown>(),
+          checkGlobalCooldown: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
         },
         vfxCommandService: {
-          getVFXConfig: createMockFn().mockResolvedValue(null),
+          getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
         },
       };
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach, beforeEach } from 'bun:test';
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import {
   secrets,
@@ -34,7 +34,7 @@ type SubscriptionDefinitionFixture = {
 
 const createTwitchAuth = (overrides: TwitchAuthFixtureOverrides = {}) => ({
   isReady: () => overrides.ready ?? true,
-  refreshTokens: createMockFn().mockResolvedValue(true),
+  refreshTokens: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
   getUserId: () => overrides.userId ?? "test-user-123",
 });
 
@@ -49,9 +49,9 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
       logger: noOpLogger,
       twitchAuth: createTwitchAuth(),
       axios: {
-        post: createMockFn(),
-        get: createMockFn(),
-        delete: createMockFn(),
+        post: vi.fn<(...args: unknown[]) => unknown>(),
+        get: vi.fn<(...args: unknown[]) => unknown>(),
+        delete: vi.fn<(...args: unknown[]) => unknown>(),
       },
       WebSocketCtor: class {
         readyState = 1;
@@ -74,9 +74,10 @@ describe("TwitchEventSub behavior guardrails", () => {
     secrets.twitch.accessToken = "test-token";
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (eventSub?.cleanup) {
-      eventSub.cleanup().catch(() => {});
+      await eventSub.cleanup();
+      expect(eventSub.cleanupInterval).toBeNull();
     }
     _resetForTesting();
     initializeStaticSecrets();

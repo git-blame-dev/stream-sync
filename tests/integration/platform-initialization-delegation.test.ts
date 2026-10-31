@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../helpers/mock-factories";
 import { AppRuntime } from "../../src/main";
 import {
@@ -117,14 +117,10 @@ describe("Platform Initialization Delegation", () => {
   let runtime: AppRuntime | null;
   let configFixture: PlatformDelegationConfig;
   let mockDependencies: RuntimeDependencies;
-  let originalExit: typeof process.exit;
 
   beforeEach(() => {
     runtime = null;
-    originalExit = process.exit;
-    process.exit = createMockFn<Parameters<typeof process.exit>, never>(() => {
-      throw new Error("process.exit called during test");
-    });
+
 
     _resetForTesting();
     secrets.twitch.clientSecret = "test-client-secret";
@@ -135,29 +131,29 @@ describe("Platform Initialization Delegation", () => {
 
     mockDependencies = {
       logging: noOpLogger,
-      displayQueue: { addItem: createMockFn(), addSequence: createMockFn() },
+      displayQueue: { addItem: vi.fn<NonNullable<RuntimeDependencies["displayQueue"]>["addItem"]>(), addSequence: vi.fn<NonNullable<RuntimeDependencies["displayQueue"]>["addSequence"]>() },
       eventBus: {
-        subscribe: createMockFn(),
-        emit: createMockFn(),
+        subscribe: vi.fn<(eventName: string, handler: (event: { [x: string]: unknown; }) => Promise<void> | void) => (() => void) | void>(),
+        emit: vi.fn<(eventName: string, payload: unknown) => void>(),
       },
       vfxCommandService: {
-        executeCommandForKey: createMockFn().mockResolvedValue({
+        executeCommandForKey: vi.fn<(...args: unknown[]) => Promise<{ success: true; }>>().mockResolvedValue({
           success: true,
         }),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn(() => false),
+        isFirstMessage: vi.fn(() => false),
       },
-      commandParser: { getVFXConfig: createMockFn() },
+      commandParser: { getVFXConfig: vi.fn<(...args: unknown[]) => unknown>() },
       obsEventService: {},
       sceneManagementService: {},
       commandCooldownService: {
-        dispose: createMockFn<[], void>(),
-        checkUserCooldown: createMockFn(() => true),
-        updateUserCooldown: createMockFn(),
+        dispose: vi.fn<(...args: []) => void>(),
+        checkUserCooldown: vi.fn(() => true),
+        updateUserCooldown: vi.fn<(userId: unknown) => void>(),
       },
       notificationManager: {
-        handleNotification: createMockFn().mockResolvedValue(undefined),
+        handleNotification: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       },
       platformLifecycleService: platformLifecycleService,
     };
@@ -167,8 +163,7 @@ describe("Platform Initialization Delegation", () => {
     if (runtime && runtime.shutdown) {
       await runtime.shutdown();
     }
-    process.exit = originalExit;
-    restoreAllMocks();
+    vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
   });
@@ -224,7 +219,7 @@ describe("Platform Initialization Delegation", () => {
     });
 
     it("delegates StreamElements module to lifecycle initialization", async () => {
-      const initializeAllPlatforms = createMockFn().mockResolvedValue({});
+      const initializeAllPlatforms = vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({});
       mockDependencies.platformLifecycleService.initializeAllPlatforms =
         initializeAllPlatforms;
       runtime = new AppRuntime(configFixture, mockDependencies);

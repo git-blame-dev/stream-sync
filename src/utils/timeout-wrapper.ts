@@ -1,5 +1,4 @@
 import { safeSetTimeout, validateTimeout } from './timeout-validator';
-const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
 
 type TimeoutOptions = {
     operationName?: string;
@@ -20,6 +19,7 @@ function createTimeoutController(timeoutMs: unknown = 5000, options: TimeoutOpti
         ? errorMessage
         : `${operationName} timeout after ${safeTimeout}ms`;
 
+    const clearTimeout = globalThis.clearTimeout.bind(globalThis);
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let cleared = false;
 
@@ -32,7 +32,7 @@ function createTimeoutController(timeoutMs: unknown = 5000, options: TimeoutOpti
 
     const cancel = () => {
         if (!cleared && timeoutId !== null) {
-            nativeClearTimeout(timeoutId);
+            clearTimeout(timeoutId);
             timeoutId = null;
             cleared = true;
         }

@@ -1,5 +1,5 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
+
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { createYouTubeRunsMessageChatItem } from "../helpers/youtube-test-data";
@@ -60,7 +60,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
             await metadata.dispose();
           }
         } finally {
-          restoreAllMocks();
+          vi.restoreAllMocks();
           if (presentation) {
             await presentation.dispose();
           }

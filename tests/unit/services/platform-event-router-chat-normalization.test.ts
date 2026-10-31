@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
@@ -25,7 +25,7 @@ const getFirstRoutedChatMessage = (
 
 describe("PlatformEventRouter chat normalization", () => {
   afterEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const platform = "twitch";
@@ -37,15 +37,15 @@ describe("PlatformEventRouter chat normalization", () => {
 
   const createRouter = (runtimeOverrides = {}) => {
     const runtime = {
-      handleChatMessage: createMockFn(),
+      handleChatMessage: vi.fn<(...args: unknown[]) => unknown>(),
       ...runtimeOverrides,
     };
     const eventBus = {
-      subscribe: createMockFn(() => createMockFn()),
-      emit: createMockFn(),
+      subscribe: vi.fn(() => vi.fn<(...args: unknown[]) => unknown>()),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
     };
     const config = createConfigFixture({ general: { messagesEnabled: true } });
-    const notificationManager = { handleNotification: createMockFn() };
+    const notificationManager = { handleNotification: vi.fn<(...args: unknown[]) => unknown>() };
     return {
       router: new PlatformEventRouter({
         runtime,

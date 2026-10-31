@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, test } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createOBSSubsystem } from "../../../src/obs/subsystem.ts";
 import { logger as coreLogger } from "../../../src/core/logging.ts";
@@ -26,11 +26,11 @@ const createConfig = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const createRawConnectionManager = (overrides: Record<string, unknown> = {}) => ({
-  ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
-  call: createMockFn<[requestType: string, payload?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
-  isConnected: createMockFn<[], boolean>().mockReturnValue(true),
-  addEventListener: createMockFn(),
-  removeEventListener: createMockFn(),
+  ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+  call: vi.fn<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
+  isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
+  addEventListener: vi.fn<(...args: unknown[]) => unknown>(),
+  removeEventListener: vi.fn<(...args: unknown[]) => unknown>(),
   ...overrides,
 });
 
@@ -42,24 +42,24 @@ describe("createOBSSubsystem", () => {
         logger,
         eventBus: {},
         getOBSConnectionManager: () => ({
-          ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
-          call: createMockFn(),
+          ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+          call: vi.fn<(...args: unknown[]) => unknown>(),
         } as never),
-        createOBSEventService: createMockFn(),
+        createOBSEventService: vi.fn<(...args: unknown[]) => unknown>(),
       }),
     ).toThrow("createOBSSubsystem requires OBS manager methods");
   });
 
   test("uses isConnected as the readiness fallback when isReady is not provided", async () => {
     const rawConnectionManager = createRawConnectionManager({
-      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
+      isConnected: vi.fn<(...args: []) => boolean>().mockReturnValue(true),
     });
-    const createOBSEventService = createMockFn<[OBSEventServiceDeps], OBSEventServiceDeps>((deps) => deps);
+    const createOBSEventService = vi.fn<(...args: [OBSEventServiceDeps]) => OBSEventServiceDeps>((deps) => deps);
 
     const subsystem = createOBSSubsystem({
       config: createConfig(),
       logger,
-      eventBus: { emit: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>() },
       getOBSConnectionManager: () => rawConnectionManager,
       createOBSEventService,
     });
@@ -77,23 +77,23 @@ describe("createOBSSubsystem", () => {
         logger,
         eventBus: {},
         getOBSConnectionManager: () => rawConnectionManager,
-        createOBSEventService: createMockFn(),
+        createOBSEventService: vi.fn<(...args: unknown[]) => unknown>(),
       }),
     ).toThrow("createOBSSubsystem requires goals configuration");
   });
 
   test("passes one bound connection manager through OBS services", () => {
     const rawConnectionManager = createRawConnectionManager({
-      connect: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+      connect: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+      disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      isReady: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
     });
-    const createOBSEventService = createMockFn<[OBSEventServiceDeps], OBSEventServiceDeps>((deps) => deps);
+    const createOBSEventService = vi.fn<(...args: [OBSEventServiceDeps]) => OBSEventServiceDeps>((deps) => deps);
 
     const subsystem = createOBSSubsystem({
       config: createConfig(),
       logger,
-      eventBus: { emit: createMockFn() },
+      eventBus: { emit: vi.fn<(...args: unknown[]) => unknown>() },
       getOBSConnectionManager: () => rawConnectionManager,
       createOBSEventService,
     });

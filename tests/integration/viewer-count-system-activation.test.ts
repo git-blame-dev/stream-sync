@@ -1,11 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { vi, afterEach, describe, expect, test } from "bun:test";
 import { AppRuntime } from "../../src/main";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
-
-registerMockLifecycleHooks({ clearCallsBeforeEach: true, logPerformanceMetrics: true });
 
 describe("ViewerCount runtime activation integration", () => {
   const apps = new Set<AppRuntime>();
@@ -15,15 +11,14 @@ describe("ViewerCount runtime activation integration", () => {
       await Promise.all([...apps].map((app) => app.shutdown()));
     } finally {
       apps.clear();
-      restoreAllMocks();
     }
   });
 
   function createRuntime() {
     const platforms = {
-      youtube: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(150) },
-      twitch: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(75) },
-      tiktok: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(200) },
+      youtube: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(150) },
+      twitch: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(75) },
+      tiktok: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(200) },
     };
     const harness = createAppRuntimeTestDependencies({
       configOverrides: {

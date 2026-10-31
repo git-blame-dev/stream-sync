@@ -1,6 +1,6 @@
+import { vi, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -13,7 +13,7 @@ type QueueItem = {
 
 describe("Notification type normalization", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   let items: QueueItem[];
@@ -31,8 +31,8 @@ describe("Notification type normalization", () => {
     };
 
     const eventBus = {
-      emit: createMockFn(),
-      subscribe: createMockFn(() => () => {}),
+      emit: vi.fn<(...args: unknown[]) => unknown>(),
+      subscribe: vi.fn(() => () => {}),
     };
 
     const config = createConfigFixture({
@@ -49,7 +49,7 @@ describe("Notification type normalization", () => {
       constants: require("../../../src/core/constants"),
       config,
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn<(...args: unknown[]) => Promise<null>>().mockResolvedValue(null),
       },
     });
   });

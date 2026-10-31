@@ -1,9 +1,6 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 import { EventEmitter } from "node:events";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../../../helpers/mock-factories";
 const {
   cleanupTikTokEventListeners,
@@ -41,7 +38,7 @@ const requireFirst = <T>(items: T[]): T => {
 
 describe("TikTok event router connection lifecycle", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createPlatformHarness = (overrides: PlatformHarnessOverrides = {}) => {
@@ -51,10 +48,10 @@ describe("TikTok event router connection lifecycle", () => {
     const disconnectionEvents: DisconnectionEvent[] = [];
 
     const connection = {
-      on: createMockFn((eventName: string, handler: Listener) => {
+      on: vi.fn((eventName: string, handler: Listener) => {
         listeners[eventName] = handler;
       }),
-      removeAllListeners: createMockFn(),
+      removeAllListeners: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     const platform = {
@@ -84,39 +81,39 @@ describe("TikTok event router connection lifecycle", () => {
       config: { enabled: true, dataLoggingEnabled: false },
       logger: noOpLogger,
       errorHandler: {
-        handleConnectionError: createMockFn(),
-        handleEventProcessingError: createMockFn(),
-        handleCleanupError: createMockFn(),
+        handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+        handleEventProcessingError: vi.fn<(...args: unknown[]) => unknown>(),
+        handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
       },
       constructor: {
-        resolveEventTimestampMs: createMockFn(() => null),
+        resolveEventTimestampMs: vi.fn(() => null),
       },
-      _logIncomingEvent: createMockFn().mockResolvedValue(),
+      _logIncomingEvent: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       _emitPlatformEvent: (type: string, payload: unknown) => emitted.push({ type, payload }),
-      _handleStandardEvent: createMockFn().mockResolvedValue(),
-      _handleStreamEnd: createMockFn().mockImplementation(async () => {
+      _handleStandardEvent: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      _handleStreamEnd: vi.fn(async () => {
         disconnectionEvents.push({ handler: "streamEnd" });
       }),
-      handleConnectionIssue: createMockFn().mockImplementation(async () => {
+      handleConnectionIssue: vi.fn(async () => {
         disconnectionEvents.push({ handler: "connectionIssue" });
       }),
-      handleConnectionError: createMockFn(),
-      handleRetry: createMockFn().mockImplementation(() => {
+      handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
+      handleRetry: vi.fn(() => {
         retryCalls.push({ source: "handleRetry" });
         return { action: "retry-queued" };
       }),
-      queueRetry: createMockFn().mockImplementation(() => {
+      queueRetry: vi.fn(() => {
         retryCalls.push({ source: "queueRetry" });
         return { queued: true };
       }),
-      handleTikTokGift: createMockFn().mockResolvedValue(),
-      handleTikTokFollow: createMockFn().mockResolvedValue(),
-      handleTikTokSocial: createMockFn().mockResolvedValue(),
+      handleTikTokGift: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      handleTikTokFollow: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      handleTikTokSocial: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       connectionActive: false,
       cachedViewerCount: 0,
       connectionTime: 0,
-      _getTimestamp: createMockFn(() => "2025-01-02T03:04:05.000Z"),
-      _handleChatMessage: createMockFn().mockResolvedValue(),
+      _getTimestamp: vi.fn(() => "2025-01-02T03:04:05.000Z"),
+      _handleChatMessage: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
       ...overrides,
     };
 
@@ -173,7 +170,7 @@ describe("TikTok event router connection lifecycle", () => {
 
   test.each(["rawData", "control-error", "disconnected", "chat", "gift", "roomUser", "streamEnd"])("contains diagnostic and reporter failure for %s", async (event) => {
     const failure = new Error("synthetic diagnostic failure");
-    const report = createMockFn<[unknown, string, unknown?, string?], void>(() => { throw new Error("synthetic reporter failure"); });
+    const report = vi.fn<(...args: [unknown, string, unknown?, string?]) => void>(() => { throw new Error("synthetic reporter failure"); });
     const { platform, listeners } = createPlatformHarness({
       _logIncomingEvent: () => Promise.reject(failure),
       errorHandler: { handleEventProcessingError: report },
@@ -231,7 +228,7 @@ describe("TikTok event router connection lifecycle", () => {
 
   test("contains synchronous diagnostic throws and rejected reporters", async () => {
     const failure = new Error("synthetic sync diagnostic failure");
-    const reporter = createMockFn<[unknown, string, unknown?, (string | undefined)?], Promise<void>>(async () => { throw new Error("synthetic async reporter failure"); });
+    const reporter = vi.fn<(...args: [unknown, string, unknown?, (string | undefined)?]) => Promise<void>>(async () => { throw new Error("synthetic async reporter failure"); });
     const { platform, listeners } = createPlatformHarness({
       _logIncomingEvent: () => { throw failure; },
       errorHandler: { handleEventProcessingError: reporter },
@@ -306,7 +303,7 @@ describe("TikTok event router connection lifecycle", () => {
           DISCONNECTED: "disconnected",
           ERROR: "control-error",
         },
-        errorHandler: { handleCleanupError: createMockFn() },
+        errorHandler: { handleCleanupError: vi.fn<(...args: unknown[]) => unknown>() },
       };
 
       cleanupTikTokEventListeners(platform);
@@ -375,9 +372,9 @@ describe("TikTok event router connection lifecycle", () => {
       const handledErrors: HandledError[] = [];
       const { platform, listeners } = createPlatformHarness({
         connectionActive: true,
-        handleConnectionIssue: createMockFn().mockRejectedValue(disconnectionError),
+        handleConnectionIssue: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(disconnectionError),
         errorHandler: {
-          handleConnectionError: createMockFn(),
+          handleConnectionError: vi.fn<(...args: unknown[]) => unknown>(),
           handleEventProcessingError: (
             error: unknown,
             context: string,
@@ -386,7 +383,7 @@ describe("TikTok event router connection lifecycle", () => {
           ) => {
             handledErrors.push({ error, context, payload, message });
           },
-          handleCleanupError: createMockFn(),
+          handleCleanupError: vi.fn<(...args: unknown[]) => unknown>(),
         },
       });
 

@@ -1,16 +1,17 @@
+import { vi, type Mock } from 'bun:test';
 import { createOBSSourcesManager } from '../../src/obs/sources';
 import { createOBSGoalsManager } from '../../src/obs/goals';
 import { createGoalTracker } from '../../src/utils/goal-tracker';
 import { logger as coreLogger } from '../../src/core/logging';
 
-import { createMockFn, type TestMockFn } from './bun-mock-utils';
+
 import { createSourcesConfigFixture } from './config-fixture';
 import { noOpLogger } from './mock-factories';
 
 type MockOBSForTesting = Parameters<typeof createOBSSourcesManager>[0] & {
-    call: TestMockFn<[requestType: string, payload?: Record<string, unknown>], Promise<unknown>>;
-    isReady: TestMockFn<[], Promise<boolean>>;
-    ensureConnected: TestMockFn<[], Promise<void>>;
+    call: Mock<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>>;
+    isReady: Mock<(...args: []) => Promise<boolean>>;
+    ensureConnected: Mock<(...args: []) => Promise<void>>;
 };
 
 type TestGoalConfig = NonNullable<Parameters<typeof createGoalTracker>[0]['config']>;
@@ -36,10 +37,10 @@ const noOpUnifiedLogger: typeof coreLogger = {
 
 function createMockOBSForTesting(): MockOBSForTesting {
     return {
-        call: createMockFn<[requestType: string, payload?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
+        call: vi.fn<(...args: [requestType: string, payload?: Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
         isConnected: () => true,
-        isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-        ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue()
+        isReady: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
+        ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue()
     };
 }
 
@@ -60,7 +61,7 @@ function createRealSourcesManager(mockOBS: MockOBSForTesting): TestSourcesManage
     return createOBSSourcesManager(mockOBS, {
         ...createSourcesConfigFixture(),
         logger: noOpLogger,
-        ensureOBSConnected: createMockFn().mockResolvedValue(),
+        ensureOBSConnected: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
         obsCall: mockOBS.call
     });
 }

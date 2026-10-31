@@ -1,13 +1,7 @@
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, beforeEach, describe, expect, it } from "bun:test";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type NotificationManagerLike = {
@@ -20,11 +14,11 @@ type NotificationManagerLike = {
 };
 
 type LoggerSpy = {
-  debug: ReturnType<typeof createMockFn>;
-  info: ReturnType<typeof createMockFn>;
-  warn: ReturnType<typeof createMockFn>;
-  error: ReturnType<typeof createMockFn>;
-  console: ReturnType<typeof createMockFn>;
+  debug: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  console: ReturnType<typeof vi.fn>;
 };
 
 type NotificationConstants = {
@@ -41,21 +35,12 @@ type NotificationConstants = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>>;
-  processQueue: ReturnType<typeof createMockFn>;
-  getQueueLength: TestMockFn<[], number>;
+  addItem: ReturnType<typeof vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>>;
+  processQueue: ReturnType<typeof vi.fn>;
+  getQueueLength: Mock<() => number>;
 };
 
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
-
 describe("NotificationManager logger argument order", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
   let spyLogger: LoggerSpy;
   let mockConstants: NotificationConstants;
   let mockDisplayQueue: DisplayQueueMock;
@@ -63,11 +48,11 @@ describe("NotificationManager logger argument order", () => {
 
   beforeEach(() => {
     spyLogger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-      console: createMockFn(),
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      console: vi.fn(),
     };
 
     mockConstants = {
@@ -83,9 +68,9 @@ describe("NotificationManager logger argument order", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]),
-      processQueue: createMockFn(),
-      getQueueLength: createMockFn<[], number>(() => 0),
+      addItem: vi.fn<(...args: [DisplayQueueItem]) => readonly DisplayQueueItem[]>((item) => [item]),
+      processQueue: vi.fn(),
+      getQueueLength: vi.fn<() => number>(() => 0),
     };
 
     config = createConfigFixture({
@@ -94,16 +79,15 @@ describe("NotificationManager logger argument order", () => {
         debugEnabled: true,
       },
     });
-
   });
 
   function createManager(
     overrides: Record<string, unknown> = {},
   ): NotificationManagerLike {
     const mockEventBus = {
-      emit: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
     };
     return new NotificationManager({
       displayQueue: mockDisplayQueue,
@@ -112,7 +96,7 @@ describe("NotificationManager logger argument order", () => {
       config,
       constants: mockConstants,
       vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        getVFXConfig: vi.fn().mockResolvedValue(null),
       },
       ...overrides,
     });
@@ -121,7 +105,7 @@ describe("NotificationManager logger argument order", () => {
   describe("spam detection logging", () => {
     it("suppresses spam without logging donor identity", async () => {
       const mockSpamDetector = {
-        handleDonationSpam: createMockFn().mockReturnValue({
+        handleDonationSpam: vi.fn().mockReturnValue({
           shouldShow: false,
         }),
       };
@@ -148,7 +132,7 @@ describe("NotificationManager logger argument order", () => {
 
     it("logs error with platform as source when spam detection throws", async () => {
       const mockSpamDetector = {
-        handleDonationSpam: createMockFn().mockImplementation(() => {
+        handleDonationSpam: vi.fn().mockImplementation(() => {
           throw new Error("spam detector failure");
         }),
       };

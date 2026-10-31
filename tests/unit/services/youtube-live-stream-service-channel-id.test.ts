@@ -1,9 +1,5 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import {
   expectNoTechnicalArtifacts,
@@ -16,9 +12,9 @@ type ChannelLike = Awaited<ReturnType<LiveStreamClient["getChannel"]>>;
 type ChannelVideo = NonNullable<Awaited<ReturnType<NonNullable<NonNullable<ChannelLike>["getLiveStreams"]>>>["videos"]>[number];
 
 type MockInnertubeClient = {
-  getChannel: TestMockFn<[string], Promise<ChannelLike>>;
-  search: TestMockFn<[string, Record<string, unknown>?], Promise<{ videos?: ChannelVideo[] }>>;
-  resolveURL: TestMockFn<[string], Promise<{ payload?: { browseId?: string } }>>;
+  getChannel: Mock<(...args: [string]) => Promise<ChannelLike>>;
+  search: Mock<(...args: [string, Record<string, unknown>?]) => Promise<{ videos?: ChannelVideo[] }>>;
+  resolveURL: Mock<(...args: [string]) => Promise<{ payload?: { browseId?: string } }>>;
 };
 
 function expectFirstStream(
@@ -37,24 +33,22 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
 
   beforeEach(() => {
     mockInnertubeClient = {
-      getChannel: createMockFn<[string], Promise<ChannelLike>>(),
-      search: createMockFn<
-        [string, Record<string, unknown>?],
-        Promise<{ videos?: ChannelVideo[] }>
+      getChannel: vi.fn<(...args: [string]) => Promise<ChannelLike>>(),
+      search: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<{ videos?: ChannelVideo[] }>
       >(),
-      resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>(),
+      resolveURL: vi.fn<(...args: [string]) => Promise<{ payload?: { browseId?: string } }>>(),
     };
   });
 
   afterEach(() => {
-    clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Valid Channel ID User Experience", () => {
     it("should provide live streams when user supplies valid YouTube Channel ID", async () => {
       const validChannelId = "UC" + "a".repeat(22);
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "live123",
@@ -93,7 +87,7 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       const validChannelId = "UC" + "x".repeat(22);
       const mockChannel = {
         videos: [],
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: never[]; }>>().mockResolvedValue({
           videos: [],
         }),
       };
@@ -307,7 +301,7 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       const channelId = "UC" + "p".repeat(22);
       const mockChannel = {
         videos: [],
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: never[]; }>>().mockResolvedValue({
           videos: [],
         }),
       };
@@ -336,7 +330,7 @@ it("resolves handles only for username input and skips it for Channel ID input",
         payload: { browseId: channelId },
       });
       const mockChannelForUsername = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "username123",
@@ -359,9 +353,9 @@ it("resolves handles only for username input and skips it for Channel ID input",
     expect(mockInnertubeClient.resolveURL).toHaveBeenCalledTimes(1);
     expect(usernameResult.streams[0]?.videoId).toBe("username123");
 
-      clearAllMocks();
+      vi.clearAllMocks();
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "channelid123",
@@ -390,7 +384,7 @@ it("resolves handles only for username input and skips it for Channel ID input",
     it("should handle international channels correctly for global users", async () => {
       const internationalChannelId = "UC" + "i".repeat(22);
       const mockChannel = {
-        getLiveStreams: createMockFn().mockResolvedValue({
+        getLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ videos: { id: string; title: { text: string; }; is_live: true; author: { name: string; }; }[]; }>>().mockResolvedValue({
           videos: [
             {
               id: "intl123",

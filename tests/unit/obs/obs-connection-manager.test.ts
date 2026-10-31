@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, afterEach, it } from 'bun:test';
+
 import {
   useFakeTimers,
   useRealTimers,
@@ -41,25 +41,21 @@ describe("OBSConnectionManager", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
-    restoreAllMocks();
+    vi.restoreAllMocks();
     useRealTimers();
   });
 
   const createDefaultMockOBS = (): MockOBS => ({
-    connect: createMockFn<
-      [address?: string, password?: string],
-      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
     >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-    call: createMockFn<
-      [requestType: string, requestData?: Record<string, unknown>],
-      Promise<unknown>
+    disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+    call: vi.fn<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>
     >().mockResolvedValue({}),
-    on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-    off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+    on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
+    off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
   });
 
   const createManager = (overrides: ManagerOverrides = {}) => {
@@ -79,19 +75,17 @@ describe("OBSConnectionManager", () => {
   };
 
   it("skips connect when already connected", async () => {
-    const connectSpy = createMockFn<
-      [address?: string, password?: string],
-      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    const connectSpy = vi.fn<(...args: [address?: string, password?: string]) => Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
     >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     });
     const mockOBS: MockOBS = {
       connect: connectSpy,
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      call: vi.fn<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -161,13 +155,13 @@ describe("OBSConnectionManager", () => {
   it("successfully completes connection when Identified event fires", async () => {
     const handlers: ObsEventHandlers = {};
     const mockOBS: MockOBS = {
-      connect: createMockFn<[address?: string, password?: string], Promise<{}>>().mockResolvedValue({}),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
+      connect: vi.fn<(...args: [address?: string, password?: string]) => Promise<{}>>().mockResolvedValue({}),
+      disconnect: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(),
+      call: vi.fn<(...args: [requestType: string, requestData?: Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -187,13 +181,13 @@ describe("OBSConnectionManager", () => {
       negotiatedRpcVersion: 1,
     });
     const mockOBS: MockOBS = {
-      connect: createMockFn(() => connectPromise),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
+      connect: vi.fn(() => connectPromise),
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -210,16 +204,16 @@ describe("OBSConnectionManager", () => {
   it("ensureConnected reuses active connect attempt", async () => {
     const handlers: ObsEventHandlers = {};
     const mockOBS: MockOBS = {
-      connect: createMockFn().mockResolvedValue({
+      connect: vi.fn<(...args: unknown[]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number; }>>().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -237,16 +231,16 @@ describe("OBSConnectionManager", () => {
   it("ignores late Identified event after connect timeout", async () => {
     const handlers: ObsEventHandlers = {};
     const mockOBS: MockOBS = {
-      connect: createMockFn().mockResolvedValue({
+      connect: vi.fn<(...args: unknown[]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number; }>>().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({
@@ -290,16 +284,16 @@ describe("OBSConnectionManager", () => {
   it("does not accept late Identified when config is disabled during connect attempt", async () => {
     const handlers: ObsEventHandlers = {};
     const mockOBS: MockOBS = {
-      connect: createMockFn().mockResolvedValue({
+      connect: vi.fn<(...args: unknown[]) => Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number; }>>().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
+      disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      on: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: vi.fn<(...args: [eventName: string, handler: ObsEventHandler]) => void>(),
     };
 
     const manager = createManager({

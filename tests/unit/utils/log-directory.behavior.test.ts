@@ -1,15 +1,15 @@
-import { describe, expect, it } from "bun:test";
+import { vi, describe, expect, it } from 'bun:test';
 
 import {
   ensureLogDirectory,
   ensureLogDirectorySync,
 } from "../../../src/utils/log-directory";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+
 
 describe("log-directory behavior", () => {
   it("creates a missing directory synchronously with recursive options", () => {
-    const existsSync = createMockFn<[string], boolean>(() => false);
-    const mkdirSync = createMockFn<[string, { recursive: true }], unknown>(() => undefined);
+    const existsSync = vi.fn<(...args: [string]) => boolean>(() => false);
+    const mkdirSync = vi.fn<(...args: [string, { recursive: true }]) => unknown>(() => undefined);
 
     ensureLogDirectorySync("logs", { existsSync, mkdirSync });
 
@@ -17,8 +17,8 @@ describe("log-directory behavior", () => {
   });
 
   it("skips synchronous creation when the directory already exists", () => {
-    const existsSync = createMockFn<[string], boolean>(() => true);
-    const mkdirSync = createMockFn<[string, { recursive: true }], unknown>(() => undefined);
+    const existsSync = vi.fn<(...args: [string]) => boolean>(() => true);
+    const mkdirSync = vi.fn<(...args: [string, { recursive: true }]) => unknown>(() => undefined);
 
     ensureLogDirectorySync("logs", { existsSync, mkdirSync });
 
@@ -26,8 +26,8 @@ describe("log-directory behavior", () => {
   });
 
   it("can force synchronous creation without an existence check", () => {
-    const existsSync = createMockFn<[string], boolean>(() => true);
-    const mkdirSync = createMockFn<[string, { recursive: true }], unknown>(() => undefined);
+    const existsSync = vi.fn<(...args: [string]) => boolean>(() => true);
+    const mkdirSync = vi.fn<(...args: [string, { recursive: true }]) => unknown>(() => undefined);
 
     ensureLogDirectorySync("logs", { existsSync, mkdirSync, checkExists: false });
 
@@ -36,8 +36,8 @@ describe("log-directory behavior", () => {
   });
 
   it("propagates synchronous creation errors", () => {
-    const existsSync = createMockFn<[string], boolean>(() => false);
-    const mkdirSync = createMockFn<[string, { recursive: true }], unknown>(() => {
+    const existsSync = vi.fn<(...args: [string]) => boolean>(() => false);
+    const mkdirSync = vi.fn<(...args: [string, { recursive: true }]) => unknown>(() => {
       throw new Error("mkdir failed");
     });
 
@@ -45,7 +45,7 @@ describe("log-directory behavior", () => {
   });
 
   it("creates a directory asynchronously with recursive options", async () => {
-    const mkdir = createMockFn<[string, { recursive: true }], Promise<unknown>>(async () => undefined);
+    const mkdir = vi.fn<(...args: [string, { recursive: true }]) => Promise<unknown>>(async () => undefined);
 
     await ensureLogDirectory("logs", { mkdir });
 
@@ -53,7 +53,7 @@ describe("log-directory behavior", () => {
   });
 
   it("propagates asynchronous creation errors", async () => {
-    const mkdir = createMockFn<[string, { recursive: true }], Promise<unknown>>(async () => {
+    const mkdir = vi.fn<(...args: [string, { recursive: true }]) => Promise<unknown>>(async () => {
       throw new Error("async mkdir failed");
     });
 

@@ -1,16 +1,12 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
+import { type Mock, vi, describe, it, beforeEach, afterEach, expect } from 'bun:test';
+
 import { CommandCooldownService } from "../../../src/services/CommandCooldownService.ts";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 type MockLogger = {
-  debug: TestMockFn<[message: unknown, source?: string, data?: unknown], void>;
-  warn: TestMockFn<[message: unknown, source?: string, data?: unknown], void>;
-  error: TestMockFn<[message: unknown, source?: string, data?: unknown], void>;
+  debug: Mock<(...args: [message: unknown, source?: string, data?: unknown]) => void>;
+  warn: Mock<(...args: [message: unknown, source?: string, data?: unknown]) => void>;
+  error: Mock<(...args: [message: unknown, source?: string, data?: unknown]) => void>;
 };
 type TestConfig = ReturnType<typeof createConfigFixture>;
 
@@ -21,9 +17,9 @@ describe("CommandCooldownService error handler integration", () => {
 
   beforeEach(() => {
     mockLogger = {
-      debug: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
+      debug: vi.fn<(message: unknown, source?: string | undefined, data?: unknown) => void>(),
+      warn: vi.fn<(message: unknown, source?: string | undefined, data?: unknown) => void>(),
+      error: vi.fn<(message: unknown, source?: string | undefined, data?: unknown) => void>(),
     };
     testConfig = createConfigFixture();
     service = new CommandCooldownService({
@@ -34,7 +30,7 @@ describe("CommandCooldownService error handler integration", () => {
 
   afterEach(() => {
     service.dispose();
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("routes invalid userId validation error through error handler", () => {

@@ -1,6 +1,6 @@
-import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { vi, describe, test, afterEach, expect, spyOn } from 'bun:test';
 import { join } from "node:path";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+
 import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { createTwitchEventSubChatMessageEvent } from "../helpers/twitch-test-data";
@@ -51,7 +51,7 @@ describe("Twitch emote chat parts pipeline (smoke E2E)", () => {
           await auth.dispose();
         }
       } finally {
-        restoreAllMocks();
+        vi.restoreAllMocks();
         if (presentation) {
           await presentation.dispose();
         }

@@ -1,9 +1,9 @@
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { TwitchViewerCountProvider } from "../../../src/utils/viewer-count-providers";
 import { TwitchApiClient } from "../../../src/utils/api-clients/twitch-api-client";
 import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
 import { secrets } from "../../../src/core/secrets";
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import {
   useFakeTimers,
   useRealTimers,
@@ -264,7 +264,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
     await drain();
     expect(getTimerCount()).toBe(0);
     secrets.twitch.accessToken = savedToken;
-    restoreAllMocks(); useRealTimers();
+    vi.restoreAllMocks(); useRealTimers();
   });
 
   describe("Extreme Viewer Count Edge Cases", () => {
@@ -952,7 +952,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       system.pollingStats.successfulPolls = 12000;
 
       const originalGc = global.gc;
-      const gcSpy = createMockFn();
+      const gcSpy = vi.fn<(...args: unknown[]) => unknown>();
       global.gc = async () => {
         gcSpy();
       };

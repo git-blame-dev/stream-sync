@@ -1,11 +1,11 @@
-import { describe, expect, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, it } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createOBSSourcesManager } from "../../../src/obs/sources.ts";
 
 describe("OBS source characterization", () => {
   it("caches scene item IDs and invalidates the cache", async () => {
-    const call = createMockFn<[string, Record<string, unknown>?], Promise<unknown>>()
+    const call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>()
       .mockResolvedValueOnce({ sceneItemId: 7 }).mockResolvedValueOnce({ sceneItemId: 8 });
     const holder: { invalidate: (() => void) | null } = { invalidate: null };
     const manager = { ensureConnected: async () => {}, call, isConnected: () => true, isReady: async () => true, setSourcesCacheInvalidator: (fn: (() => void) | null) => { holder.invalidate = fn; } };

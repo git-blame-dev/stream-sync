@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { vi, describe, expect, beforeEach, it } from 'bun:test';
+
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
 import { EventEmitter } from "events";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
@@ -22,34 +22,34 @@ describe("DisplayQueue notification TTS disabled", () => {
     };
 
     mockOBSManager = {
-      isReady: createMockFn().mockResolvedValue(true),
-      call: createMockFn().mockResolvedValue({}),
+      isReady: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
+      call: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
     };
 
     mockSourcesManager = {
-      updateTextSource: createMockFn<[string, string?], Promise<void>>((_, text) => {
+      updateTextSource: vi.fn<(...args: [string, string?]) => Promise<void>>((_, text) => {
         if (text !== undefined) {
         updateCalls.push(text);
         }
         return Promise.resolve();
       }),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      hideAllDisplays: createMockFn().mockResolvedValue(),
-      updateChatMsgText: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
-      hideAllPlatformLogos: createMockFn().mockResolvedValue(),
-      hideAllNotificationPlatformLogos: createMockFn().mockResolvedValue(),
-      setSourceFilterEnabled: createMockFn().mockResolvedValue(),
-      getSourceFilterSettings: createMockFn().mockResolvedValue({}),
-      setSourceFilterSettings: createMockFn().mockResolvedValue(),
-      clearSceneItemCache: createMockFn(),
+      clearTextSource: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setSourceVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setPlatformLogoVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      hideAllDisplays: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      updateChatMsgText: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setNotificationPlatformLogoVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setGroupSourceVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      getGroupSceneItemId: vi.fn<(...args: [string, string]) => Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      setChatDisplayVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setNotificationDisplayVisibility: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      getSceneItemId: vi.fn<(...args: [string, string]) => Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      hideAllPlatformLogos: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      hideAllNotificationPlatformLogos: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      setSourceFilterEnabled: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      getSourceFilterSettings: vi.fn<(...args: unknown[]) => Promise<{}>>().mockResolvedValue({}),
+      setSourceFilterSettings: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined),
+      clearSceneItemCache: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     testRuntimeConstants = {

@@ -49,7 +49,9 @@ describe("TwitchEventSub Resubscription Notification Fix", () => {
     );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await eventSub?.cleanup();
+    expect(eventSub.cleanupInterval).toBeNull();
     eventSub?.removeAllListeners();
     _resetForTesting();
     initializeStaticSecrets();

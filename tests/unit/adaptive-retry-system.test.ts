@@ -1,12 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { noOpLogger } from "../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 import {
   RetrySystem,

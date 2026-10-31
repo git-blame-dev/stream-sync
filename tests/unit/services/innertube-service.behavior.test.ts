@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { InnertubeService } from "../../../src/services/innertube-service";
 import { InnertubeFactory as SDKFactory } from "../../../src/factories/innertube-factory";
@@ -18,24 +18,22 @@ type InnertubeInfoClient = {
   getInfo: (videoId: string, options?: Record<string, unknown>) => Promise<VideoInfo>;
 };
 type InnertubeFactory = {
-  createWithTimeout: ReturnType<typeof createMockFn<[timeoutMs?: number], Promise<InnertubeInfoClient>>>;
+  createWithTimeout: ReturnType<typeof vi.fn<(...args: [timeoutMs?: number]) => Promise<InnertubeInfoClient>>>;
 };
 describe("InnertubeService behavior", () => {
   let factory: InnertubeFactory;
 
   beforeEach(() => {
     factory = {
-      createWithTimeout: createMockFn<
-        [timeoutMs?: number],
-        Promise<InnertubeInfoClient>
+      createWithTimeout: vi.fn<(...args: [timeoutMs?: number]) => Promise<InnertubeInfoClient>
       >(async () => ({
-        getInfo: createMockFn(async (_videoId: string) => ({ video: "info" })),
+        getInfo: vi.fn(async (_videoId: string) => ({ video: "info" })),
       })),
     };
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("reuses the metadata owner and reports initialization and reuse separately", async () => {

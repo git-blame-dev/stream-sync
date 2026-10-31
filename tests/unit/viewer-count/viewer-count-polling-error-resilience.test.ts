@@ -1,20 +1,18 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { vi, describe, test, expect, afterEach } from 'bun:test';
 
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 describe("ViewerCountSystem polling resilience", () => {
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function createSystem({ streamLive = true } = {}) {
     const platform = {
-      getViewerCount: createMockFn().mockRejectedValue(
-        new Error("fetch failed"),
-      ),
+      getViewerCount: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("fetch failed")),
     };
 
     const system = new ViewerCountSystem({

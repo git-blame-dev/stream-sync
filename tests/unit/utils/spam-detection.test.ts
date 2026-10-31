@@ -1,8 +1,6 @@
 import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import {
   SpamDetectionConfig,
   createSpamDetectionConfig,
@@ -15,12 +13,6 @@ type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
 
 initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 describe("Spam Detection", () => {
   let mockLogger: typeof noOpLogger;
@@ -37,10 +29,6 @@ describe("Spam Detection", () => {
     };
 
     config = new SpamDetectionConfig(configObj, { logger: mockLogger });
-  });
-
-  afterEach(() => {
-    restoreAllMocks();
   });
 
   describe("when initializing spam detection configuration", () => {

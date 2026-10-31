@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createEventBus } from "../../../src/core/EventBus";
 import { createSceneManagementService } from "../../../src/obs/scene-management-service";
@@ -36,14 +36,14 @@ describe("SceneManagementService", () => {
   let sceneService: SceneService;
   let eventBus: ReturnType<typeof createSceneEventBusAdapter>;
   let mockOBSConnection: SceneObsConnection & {
-    call: ReturnType<typeof createMockFn<[string, Record<string, unknown>], Promise<unknown>>>;
+    call: ReturnType<typeof vi.fn<(...args: [string, Record<string, unknown>]) => Promise<unknown>>>;
   };
 
   beforeEach(() => {
     eventBus = createSceneEventBusAdapter();
 
     mockOBSConnection = {
-      call: createMockFn<[string, Record<string, unknown>], Promise<unknown>>(
+      call: vi.fn<(...args: [string, Record<string, unknown>]) => Promise<unknown>>(
         async () => ({}),
       ),
     };
@@ -56,7 +56,7 @@ describe("SceneManagementService", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    vi.restoreAllMocks();
     sceneService.destroy();
     eventBus.reset();
   });

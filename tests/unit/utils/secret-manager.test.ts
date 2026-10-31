@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
 import fs from "fs";
 import { ensureSecrets } from "../../../src/utils/secret-manager.ts";
 
@@ -64,12 +64,12 @@ describe("secret-manager", () => {
     fileStore = {};
     filePermissions = {};
 
-    mutableFs.existsSync = createMockFn((path: string) => path in fileStore);
-    mutableFs.readFileSync = createMockFn((path: string) => {
+    mutableFs.existsSync = vi.fn((path: string) => path in fileStore);
+    mutableFs.readFileSync = vi.fn((path: string) => {
       if (path in fileStore) return fileStore[path] ?? "";
       throw new Error(`ENOENT: no such file: ${path}`);
     });
-    mutableFs.writeFileSync = createMockFn((
+    mutableFs.writeFileSync = vi.fn((
       path: string,
       content: string,
       options?: WriteFileOptions | BufferEncoding,
@@ -79,20 +79,20 @@ describe("secret-manager", () => {
         filePermissions[path] = options.mode;
       }
     });
-    mutableFs.renameSync = createMockFn((from: string, to: string) => {
+    mutableFs.renameSync = vi.fn((from: string, to: string) => {
       fileStore[to] = fileStore[from] ?? "";
       filePermissions[to] = filePermissions[from] ?? 0;
       delete fileStore[from];
       delete filePermissions[from];
     });
-    mutableFs.unlinkSync = createMockFn((path: string) => {
+    mutableFs.unlinkSync = vi.fn((path: string) => {
       delete fileStore[path];
       delete filePermissions[path];
     });
-    mutableFs.chmodSync = createMockFn((path: string, mode: number) => {
+    mutableFs.chmodSync = vi.fn((path: string, mode: number) => {
       filePermissions[path] = mode;
     });
-    mutableFs.statSync = createMockFn((path: string) => {
+    mutableFs.statSync = vi.fn((path: string) => {
       if (!(path in fileStore)) {
         throw new Error(`ENOENT: no such file: ${path}`);
       }
@@ -157,7 +157,7 @@ describe("secret-manager", () => {
     mutableFs.statSync = originalStatSync;
     mutableFs.renameSync = originalRenameSync;
     mutableFs.unlinkSync = originalUnlinkSync;
-    restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("persists representable updates without replacing an unrepresentable credential's existing entry", async () => {

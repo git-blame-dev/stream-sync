@@ -1,20 +1,11 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { describe, expect, it } from "bun:test";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
 import testClock from "../../helpers/test-clock";
 import { normalizeTikTokMessage } from "../../../src/utils/message-normalization";
 import { extractTikTokUserData } from "../../../src/utils/tiktok-data-extraction";
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  logPerformanceMetrics: true,
-});
 
 describe("TikTok Unknown User Data Structure Mismatch", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
   describe("Message Normalization with Actual TikTok Data Structure", () => {
     describe("when TikTok data has nested structure (current production format)", () => {
       it(

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { vi, afterEach, describe, expect, test } from 'bun:test';
 
-import { restoreAllMocks } from '../../../../helpers/bun-mock-utils';
+
 import { noOpLogger } from '../../../../helpers/mock-factories';
 import { createYouTubeEventRouter } from '../../../../../src/platforms/youtube/events/event-router';
 import { PlatformEvents } from '../../../../../src/interfaces/PlatformEvents';
@@ -31,7 +31,7 @@ const logger: LoggerLike = noOpLogger;
 
 describe('YouTube event router', () => {
     afterEach(() => {
-        restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     test('routes event types to platform handlers', async () => {

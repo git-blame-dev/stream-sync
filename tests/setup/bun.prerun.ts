@@ -22,24 +22,13 @@ process.once('exit', () => fs.rmSync(tempConfigDirectory, { recursive: true, for
 type WriteCallback = (error?: Error | null) => void;
 type WriteFunction = typeof process.stdout.write;
 type PreRunGlobalState = typeof globalThis & {
-    __ORIGINAL_PROCESS_EXIT__: typeof process.exit;
-    __NOOP_PROCESS_EXIT__: typeof process.exit;
     __ORIGINAL_STDOUT_WRITE__: WriteFunction;
     __SUPPRESSED_STDOUT_WRITE__: WriteFunction;
     __ORIGINAL_STDERR_WRITE__: WriteFunction;
     __SUPPRESSED_STDERR_WRITE__: WriteFunction;
 };
 
-const originalProcessExit = process.exit;
 const preRunGlobal = global as PreRunGlobalState;
-
-// Imports and shutdown tests can exit in-process; callers capture exit attempts locally.
-const noopProcessExit = (() => {}) as typeof process.exit;
-
-process.exit = noopProcessExit;
-
-preRunGlobal.__ORIGINAL_PROCESS_EXIT__ = originalProcessExit;
-preRunGlobal.__NOOP_PROCESS_EXIT__ = noopProcessExit;
 
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);

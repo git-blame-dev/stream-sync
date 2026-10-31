@@ -1,20 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { GlobalCommandCooldownManager } from "../../../src/utils/global-command-cooldown";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
 
 type GlobalCommandCooldownManagerLike = GlobalCommandCooldownManager;
 
 initializeTestLogging();
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
 
 describe(
   "GlobalCommandCooldownManager",
@@ -26,10 +18,6 @@ describe(
       mockLogger = noOpLogger;
 
       cooldownManager = new GlobalCommandCooldownManager(mockLogger);
-    });
-
-    afterEach(() => {
-      restoreAllMocks();
     });
 
     describe("when checking cooldown for new command", () => {

@@ -1,11 +1,7 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { vi, type Mock, describe, test, beforeEach, afterEach, expect } from 'bun:test';
 import { EventEmitter } from "node:events";
 
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../helpers/bun-mock-utils";
+
 
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
@@ -17,7 +13,7 @@ import { createConfigFixture } from "../helpers/config-fixture";
 import testClock from "../helpers/test-clock";
 
 type ViewerPlatform = {
-  getViewerCount: TestMockFn<[], Promise<number | null>>;
+  getViewerCount: Mock<(...args: []) => Promise<number | null>>;
   isEnabled: () => boolean;
 };
 type ViewerPlatformMap = Record<string, ViewerPlatform>;
@@ -36,7 +32,7 @@ type ViewerUpdate = {
 };
 
 class SyntheticObsSocket extends EventEmitter {
-  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+  call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<Record<string, unknown>>>()
     .mockResolvedValue({ status: "success" });
   async connect() {
     this.emit("Identified");
@@ -63,7 +59,7 @@ const isViewerUpdate = (value: unknown): value is ViewerUpdate =>
   typeof value.isStreamLive === "boolean";
 
 const createViewerPlatform = (count: number): ViewerPlatform => ({
-  getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(
+  getViewerCount: vi.fn<(...args: []) => Promise<number | null>>().mockResolvedValue(
     count,
   ),
   isEnabled: () => true,
@@ -78,10 +74,10 @@ const requireYouTubePlatform = (platforms: ViewerPlatformMap): ViewerPlatform =>
 };
 
 const createViewerCountLogger = (): TestLogger => ({
-  debug: createMockFn(),
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn(),
+  debug: vi.fn<(message: string, context?: string, payload?: unknown) => void>(),
+  info: vi.fn<(message: string, context?: string, payload?: unknown) => void>(),
+  warn: vi.fn<(message: string, context?: string, payload?: unknown) => void>(),
+  error: vi.fn<(message: string, context?: string, payload?: unknown) => void>(),
 });
 
 describe("YouTube Viewer Count System - End-to-End Integration", () => {
@@ -95,7 +91,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
         await obsManager.disconnect();
       }
     } finally {
-      restoreAllMocks();
+      vi.restoreAllMocks();
     }
   });
 
@@ -184,11 +180,11 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
 
     test("should handle multiple platform viewer counts simultaneously", async () => {
       platforms.twitch = {
-        getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(567),
+        getViewerCount: vi.fn<(...args: []) => Promise<number | null>>().mockResolvedValue(567),
         isEnabled: () => true,
       };
       platforms.tiktok = {
-        getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(890),
+        getViewerCount: vi.fn<(...args: []) => Promise<number | null>>().mockResolvedValue(890),
         isEnabled: () => true,
       };
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -296,10 +292,10 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     test("should notify multiple observers of viewer count updates", async () => {
       const mockObserver = {
         getObserverId: () => "test-observer",
-        onViewerCountUpdate: createMockFn(),
-        onStreamStatusChange: createMockFn(),
-        initialize: createMockFn(),
-        cleanup: createMockFn(),
+        onViewerCountUpdate: vi.fn<(...args: unknown[]) => unknown>(),
+        onStreamStatusChange: vi.fn<(...args: unknown[]) => unknown>(),
+        initialize: vi.fn<(...args: unknown[]) => unknown>(),
+        cleanup: vi.fn<(...args: unknown[]) => unknown>(),
       };
       viewerCountSystem.addObserver(mockObserver);
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -323,10 +319,8 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     test("should handle observer errors gracefully", async () => {
       const faultyObserver = {
         getObserverId: () => "faulty-observer",
-        onViewerCountUpdate: createMockFn().mockRejectedValue(
-          new Error("Observer error"),
-        ),
-        onStreamStatusChange: createMockFn(),
+        onViewerCountUpdate: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("Observer error")),
+        onStreamStatusChange: vi.fn<(...args: unknown[]) => unknown>(),
       };
       viewerCountSystem.addObserver(faultyObserver);
       await viewerCountSystem.updateStreamStatus("youtube", true);

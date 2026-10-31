@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, type TestMockFn } from "../../../helpers/bun-mock-utils";
+import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { noOpLogger } from "../../../helpers/mock-factories";
 import {
   useFakeTimers,
@@ -21,7 +21,7 @@ type EffectsManagerLike = NonNullable<
 >;
 type PlayMediaInOBS = EffectsManagerLike["playMediaInOBS"];
 type MockEffectsManager = EffectsManagerLike & {
-  playMediaInOBS: TestMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>;
+  playMediaInOBS: Mock<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>;
 };
 type CooldownOverrides = {
   cmdCooldown?: number;
@@ -30,8 +30,8 @@ type CooldownOverrides = {
 
 const createMockEffectsManager = (): MockEffectsManager => {
   const obsManager = {
-    ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
-    call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+    ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
+    call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
   };
 
   return Object.assign(
@@ -40,7 +40,7 @@ const createMockEffectsManager = (): MockEffectsManager => {
       delay: async () => {},
     }),
     {
-      playMediaInOBS: createMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>()
+      playMediaInOBS: vi.fn<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>()
         .mockResolvedValue(undefined),
     },
   );
@@ -61,7 +61,7 @@ describe("VFXCommandService cooldown handling", () => {
     });
 
   const createMockCommandParser = (): CommandParserLike => ({
-    getVFXConfig: createMockFn((message: string): VFXConfig => ({
+    getVFXConfig: vi.fn((message: string): VFXConfig => ({
       command: message,
       commandKey: message,
       filename: `${message}.mp4`,
@@ -295,7 +295,7 @@ describe("VFXCommandService cooldown handling", () => {
           effectsManager: mockEffectsManager,
         },
       );
-      service.selectVFXCommand = createMockFn().mockResolvedValue({
+      service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<{ command: string; commandKey: string; filename: string; mediaSource: string; vfxFilePath: string; duration: number; }>>().mockResolvedValue({
         command: "!one",
         commandKey: "!one",
         filename: "!one.mp4",
