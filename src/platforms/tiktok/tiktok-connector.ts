@@ -1,7 +1,9 @@
 import type { TikTokLiveConstructorConnectionOptions, WebSocketParams, WebcastGotHttpConfig } from 'tiktok-live-connector';
+import { logger } from '../../core/logging';
+import { TikTokTransportDiagnostics, type DiagnosticLogger } from './transport-diagnostics';
 
 /** A new SDK and HTTP cancellation scope for each application-owned connection attempt. */
-async function createTikTokConnector(username: string, apiKey: string | null, signal: AbortSignal) {
+async function createTikTokConnector(username: string, apiKey: string | null, signal: AbortSignal, diagnosticLogger: DiagnosticLogger = logger) {
     const { TikTokLiveConnection, WebcastDeserializeConfig } = await import('tiktok-live-connector');
     const { default: EulerStreamApiClient } = await import('tiktok-live-api-sdk');
     signal.throwIfAborted();
@@ -12,8 +14,11 @@ async function createTikTokConnector(username: string, apiKey: string | null, si
         return code ? Object.assign(new Error('TikTok signing request failed'), { code }) : error;
     };
     class ScopedConnection extends TikTokLiveConnection {
+        private readonly diagnostics = new TikTokTransportDiagnostics(diagnosticLogger);
+
         constructor(name: string, constructorOptions: TikTokLiveConstructorConnectionOptions) {
             super(name, constructorOptions);
+            signal.addEventListener('abort', () => this.diagnostics.close(), { once: true });
             const provideSocket = this._wsClientProvider;
             this._wsClientProvider = params => {
                 signal.throwIfAborted();
@@ -23,6 +28,14 @@ async function createTikTokConnector(username: string, apiKey: string | null, si
         override async connect(roomId?: string) {
             try { return await super.connect(roomId); }
             catch (error) { throw preserveSigningStatus(error instanceof Error ? error : new Error('TikTok connection failed')); }
+        }
+        override async disconnect() {
+            this.diagnostics.close();
+            await super.disconnect();
+        }
+        protected override async processProtoMessageFetchResult(batch: Parameters<InstanceType<typeof TikTokLiveConnection>['processProtoMessageFetchResult']>[0]) {
+            this.diagnostics.record(batch.messages);
+            await super.processProtoMessageFetchResult(batch);
         }
         protected override handleError(error: Error, context: string) {
             super.handleError(preserveSigningStatus(error), context);
