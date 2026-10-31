@@ -68,8 +68,8 @@ const buildOverrides = (options: { cliArgs?: MainOverridesArg['cliArgs'] } = {})
     onShutdownComplete: () => {},
     cliArgs: options.cliArgs ?? { chat: 1000 },
     getOBSConnectionManager: () => obs,
-    createSingleInstanceGuard: async options => {
-      guard = await acquireSingleInstanceGuard({ ...options, lockPath: path.join(dir, 'instance.lock'), registerProcessCleanup: false });
+    createSingleInstanceGuard: async () => {
+      guard = await acquireSingleInstanceGuard({ port: guard?.port ?? 0 });
       const release = guard.release.bind(guard);
       guard.release = async () => { releaseCalls.push(true); await release(); };
       return guard;
@@ -80,7 +80,7 @@ const buildOverrides = (options: { cliArgs?: MainOverridesArg['cliArgs'] } = {})
     createUsdRateService: options => createUsdRateService({ ...options, cachePath: path.join(dir, 'rates.json'), fetch: async () => ({ ok: true, status: 200, json: async () => [{ base: 'USD', quote: 'EUR', rate: 0.9 }] }) }),
     createGracefulExitService: (runtime, ...args) => { app = runtime as AppRuntime; return createGracefulExitService(runtime, ...args); },
   };
-  return { overrides, obs, dir, get runtime() { if (!app) throw new Error('Main did not acquire runtime'); return app; }, getSingleInstanceReleaseCalls: () => releaseCalls };
+  return { overrides, obs, dir, get instancePort() { if (!guard) throw new Error('Main did not acquire instance ownership'); return guard.port; }, get runtime() { if (!app) throw new Error('Main did not acquire runtime'); return app; }, getSingleInstanceReleaseCalls: () => releaseCalls };
 };
 let stdout: ReturnType<typeof captureStdout>;
 let stderr: ReturnType<typeof captureStderr>;
@@ -305,9 +305,8 @@ describe('main startup using production owners', () => {
 
   it("shuts down in startup-only mode", async () => {
     process.env.CHAT_BOT_STARTUP_ONLY = "true";
-    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({
-      cliArgs: { chat: 1 },
-    });
+    const h = buildOverrides({ cliArgs: { chat: 1 } });
+    const { overrides, getSingleInstanceReleaseCalls } = h;
 
     const result = await main({
       ...overrides,
@@ -316,6 +315,8 @@ describe('main startup using production owners', () => {
 
     expect(result.success).toBe(true);
     expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
+    const successor = await acquireSingleInstanceGuard({ port: h.instancePort });
+    await successor.release();
   });
 
   it("rejects non-function startup override dependencies", async () => {
@@ -376,14 +377,26 @@ describe('main startup using production owners', () => {
 
   it('rejects a second actual instance before secret setup and permits startup after release', async () => {
     const h = buildOverrides();
-    const held = await acquireSingleInstanceGuard({ lockPath: path.join(h.dir, 'instance.lock'), registerProcessCleanup: false, logger: noOpLogger });
+    const held = await acquireSingleInstanceGuard({ port: 0 });
     const config = buildMainConfig();
     config.youtube.enableAPI = true;
+    let secretCalls = 0;
     try {
-      await expect(main({ ...h.overrides, config })).rejects.toThrow('Another Stream Sync instance');
+      await expect(main({ ...h.overrides, config, createSingleInstanceGuard: () => acquireSingleInstanceGuard({ port: held.port }),
+        ensureSecrets: async options => { secretCalls += 1; return ensureSecrets(options); }
+      })).rejects.toThrow('is occupied by Stream Sync or another application');
+      expect(secretCalls).toBe(0);
       expect(h.getSingleInstanceReleaseCalls()).toHaveLength(0);
     } finally { await held.release(); }
     expect((await main({ ...h.overrides, config: buildMainConfig() })).success).toBe(true);
+  });
+
+  it('retains instance ownership through shutdown when the process remains alive', async () => {
+    const h = buildOverrides();
+    await main({ ...h.overrides, config: buildMainConfig() });
+    await h.runtime.shutdown();
+    await expect(acquireSingleInstanceGuard({ port: h.instancePort })).rejects.toMatchObject({ code: 'STREAM_SYNC_INSTANCE_UNAVAILABLE' });
+    expect(h.getSingleInstanceReleaseCalls()).toHaveLength(0);
   });
 
   it('passes GUI and speech settings into the actual supplied display queue factory', async () => {

@@ -265,6 +265,24 @@ Copy-Item .env.example .env
 .\stream-sync.exe
 ```
 
+### Single instance ownership
+
+Stream Sync reserves `127.0.0.1:3398` before secret setup and platform startup.
+Only one instance can own that address in the same network namespace, across
+users and checkouts. The operating system releases it when the process exits,
+including after a force kill; there is no stale-lock waiting period. A bot left
+running after OBS closes continues to own the address.
+
+If startup reports that this address is occupied, check for an existing bot or
+another application using port 3398. Stream Sync does not terminate the occupant
+or choose another port. The singleton address is independent of the GUI port.
+Windows, WSL distributions, and containers can have different network namespaces;
+this mechanism does not guarantee exclusion between them.
+
+When upgrading from the old lockfile version, stop that bot before starting the
+new version: the two versions do not share an ownership mechanism. Old temporary
+lock directories are ignored and need no cleanup for startup.
+
 ## ✅ Testing
 
 The test suite focuses on observable stream-control behavior rather than live network calls. It includes unit, integration, and smoke E2E tests for platform event routing, viewer counts, OBS integration boundaries, GUI transport, startup wiring, and secret-manager flows.

@@ -1,329 +1,80 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import fs from "node:fs/promises";
-import syncFs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createConnection, createServer } from 'node:net';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
 import {
-  StreamSyncAlreadyRunningError,
-  acquireSingleInstanceGuard,
-} from "../../../src/services/SingleInstanceGuard.ts";
-import {
-  advanceTimersByTime,
-  setSystemTime,
-  useFakeTimers,
-  useRealTimers,
-} from "../../helpers/bun-timers.ts";
+    acquireSingleInstanceGuard,
+    StreamSyncInstanceUnavailableError
+} from '../../../src/services/SingleInstanceGuard';
+import type { SingleInstanceGuard } from '../../../src/services/SingleInstanceGuard';
 
-describe("SingleInstanceGuard", () => {
-  let tempDir: string;
+const guards: SingleInstanceGuard[] = [];
+const acquire = async (port = 0) => {
+    const guard = await acquireSingleInstanceGuard({ port });
+    guards.push(guard);
+    return guard;
+};
+afterEach(async () => {
+    await Promise.all(guards.splice(0).map(guard => guard.release()));
+});
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "stream-sync-guard-test-"));
-  });
-
-  afterEach(async () => {
-    useRealTimers();
-    if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  const getLockPath = () => path.join(tempDir, "stream-sync.lock");
-
-  for (const failure of ['owner.json', 'heartbeat', 'open'] as const) {
-    it(`rolls back its partial ${failure} failure and permits an immediate retry`, async () => {
-      const lockPath = getLockPath();
-      const originalWrite = fs.writeFile.bind(fs);
-      const originalOpen = syncFs.openSync.bind(syncFs);
-      const error = Object.assign(new Error('synthetic acquisition failure'), { code: 'ENOSPC' });
-      const write = spyOn(fs, 'writeFile').mockImplementation(async (file, ...args) => {
-        if (String(file) === path.join(lockPath, failure)) throw error;
-        return originalWrite(file, ...args);
-      });
-      const open = spyOn(syncFs, 'openSync').mockImplementation((file, ...args) => {
-        if (failure === 'open' && String(file) === path.join(lockPath, 'heartbeat')) throw error;
-        return originalOpen(file, ...args);
-      });
-      try {
-        await expect(acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false })).rejects.toBe(error);
-      } finally {
-        write.mockRestore();
-        open.mockRestore();
-      }
-      expect(await fs.stat(lockPath).then(() => true, () => false)).toBe(false);
-      const retry = await acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false });
-      await retry.release();
-    });
-  }
-
-  it('preserves a replacement directory when its own partial acquisition fails', async () => {
-    const lockPath = getLockPath();
-    const original = fs.writeFile.bind(fs);
-    const error = new Error('synthetic replaced acquisition');
-    const write = spyOn(fs, 'writeFile').mockImplementation(async (file, ...args) => {
-      if (String(file) === path.join(lockPath, 'owner.json')) {
-        await fs.rename(lockPath, `${lockPath}.old`);
-        await fs.mkdir(lockPath);
-        await original(path.join(lockPath, 'owner.json'), JSON.stringify({ instanceId: 'synthetic-other-owner' }));
-        throw error;
-      }
-      return original(file, ...args);
-    });
-    try {
-      await expect(acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false })).rejects.toBe(error);
-    } finally { write.mockRestore(); }
-    expect(JSON.parse(await fs.readFile(path.join(lockPath, 'owner.json'), 'utf8')).instanceId).toBe('synthetic-other-owner');
-  });
-
-  it("acquires and releases a lock directory", async () => {
-    const lockPath = getLockPath();
-    const guard = await acquireSingleInstanceGuard({
-      lockPath,
-      isProcessAlive: () => true,
-      registerProcessCleanup: false,
+describe('SingleInstanceGuard', () => {
+    it('owns an endpoint until release, then permits a successor', async () => {
+        const guard = await acquire();
+        expect(guard.port).toBeGreaterThan(0);
+        await expect(acquire(guard.port)).rejects.toBeInstanceOf(StreamSyncInstanceUnavailableError);
+        const releasing = guard.release();
+        expect(guard.release()).toBe(releasing);
+        await releasing;
+        const successor = await acquire(guard.port);
+        await guard.release();
+        await expect(acquire(successor.port)).rejects.toBeInstanceOf(StreamSyncInstanceUnavailableError);
     });
 
-    expect(guard.lockPath).toBe(lockPath);
-    expect(guard.metadata.pid).toBe(process.pid);
-    expect(await fs.stat(lockPath)).toBeDefined();
-
-    await guard.release();
-    await guard.release();
-
-    await expect(fs.stat(lockPath)).rejects.toThrow();
-  });
-
-  it("rejects acquisition while an existing lock is active", async () => {
-    const lockPath = getLockPath();
-    const guard = await acquireSingleInstanceGuard({
-      lockPath,
-      isProcessAlive: () => true,
-      registerProcessCleanup: false,
+    it('allows exactly one simultaneous contender to succeed', async () => {
+        const previous = await acquire();
+        await previous.release();
+        const results = await Promise.allSettled([acquire(previous.port), acquire(previous.port)]);
+        expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
+        await expect(acquire(previous.port)).rejects.toBeInstanceOf(StreamSyncInstanceUnavailableError);
     });
 
-    await expect(
-      acquireSingleInstanceGuard({
-        lockPath,
-        isProcessAlive: () => true,
-        registerProcessCleanup: false,
-      }),
-    ).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-
-    await guard.release();
-  });
-
-  it("treats a fresh metadata-less lock as active", async () => {
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-
-    await expect(
-      acquireSingleInstanceGuard({
-        lockPath,
-        staleMs: 60_000,
-        isProcessAlive: () => false,
-        registerProcessCleanup: false,
-      }),
-    ).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-  });
-
-  it("removes stale locks before acquiring", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(5000));
-
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(
-      path.join(lockPath, "owner.json"),
-      JSON.stringify({ instanceId: "stale-owner", pid: 999999999 }),
-      "utf8",
-    );
-    await fs.writeFile(path.join(lockPath, "heartbeat"), "0", "utf8");
-
-    const guard = await acquireSingleInstanceGuard({
-      lockPath,
-      staleMs: 1000,
-      isProcessAlive: () => false,
-      registerProcessCleanup: false,
+    it('reports an unrelated occupant without disrupting it or falling back', async () => {
+        const occupant = createServer(socket => socket.destroy());
+        occupant.listen({ host: '127.0.0.1', port: 0, exclusive: true });
+        await once(occupant, 'listening');
+        const port = (occupant.address() as AddressInfo).port;
+        try {
+            const error = await acquire(port).catch((error: unknown) => error);
+            expect(error).toBeInstanceOf(StreamSyncInstanceUnavailableError);
+            expect(error).toMatchObject({ code: 'STREAM_SYNC_INSTANCE_UNAVAILABLE', port, cause: { code: 'EADDRINUSE' } });
+            expect((error as Error).message).toContain('Stream Sync or another application');
+            expect(occupant.listening).toBe(true);
+        } finally {
+            await new Promise<void>((resolve, reject) => occupant.close(error => error ? reject(error) : resolve()));
+        }
+        await acquire(port);
     });
 
-    expect(guard.metadata.pid).toBe(process.pid);
-    await guard.release();
-  });
-
-  it("protects a live stalled or suspended owner with an old heartbeat", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(5000));
-
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(
-      path.join(lockPath, "owner.json"),
-      JSON.stringify({ instanceId: "stale-owner", pid: process.pid }),
-      "utf8",
-    );
-    await fs.writeFile(path.join(lockPath, "heartbeat"), "0", "utf8");
-
-    await expect(acquireSingleInstanceGuard({
-      lockPath,
-      staleMs: 1000,
-      isProcessAlive: () => true,
-      registerProcessCleanup: false,
-    })).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-    expect(JSON.parse(await fs.readFile(path.join(lockPath, "owner.json"), "utf8")).instanceId).toBe("stale-owner");
-  });
-
-  it("allows only one concurrent acquirer", async () => {
-    const lockPath = getLockPath();
-
-    const results = await Promise.allSettled([
-      acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false }),
-      acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false }),
-    ]);
-
-    const fulfilled = results.filter((result) => result.status === "fulfilled");
-    const rejected = results.filter((result) => result.status === "rejected");
-
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    if (rejected[0] === undefined || fulfilled[0] === undefined) {
-      throw new Error("Expected one fulfilled and one rejected acquisition");
-    }
-    expect(rejected[0].reason).toBeInstanceOf(StreamSyncAlreadyRunningError);
-
-    await fulfilled[0].value.release();
-  });
-
-  it("treats a fresh owner-only lock as pending even before a PID is available", async () => {
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-pending" }));
-    await expect(acquireSingleInstanceGuard({
-      lockPath, isProcessAlive: () => false, registerProcessCleanup: false,
-    })).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-  });
-
-  it("allows only one concurrent acquirer when recovering a dead stale owner", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(5000));
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-dead", pid: 123456789 }));
-    await fs.writeFile(path.join(lockPath, "heartbeat"), "0");
-    const options = { lockPath, staleMs: 1000,
-      isProcessAlive: (pid: number) => pid !== 123456789, registerProcessCleanup: false };
-    const results = await Promise.allSettled([
-      acquireSingleInstanceGuard(options), acquireSingleInstanceGuard(options),
-    ]);
-    const winners = results.filter((result) => result.status === "fulfilled");
-    expect(winners).toHaveLength(1);
-    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-    for (const winner of winners) await winner.value.release();
-  });
-
-  it("does not retire a replacement installed after stale observation", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(5000));
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-dead", pid: 123456789 }));
-    await fs.writeFile(path.join(lockPath, "heartbeat"), "0");
-    let replaced = false;
-    await expect(acquireSingleInstanceGuard({
-      lockPath, staleMs: 1000, registerProcessCleanup: false,
-      isProcessAlive: (pid) => pid === 987654321,
-      logger: { warn: () => {
-        if (replaced) return;
-        replaced = true;
-        syncFs.renameSync(lockPath, `${lockPath}.synthetic-old`);
-        syncFs.mkdirSync(lockPath);
-        syncFs.writeFileSync(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-replacement", pid: 987654321 }));
-        syncFs.writeFileSync(path.join(lockPath, "heartbeat"), "5000");
-      } },
-    })).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-    expect(JSON.parse(await fs.readFile(path.join(lockPath, "owner.json"), "utf8")).instanceId).toBe("synthetic-replacement");
-  });
-
-  it("rechecks a heartbeat renewed after stale observation", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(5000));
-    const lockPath = getLockPath();
-    await fs.mkdir(lockPath);
-    await fs.writeFile(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-renewed", pid: 123456789 }));
-    await fs.writeFile(path.join(lockPath, "heartbeat"), "0");
-    await expect(acquireSingleInstanceGuard({
-      lockPath, staleMs: 1000, isProcessAlive: () => false, registerProcessCleanup: false,
-      logger: { warn: () => syncFs.writeFileSync(path.join(lockPath, "heartbeat"), "5000") },
-    })).rejects.toBeInstanceOf(StreamSyncAlreadyRunningError);
-    expect(await fs.readFile(path.join(lockPath, "heartbeat"), "utf8")).toBe("5000");
-  });
-
-  it("release preserves a replacement directory even if it copies the old owner token", async () => {
-    const lockPath = getLockPath();
-    const guard = await acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false });
-    await fs.rename(lockPath, `${lockPath}.synthetic-old`);
-    await fs.mkdir(lockPath);
-    await fs.writeFile(path.join(lockPath, "owner.json"), JSON.stringify(guard.metadata));
-    await guard.release();
-    expect(await fs.stat(lockPath)).toBeDefined();
-  });
-
-  it("simultaneous old release and replacement acquisition preserve the new guard", async () => {
-    const lockPath = getLockPath();
-    const old = await acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false });
-    await fs.rename(lockPath, `${lockPath}.synthetic-old`);
-    const [replacement] = await Promise.all([
-      acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false }),
-      old.release(),
-    ]);
-    expect(JSON.parse(await fs.readFile(path.join(lockPath, "owner.json"), "utf8")).instanceId).toBe(replacement.metadata.instanceId);
-    await replacement.release();
-  });
-
-  it("keeps heartbeat writes on the acquired file after directory replacement", async () => {
-    useFakeTimers();
-    setSystemTime(new Date(234));
-    const lockPath = getLockPath();
-    const guard = await acquireSingleInstanceGuard({
-      lockPath, heartbeatMs: 1000, isProcessAlive: () => true, registerProcessCleanup: false,
+    it('preserves non-conflict binding failures', async () => {
+        const error = await acquire(-1).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(StreamSyncInstanceUnavailableError);
+        expect((error as Error).message).toContain('port');
     });
-    try {
-      await fs.rename(lockPath, `${lockPath}.synthetic-old`);
-      await fs.mkdir(lockPath);
-      await fs.writeFile(path.join(lockPath, "heartbeat"), "synthetic-replacement");
-      const originalHeartbeat = await fs.readFile(path.join(`${lockPath}.synthetic-old`, "heartbeat"), "utf8");
-      advanceTimersByTime(1000);
-      // The old implementation queued an asynchronous path-based write.
-      await Promise.resolve();
-      expect(await fs.readFile(path.join(lockPath, "heartbeat"), "utf8")).toBe("synthetic-replacement");
-      const updatedHeartbeat = await fs.readFile(path.join(`${lockPath}.synthetic-old`, "heartbeat"), "utf8");
-      expect(updatedHeartbeat).toMatch(/^\d+$/);
-      expect(updatedHeartbeat).not.toBe(originalHeartbeat);
-    } finally {
-      await guard.release();
-    }
-  });
 
-  it("preserves rather than deletes a replacement encountered during release rename", async () => {
-    const lockPath = getLockPath();
-    const guard = await acquireSingleInstanceGuard({ lockPath, isProcessAlive: () => true, registerProcessCleanup: false });
-    const rename = syncFs.renameSync;
-    let movedTo = "";
-    syncFs.renameSync = ((from, to) => {
-      if (from === lockPath) {
-        rename(lockPath, `${lockPath}.synthetic-old`);
-        syncFs.mkdirSync(lockPath);
-        syncFs.writeFileSync(path.join(lockPath, "owner.json"), JSON.stringify({ instanceId: "synthetic-racing-replacement" }));
-        movedTo = String(to);
-      }
-      rename(from, to);
-    }) as typeof syncFs.renameSync;
-    try {
-      await expect(guard.release()).rejects.toThrow("preserved for recovery");
-      expect(JSON.parse(await fs.readFile(path.join(movedTo, "owner.json"), "utf8")).instanceId).toBe("synthetic-racing-replacement");
-    } finally {
-      syncFs.renameSync = rename;
-      await guard.release();
-    }
-  });
+    it('closes incoming connections so clients cannot pin release', async () => {
+        const guard = await acquire();
+        const client = createConnection({ host: '127.0.0.1', port: guard.port });
+        const closed = once(client, 'close');
+        client.resume();
+        try {
+            await closed;
+            await guard.release();
+            await acquire(guard.port);
+        } finally {
+            client.destroy();
+        }
+    });
 });

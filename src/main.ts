@@ -461,8 +461,8 @@ async function releaseSingleInstanceGuard(singleInstanceGuard: SingleInstanceGua
     try {
         await singleInstanceGuard.release();
     } catch (error) {
-        logMainError('Failed to release single-instance lock', error, {
-            lockPath: singleInstanceGuard.lockPath
+        logMainError('Failed to release single-instance listener', error, {
+            port: singleInstanceGuard.port
         }, {
             eventType: 'shutdown',
             logContext: 'single-instance'
@@ -620,7 +620,8 @@ async function main(overrides: MainOverrides = {}) {
     try {
         logger.info('Starting main application...', 'main');
 
-        singleInstanceGuard = await createSingleInstanceGuardFn({ logger });
+        singleInstanceGuard = await createSingleInstanceGuardFn();
+        logger.debug('Acquired Stream Sync instance listener', 'single-instance', { port: singleInstanceGuard.port });
 
         try {
             await ensureSecretsFn({

@@ -6,7 +6,8 @@
     "tests/**/*.test.ts",
     "tests/setup/**/*.ts",
     "tests/fixtures/tiktok-sdk-contract.ts",
-    "tests/fixtures/gui-runtime-media-lifetime.ts"
+    "tests/fixtures/gui-runtime-media-lifetime.ts",
+    "tests/fixtures/single-instance-process.ts"
   ],
   "project": [
     "src/**/*.ts",

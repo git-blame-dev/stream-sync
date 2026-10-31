@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { acquireSingleInstanceGuard } from '../../src/services/SingleInstanceGuard';
 import { withTimeout } from '../../src/utils/timeout-wrapper';
 import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
 import { captureStdout, captureStderr } from '../helpers/output-capture';
@@ -35,13 +34,14 @@ describe('main real-owner startup and presentation', () => {
         } finally { unsubscribe?.(); try { await h.dispose(); } finally { stdout.restore(); stderr.restore(); } }
     });
 
-    test('invalid root configuration rolls back acquired funding and the real instance lock', async () => {
+    test('invalid root configuration rolls back acquired funding and the real instance listener', async () => {
         const stdout = captureStdout(); const stderr = captureStderr();
         const h = await createMainPresentationFixture();
         try {
             Reflect.deleteProperty(h.config, 'goals');
             await expect(h.start()).rejects.toThrow('requires goals configuration');
-            await expect(stat(join(h.dir, 'instance.lock'))).rejects.toMatchObject({ code: 'ENOENT' });
+            const successor = await acquireSingleInstanceGuard({ port: h.instancePort });
+            await successor.release();
             await expect(h.funding.processPresentedContributions([])).rejects.toThrow('disposed');
         } finally { try { await h.dispose(); } finally { stdout.restore(); stderr.restore(); } }
     });

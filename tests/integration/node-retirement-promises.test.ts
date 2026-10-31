@@ -161,7 +161,7 @@ async function run() {
       config,
       createSingleInstanceGuard: async () => {
         acquired += 1;
-        return { release: async () => { released += 1; } };
+        return { port: 0, release: async () => { released += 1; } };
       },
       ensureSecrets: async () => { throw startupFailure; },
     }), (error: unknown) => error === startupFailure);

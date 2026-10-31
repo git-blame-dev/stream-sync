@@ -63,8 +63,8 @@ export async function createMainPresentationFixture(options: { operator?: boolea
                 unsubscribe = bus.subscribe('display:row', value => { rows.push(value as DisplayQueueItem); });
                 return bus;
             },
-            createSingleInstanceGuard: async options => {
-                guard = await acquireSingleInstanceGuard({ ...options, lockPath: join(dir, 'instance.lock'), registerProcessCleanup: false });
+            createSingleInstanceGuard: async () => {
+                guard = await acquireSingleInstanceGuard({ port: 0 });
                 return guard;
             },
             createOperatorControlService: options => createOperatorControlService({ ...options, filePath: join(dir, 'controls.json') }),
@@ -83,6 +83,7 @@ export async function createMainPresentationFixture(options: { operator?: boolea
     };
     return {
         config, socket, obs, rows, dir, fundingPath, start,
+        get instancePort() { if (!guard) throw new Error('Synthetic main did not acquire instance ownership'); return guard.port; },
         get runtime() { if (!runtime) throw new Error('Synthetic main did not acquire runtime'); return runtime; },
         get bus() { if (!bus) throw new Error('Synthetic main did not acquire bus'); return bus; },
         get queue() { if (!runtime) throw new Error('Synthetic main did not acquire queue'); return runtime.displayQueue as DisplayQueue; },
