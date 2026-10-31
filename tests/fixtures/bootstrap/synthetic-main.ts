@@ -19,6 +19,9 @@ export async function main(): Promise<void> {
             void Promise.reject(new Error('synthetic rejection failure'));
             await new Promise<void>(resolve => setImmediate(resolve));
             break;
+        case 'handled-rejection':
+            await Promise.reject(new Error('synthetic expected operational failure')).catch(() => {});
+            break;
         case 'debug':
             assert.ok(process.argv.includes('--debug'));
             break;

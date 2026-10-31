@@ -19,6 +19,7 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
     bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled = true;
     bootstrapProcess.on('unhandledRejection', (reason) => {
         bootstrapEmergencyLogger.writeUnhandledRejection(reason);
+        process.exit(1);
     });
 }
 

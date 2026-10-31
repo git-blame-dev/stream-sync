@@ -77,12 +77,21 @@ describe('bootstrap process boundary', () => {
         expect(result.emergencyFile).toContain('synthetic uncaught failure');
     });
 
-    test('reports unhandled rejection without changing the established nonfatal exit', async () => {
+    test('exits nonzero after exactly one bounded unhandled rejection report', async () => {
         const result = await runSyntheticBootstrap('unhandled-rejection');
-        expect(result.code).toBe(0);
+        expect(result.code).toBe(1);
         expect(result.stdout).toBe('');
         expect(result.stderr).toContain('[BOOTSTRAP] Unhandled Rejection:');
         expect(result.emergencyFile).toContain('synthetic rejection failure');
+        expect(result.stderr.match(/\[BOOTSTRAP\] Unhandled Rejection:/g)).toHaveLength(1);
+        expect(result.emergencyFile?.match(/\[BOOTSTRAP\] Unhandled Rejection:/g)).toHaveLength(1);
+        expect(result.stderr.length).toBeLessThan(5_000);
+    });
+
+    test('keeps handled operational failures outside the fatal rejection policy', async () => {
+        expect(await runSyntheticBootstrap('handled-rejection')).toEqual({
+            code: 0, stdout: '', stderr: '', emergencyFile: undefined,
+        });
     });
 
     test('passes debug to main without extra bootstrap announcements', async () => {

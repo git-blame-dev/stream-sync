@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, test, expect } from "bun:test";
 import { createBootstrapEmergencyLogger, formatBootstrapErrorDetails } from "../../../src/core/bootstrap-emergency-logger.ts";
 
@@ -15,6 +18,86 @@ function createStderrCapture() {
 }
 
 describe("bootstrap emergency logger behavior", () => {
+    test("rotates at the UTF-8 byte boundary and replaces only the single managed backup", () => {
+        const logsDir = mkdtempSync(join(tmpdir(), 'synthetic-emergency-'));
+        try {
+            const capture = createStderrCapture();
+            const logger = createBootstrapEmergencyLogger({ logsDir, stderr: capture.stderr });
+            const active = join(logsDir, 'program-log.txt');
+            const backup = `${active}.1`;
+            const line = '[BOOTSTRAP] Unhandled Rejection: synthetic 雪\n';
+            const bytes = Buffer.byteLength(line);
+            writeFileSync(active, 'x'.repeat(1024 * 1024 - bytes));
+            logger.writeUnhandledRejection('synthetic 雪');
+            expect(statSync(active).size).toBe(1024 * 1024);
+            expect(readdirSync(logsDir)).toEqual(['program-log.txt']);
+            logger.writeUnhandledRejection('synthetic 雪');
+            expect(statSync(backup).size).toBe(1024 * 1024);
+            expect(readFileSync(active, 'utf8')).toBe(line);
+            writeFileSync(active, 'y'.repeat(1024 * 1024));
+            logger.writeUnhandledRejection('synthetic 雪');
+            expect(readFileSync(backup, 'utf8')).toBe('y'.repeat(1024 * 1024));
+            expect(readFileSync(active, 'utf8')).toBe(line);
+            expect(readdirSync(logsDir).sort()).toEqual(['program-log.txt', 'program-log.txt.1']);
+        } finally {
+            rmSync(logsDir, { recursive: true, force: true });
+        }
+    });
+
+    test("preserves inherited oversized active and backup history outside managed names", () => {
+        const logsDir = mkdtempSync(join(tmpdir(), 'synthetic-emergency-history-'));
+        try {
+            const active = join(logsDir, 'program-log.txt');
+            const backup = `${active}.1`;
+            const history = ['a'.repeat(1024 * 1024 + 1), 'b'.repeat(1024 * 1024 + 2)];
+            writeFileSync(active, history[0]!);
+            writeFileSync(backup, history[1]!);
+            const capture = createStderrCapture();
+            createBootstrapEmergencyLogger({ logsDir, stderr: capture.stderr }).writeUncaughtException('synthetic failure');
+            expect(statSync(active).size).toBeLessThan(1024 * 1024);
+            const preserved = readdirSync(logsDir).filter(name => name.includes('.preserved-'));
+            expect(preserved).toHaveLength(2);
+            expect(preserved.map(name => readFileSync(join(logsDir, name), 'utf8')).sort()).toEqual(history);
+            expect(readdirSync(logsDir)).not.toContain('program-log.txt.1');
+            expect(capture.output.join('')).toContain('outside managed rotation');
+        } finally {
+            rmSync(logsDir, { recursive: true, force: true });
+        }
+    });
+
+    test("rotation failures leave existing bytes intact and still report to stderr", () => {
+        const logsDir = mkdtempSync(join(tmpdir(), 'synthetic-emergency-failure-'));
+        try {
+            const active = join(logsDir, 'program-log.txt');
+            const history = 'x'.repeat(1024 * 1024);
+            writeFileSync(active, history);
+            const capture = createStderrCapture();
+            const logger = createBootstrapEmergencyLogger({ logsDir, stderr: capture.stderr,
+                renameSync() { throw new Error('synthetic rotation failure'); } });
+            expect(() => logger.writeUnhandledRejection('synthetic failure')).not.toThrow();
+            expect(readFileSync(active, 'utf8')).toBe(history);
+            expect(capture.output.join('')).toContain('Unhandled Rejection: synthetic failure');
+            expect(capture.output.join('')).toContain('Failed to write to log file:');
+            expect(capture.output.join('')).toContain('synthetic rotation failure');
+        } finally {
+            rmSync(logsDir, { recursive: true, force: true });
+        }
+    });
+
+    test("nonregular managed destinations fail safely without modifying unrelated bytes", () => {
+        const logsDir = mkdtempSync(join(tmpdir(), 'synthetic-emergency-destination-'));
+        try {
+            const capture = createStderrCapture();
+            mkdirSync(join(logsDir, 'program-log.txt.1'));
+            const logger = createBootstrapEmergencyLogger({ logsDir, stderr: capture.stderr });
+            expect(() => logger.writeUncaughtException('synthetic failure')).not.toThrow();
+            expect(readdirSync(logsDir)).toEqual(['program-log.txt.1']);
+            expect(capture.output.join('')).toContain('not a regular file');
+        } finally {
+            rmSync(logsDir, { recursive: true, force: true });
+        }
+    });
+
     test("bounds emergency text and prevents control characters from creating extra records", () => {
         const text = formatBootstrapErrorDetails('synthetic failure\n\r\t\u001b' + 'x'.repeat(20_000));
         expect(text.length).toBeLessThanOrEqual(4096);

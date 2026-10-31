@@ -1,4 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, renameSync, type Stats } from 'node:fs';
 import { join } from 'node:path';
 import { sanitizeLogText } from './logger/safe-log-serializer';
 
@@ -8,6 +9,7 @@ type BootstrapEmergencyLoggerDependencies = {
     existsSync?: typeof existsSync;
     mkdirSync?: typeof mkdirSync;
     appendFileSync?: typeof appendFileSync;
+    renameSync?: typeof renameSync;
 };
 
 type BootstrapEmergencyLogger = {
@@ -17,6 +19,7 @@ type BootstrapEmergencyLogger = {
 };
 
 const MAX_EMERGENCY_DETAILS_LENGTH = 4096;
+const MAX_EMERGENCY_FILE_BYTES = 1024 * 1024;
 
 function formatBootstrapErrorDetails(error: unknown): string {
     try {
@@ -37,9 +40,30 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
     const fileExistsSync = dependencies.existsSync ?? existsSync;
     const createDirectorySync = dependencies.mkdirSync ?? mkdirSync;
     const appendLogFileSync = dependencies.appendFileSync ?? appendFileSync;
+    const moveFileSync = dependencies.renameSync ?? renameSync;
+    const activePath = join(dependencies.logsDir, 'program-log.txt');
+    const backupPath = `${activePath}.1`;
 
     const writeStderr = (line: string): void => {
         try { stderr.write(line); } catch { /* Other emergency sinks must still be attempted. */ }
+    };
+
+    const managedFileSize = (path: string): number => {
+        let file: Stats;
+        try {
+            file = lstatSync(path);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return 0;
+            throw error;
+        }
+        if (!file.isFile()) throw new Error('Emergency log destination is not a regular file');
+        if (file.size > MAX_EMERGENCY_FILE_BYTES) {
+            // Historical bytes are preserved, but excluded from the active-plus-backup bound.
+            moveFileSync(path, `${path}.preserved-${randomUUID()}`);
+            writeStderr('[BOOTSTRAP] Preserved oversized emergency history outside managed rotation.\n');
+            return 0;
+        }
+        return file.size;
     };
 
     const writeProgramLog = (line: string, fallbackPrefix: string): void => {
@@ -47,7 +71,13 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
             if (!fileExistsSync(dependencies.logsDir)) {
                 createDirectorySync(dependencies.logsDir, { recursive: true });
             }
-            appendLogFileSync(join(dependencies.logsDir, 'program-log.txt'), `${line}\n`);
+            managedFileSize(backupPath);
+            const activeBytes = managedFileSize(activePath);
+            const record = `${line}\n`;
+            if (activeBytes + Buffer.byteLength(record, 'utf8') > MAX_EMERGENCY_FILE_BYTES) {
+                moveFileSync(activePath, backupPath);
+            }
+            appendLogFileSync(activePath, record);
         } catch (error) {
             writeStderr(`${fallbackPrefix} ${formatBootstrapErrorDetails(error)}\n`);
         }
