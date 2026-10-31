@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { createBootstrapEmergencyLogger } from "../../../src/core/bootstrap-emergency-logger.ts";
+import { createBootstrapEmergencyLogger, formatBootstrapErrorDetails } from "../../../src/core/bootstrap-emergency-logger.ts";
 
 function createStderrCapture() {
     const output: string[] = [];
@@ -15,6 +15,42 @@ function createStderrCapture() {
 }
 
 describe("bootstrap emergency logger behavior", () => {
+    test("bounds emergency text and prevents control characters from creating extra records", () => {
+        const text = formatBootstrapErrorDetails('synthetic failure\n\r\t\u001b' + 'x'.repeat(20_000));
+        expect(text.length).toBeLessThanOrEqual(4096);
+        expect(text).toContain('synthetic failure');
+        expect(text).not.toMatch(/[\x00-\x1f\x7f]/);
+        expect(text).toEndWith('...');
+    });
+
+    test("formats once for identical independent sink records", () => {
+        let reads = 0;
+        const error = new Error('synthetic failure');
+        Object.defineProperty(error, 'stack', { get() { return `synthetic read ${++reads}`; } });
+        const capture = createStderrCapture();
+        const writes: string[] = [];
+        const logger = createBootstrapEmergencyLogger({ logsDir: '/synthetic-unused', stderr: capture.stderr,
+            existsSync: () => true, appendFileSync: (_path, data) => { writes.push(String(data)); } });
+        logger.writeUncaughtException(error);
+        expect(reads).toBe(1);
+        expect(capture.output).toEqual(writes);
+    });
+
+    test("unreadable errors and simultaneous sink failures remain isolated", () => {
+        const error = new Error('synthetic unreadable error');
+        Object.defineProperty(error, 'stack', { get() { throw new Error('synthetic getter failure'); } });
+        expect(formatBootstrapErrorDetails(error)).toBe('[Unformattable error]');
+        let fileAttempts = 0;
+        const logger = createBootstrapEmergencyLogger({ logsDir: '/synthetic-unused',
+            stderr: { write() { throw new Error('synthetic stderr failure'); } },
+            existsSync: () => true,
+            appendFileSync: () => { fileAttempts++; throw new Error('synthetic file failure'); } });
+        expect(() => logger.writeUncaughtException(error)).not.toThrow();
+        expect(() => logger.writeUnhandledRejection(error)).not.toThrow();
+        expect(() => logger.writeMainFailure(error)).not.toThrow();
+        expect(fileAttempts).toBe(2);
+    });
+
     test("removes complete URL secrets before independent stderr and file writes", () => {
         const capture = createStderrCapture();
         const writes: string[] = [];

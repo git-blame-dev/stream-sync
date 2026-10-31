@@ -1,7 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { safeObjectStringify, sanitizeLogText } from './logger/safe-log-serializer';
-import { ensureLogDirectorySync } from '../utils/log-directory';
+import { sanitizeLogText } from './logger/safe-log-serializer';
 
 type BootstrapEmergencyLoggerDependencies = {
     logsDir: string;
@@ -17,21 +16,17 @@ type BootstrapEmergencyLogger = {
     writeMainFailure(error: unknown): void;
 };
 
+const MAX_EMERGENCY_DETAILS_LENGTH = 4096;
+
 function formatBootstrapErrorDetails(error: unknown): string {
     try {
-        if (error instanceof Error) {
-            return sanitizeLogText(error.stack || error.message);
-        }
-        if (typeof error === 'string') {
-            return sanitizeLogText(error);
-        }
-        if (error && typeof error === 'object') {
-            const constructor = error.constructor;
-            const type = typeof constructor === 'function' && typeof constructor.name === 'string'
-                ? constructor.name : 'Object';
-            return safeObjectStringify({ type, fieldCount: Object.keys(error).length });
-        }
-        return sanitizeLogText(String(error));
+        // Never traverse arbitrary rejection payloads or invoke their serialization hooks.
+        const details = error instanceof Error ? error.stack || error.message
+            : error !== null && typeof error === 'object' ? '[Non-Error object]' : String(error);
+        // Redact before truncation so a cut through a secret cannot defeat matching.
+        const safe = sanitizeLogText(details).replace(/[\x00-\x1f\x7f]/g, ' ');
+        return safe.length > MAX_EMERGENCY_DETAILS_LENGTH
+            ? `${safe.slice(0, MAX_EMERGENCY_DETAILS_LENGTH - 3)}...` : safe;
     } catch {
         return '[Unformattable error]';
     }
@@ -49,10 +44,9 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
 
     const writeProgramLog = (line: string, fallbackPrefix: string): void => {
         try {
-            ensureLogDirectorySync(dependencies.logsDir, {
-                existsSync: fileExistsSync,
-                mkdirSync: createDirectorySync
-            });
+            if (!fileExistsSync(dependencies.logsDir)) {
+                createDirectorySync(dependencies.logsDir, { recursive: true });
+            }
             appendLogFileSync(join(dependencies.logsDir, 'program-log.txt'), `${line}\n`);
         } catch (error) {
             writeStderr(`${fallbackPrefix} ${formatBootstrapErrorDetails(error)}\n`);
@@ -61,13 +55,15 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
 
     return {
         writeUncaughtException(error: unknown): void {
-            writeStderr(`[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}\n`);
-            writeProgramLog(`[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}`, '[FATAL] Failed to write to log file:');
+            const line = `[FATAL] Uncaught Exception: ${formatBootstrapErrorDetails(error)}`;
+            writeStderr(`${line}\n`);
+            writeProgramLog(line, '[FATAL] Failed to write to log file:');
         },
 
         writeUnhandledRejection(reason: unknown): void {
-            writeStderr(`[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}\n`);
-            writeProgramLog(`[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}`, '[BOOTSTRAP] Failed to write to log file:');
+            const line = `[BOOTSTRAP] Unhandled Rejection: ${formatBootstrapErrorDetails(reason)}`;
+            writeStderr(`${line}\n`);
+            writeProgramLog(line, '[BOOTSTRAP] Failed to write to log file:');
         },
 
         writeMainFailure(error: unknown): void {
