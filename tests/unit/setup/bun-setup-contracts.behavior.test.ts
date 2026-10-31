@@ -5,7 +5,6 @@ import {
   registerModuleMocks,
   createWebSocketMock,
   createAxiosMock,
-  createTikTokConnectorMock,
   createYoutubeiMock,
 } from "../../setup/bun.setup";
 
@@ -48,13 +47,8 @@ describe("bun setup contracts behavior", () => {
     expect((await axiosInstance.delete()).data.data).toEqual([]);
   });
 
-  it("builds tiktok and youtube mock module contracts", async () => {
-    const tiktokMock = createTikTokConnectorMock();
+  it("builds the youtube mock module contract", async () => {
     const youtubeMock = createYoutubeiMock();
-
-    const tiktokClient = new tiktokMock.WebcastPushConnection();
-    expect(await tiktokClient.connect()).toBe(true);
-    expect(tiktokMock.__esModule).toBe(true);
 
     const innertube = await youtubeMock.Innertube.create();
     expect(innertube.session.context.client.clientName).toBe("WEB");

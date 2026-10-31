@@ -19,13 +19,11 @@ fs.writeFileSync(tempConfigPath, ini.stringify(getRawTestConfig()));
 process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
 process.once('exit', () => fs.rmSync(tempConfigDirectory, { recursive: true, force: true }));
 
-type ProcessExitCode = Parameters<typeof process.exit>[0];
-type NoopProcessExit = typeof process.exit & { calls: ProcessExitCode[] };
 type WriteCallback = (error?: Error | null) => void;
 type WriteFunction = typeof process.stdout.write;
 type PreRunGlobalState = typeof globalThis & {
     __ORIGINAL_PROCESS_EXIT__: typeof process.exit;
-    __NOOP_PROCESS_EXIT__: NoopProcessExit;
+    __NOOP_PROCESS_EXIT__: typeof process.exit;
     __ORIGINAL_STDOUT_WRITE__: WriteFunction;
     __SUPPRESSED_STDOUT_WRITE__: WriteFunction;
     __ORIGINAL_STDERR_WRITE__: WriteFunction;
@@ -35,11 +33,8 @@ type PreRunGlobalState = typeof globalThis & {
 const originalProcessExit = process.exit;
 const preRunGlobal = global as PreRunGlobalState;
 
-const noopProcessExit = ((code = 0) => {
-    noopProcessExit.calls.push(code);
-}) as NoopProcessExit;
-
-noopProcessExit.calls = [];
+// Imports and shutdown tests can exit in-process; callers capture exit attempts locally.
+const noopProcessExit = (() => {}) as typeof process.exit;
 
 process.exit = noopProcessExit;
 
