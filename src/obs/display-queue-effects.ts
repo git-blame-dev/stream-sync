@@ -5,6 +5,7 @@ import MessageTTSHandler from '../utils/message-tts-handler';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
+import { requestNeuralTts } from './neural-tts-diagnostics';
 
 const VFX_EVENTS = {
     EFFECT_COMPLETED: 'vfx:effect-completed',
@@ -12,7 +13,6 @@ const VFX_EVENTS = {
 } as const;
 
 const NEURAL_TTS_HEALTH_TIMEOUT_MS = 2_000;
-const NEURAL_TTS_SPEAK_TIMEOUT_MS = 120_000;
 
 type QueueItem = DisplayQueueItem;
 
@@ -435,13 +435,7 @@ class DisplayQueueEffects {
             this.healthVerified = true;
         }
 
-        const response = await this.fetch(`${root}/v1/prepare`, {
-            method: 'POST',
-            redirect: 'error',
-            signal: AbortSignal.timeout(NEURAL_TTS_SPEAK_TIMEOUT_MS),
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text, ...(voice ? { voice } : {}) })
-        });
+        const response = await requestNeuralTts(this.fetch, root, 'prepare', text, voice, logger);
         if (response.status === 404) {
             return;
         }
@@ -498,13 +492,7 @@ class DisplayQueueEffects {
             await this.verifyNeuralTtsHealth(root);
         }
 
-        const response = await this.fetch(`${root}/v1/speak`, {
-            method: 'POST',
-            redirect: 'error',
-            signal: AbortSignal.timeout(NEURAL_TTS_SPEAK_TIMEOUT_MS),
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text, ...(voice ? { voice } : {}) })
-        });
+        const response = await requestNeuralTts(this.fetch, root, 'speak', text, voice, logger);
         if (!response.ok) {
             throw new Error(`Neural TTS request failed (HTTP ${response.status})`);
         }
