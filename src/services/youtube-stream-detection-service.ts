@@ -329,7 +329,7 @@ channelHandle,
             {
                 timeout,
                 logger: {
-                    debug: () => this.logger.debug?.('YouTube discovery progress', 'youtube-stream-detection'),
+                    debug: () => {},
                     warn: () => this.logger.warn?.('YouTube discovery warning', 'youtube-stream-detection'),
                     error: () => this._handleDetectionError('YouTube discovery failed', new Error('YouTube discovery failed'), 'stream-detection')
                 }

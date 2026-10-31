@@ -920,7 +920,6 @@ class AppRuntime {
     private async startRuntime() {
         this.isStarting = true;
 
-        this.logger.info('AppRuntime.start() method called', 'AppRuntime');
         this.logger.debug('Start method called...', 'AppRuntime');
 
         try {
@@ -1178,7 +1177,6 @@ class AppRuntime {
             this.eventBus.emit(PlatformEvents.SYSTEM_READY, readyPayload);
         }
 
-        this.logger.debug('system:ready payload built', 'AppRuntime', readyPayload);
         return readyPayload;
     }
 

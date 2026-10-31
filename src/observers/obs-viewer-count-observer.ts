@@ -194,7 +194,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
                 overlay: true
             });
             
-            this.logger.debug(`Successfully updated OBS source '${sourceName}' with count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         } catch (error) {
             this.handleObsUpdateError(error, sourceName, platformName);
         }

@@ -806,7 +806,6 @@ class ViewerCountSystem {
         this.pollingStats.totalPolls++;
 
         try {
-            this.logger.debug(`Polling ${platformKey} for viewer count...`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             const platform = validation.platform;
             if (platformKey === 'youtube' && this._hasObservationCapability(platform)) {
                 const observation = await platform.getViewerCountObservation();
@@ -829,7 +828,6 @@ class ViewerCountSystem {
             }
 
             const count = await platform.getViewerCount();
-            this.logger.debug(`${platformKey} returned viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
             if (pollGeneration !== this._getPollGeneration(platformKey) || !this.isStreamLive(platformKey)) {
                 this.logger.debug(`Discarding stale viewer count poll for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);

@@ -29,7 +29,8 @@ function fixture() {
   const plans = new Map<string, SdkPlan>();
   const chats = new Map<string, Array<EventEmitter & { start(): void; stop(): Promise<void>; applyFilter(filter: string): void }>>();
   const calls: string[] = [], diagnostics: unknown[][] = [];
-  const logger = { ...noOpLogger, warn: (...args: unknown[]) => { diagnostics.push(args); },
+  const info: unknown[][] = [];
+  const logger = { ...noOpLogger, info: (...args: unknown[]) => { info.push(args); }, warn: (...args: unknown[]) => { diagnostics.push(args); },
     error: (...args: unknown[]) => { diagnostics.push(args); } };
   const entered = new Map<string, Deferred>();
   const releases = new Set<Deferred>();
@@ -84,7 +85,7 @@ function fixture() {
     if (!value) throw new Error(`Missing synthetic SDK chat ${id}`);
     return value;
   };
-  return { platform, manager: platform.connectionManager, owner, detector, plans, chats, chat, calls, diagnostics, entered, events,
+  return { platform, manager: platform.connectionManager, owner, detector, plans, chats, chat, calls, diagnostics, entered, events, info,
     connect: (id: string) => platform!.connectionManager.connectToStream(id,
       (videoId, attempt, context) => platform!._createYouTubeConnection(videoId, attempt, context)),
   };
@@ -267,6 +268,24 @@ describe('default YouTube factory with actual platform owners', () => {
       f.chat('synthetic-error').emit('chat-update', direct()); await checkpoint();
       expect(messages(f)).toHaveLength(1);
     });
+
+  test('repeated SDK starts announce readiness once and preserve current chat delivery', async () => {
+    const f = fixture();
+    expect(await f.connect('synthetic-start')).toBe(true);
+    const chat = f.chat('synthetic-start');
+    f.info.length = 0;
+    chat.emit('start', { actions: [] });
+    await checkpoint();
+    const first = f.info.slice();
+    expect(first.some(entry => String(entry[0]).includes('Chat listener started'))).toBe(true);
+    chat.emit('start', { actions: [] });
+    await checkpoint();
+    expect(f.info).toEqual(first);
+    expect(f.manager.isConnectionReady('synthetic-start')).toBe(true);
+    chat.emit('chat-update', direct());
+    await checkpoint();
+    expect(messages(f)).toHaveLength(1);
+  });
 
   test('detached generation cannot deliver start, chat, error or end into a successful replacement', async () => {
     const f = fixture(); expect(await f.connect('synthetic-stale')).toBe(true);

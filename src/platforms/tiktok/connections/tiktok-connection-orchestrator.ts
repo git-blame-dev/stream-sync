@@ -107,8 +107,6 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
                 }
 
                 await platform.handleConnectionSuccess();
-
-                platform.logger.info(`Successfully connected to TikTok user '${platform.config.username}'`, 'tiktok');
             } catch (error: unknown) {
                 if (typeof platform.handleConnectionError === 'function') {
                     platform.handleConnectionError(error);

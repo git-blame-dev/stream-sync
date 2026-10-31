@@ -1,16 +1,85 @@
 import { afterEach, beforeEach, expect, test, vi } from 'bun:test';
 import { createTikTokLifetimeFixture, flushConnectorSetup } from '../../helpers/tiktok-connector-fixture';
+import { noOpLogger } from '../../helpers/mock-factories';
+import { PlatformLifecycleService } from '../../../src/services/PlatformLifecycleService';
+import testClock from '../../helpers/test-clock';
 
 type PlatformEvent = { type: string; data: { isLive?: boolean; willReconnect?: boolean; status?: string } };
 let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
 let events: PlatformEvent[];
+let infoRecords: Array<{ message: string; scope?: string }>;
 beforeEach(() => {
     vi.useFakeTimers();
-    fixture = createTikTokLifetimeFixture();
+    infoRecords = [];
+    fixture = createTikTokLifetimeFixture({}, undefined, {
+        ...noOpLogger,
+        info: (message, scope) => { infoRecords.push({ message: String(message), ...(scope !== undefined ? { scope } : {}) }); },
+    });
     events = [];
     fixture.platform.on('platform:event', event => { events.push(event); });
 });
 afterEach(async () => { await fixture.cleanup(); vi.useRealTimers(); });
+
+test('background initialization reports ready once after room entry and preserves chat delivery', async () => {
+    const lifecycle = new PlatformLifecycleService({ logger: fixture.platform.logger });
+    lifecycle.platforms.tiktok = fixture.platform;
+    await lifecycle.initializePlatformConnection('tiktok', fixture.platform, lifecycle.createDefaultEventHandlers('tiktok'), {});
+    const background = lifecycle.backgroundPlatformInits.map(entry => entry.promise);
+    await flushConnectorSetup();
+    expect(infoRecords).toEqual([]);
+    expect(events.filter(event => event.type === 'platform:chat-connected')).toEqual([]);
+    fixture.connectors[0]!.open();
+    await flushConnectorSetup();
+    expect(infoRecords).toEqual([]);
+    fixture.connectors[0]!.enter();
+    await Promise.all(background);
+    expect(fixture.platform.connectionActive).toBe(true);
+    expect(lifecycle.platformHealth.tiktok?.state).toBe('ready');
+    expect(events.filter(event => event.type === 'platform:chat-connected')).toHaveLength(1);
+    expect(infoRecords).toHaveLength(1);
+    expect(infoRecords[0]!.scope).toBe('tiktok');
+    expect(infoRecords[0]!.message).not.toContain('synthetic-streamer');
+    await fixture.platform.handleConnectionSuccess();
+    expect(infoRecords).toHaveLength(1);
+    expect(events.filter(event => event.type === 'platform:chat-connected')).toHaveLength(1);
+    fixture.connectors[0]!.emit('chat', {
+        user: { uniqueId: 'synthetic-viewer', userId: '9000000000000000002', nickname: 'Synthetic Viewer' },
+        comment: 'synthetic message',
+        createTime: testClock.now() / 1000,
+    });
+    await flushConnectorSetup();
+    expect(events.filter(event => event.type === 'platform:chat-message')).toHaveLength(1);
+});
+
+test('offline initialization reports monitoring and announces readiness only on recovery', async () => {
+    const lifecycle = new PlatformLifecycleService({ logger: fixture.platform.logger });
+    lifecycle.platforms.tiktok = fixture.platform;
+    await lifecycle.initializePlatformConnection('tiktok', fixture.platform, lifecycle.createDefaultEventHandlers('tiktok'), {});
+    const background = lifecycle.backgroundPlatformInits.map(entry => entry.promise);
+    await flushConnectorSetup();
+    fixture.connectors[0]!.fail(Object.assign(new Error('Synthetic stream not live'), { code: 4404 }));
+    await Promise.all(background);
+    expect(fixture.platform.connectionActive).toBe(false);
+    expect(lifecycle.platformHealth.tiktok?.state).toBe('monitoring');
+    expect(fixture.platform.initializationStats.getStatistics().successfulAttempts).toBe(1);
+    expect(events.filter(event => event.type === 'platform:chat-connected')).toEqual([]);
+    expect(infoRecords).toHaveLength(1);
+    const monitoringRecord = infoRecords[0]!;
+    expect(fixture.platform.intervalManager.hasInterval('tiktok-stream-reconnect')).toBe(true);
+
+    const reconnecting = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[1]!.open();
+    fixture.connectors[1]!.enter();
+    await reconnecting;
+    expect(fixture.platform.connectionActive).toBe(true);
+    expect(fixture.platform.intervalManager.hasInterval('tiktok-stream-reconnect')).toBe(false);
+    expect(events.filter(event => event.type === 'platform:chat-connected')).toHaveLength(1);
+    expect(infoRecords).toHaveLength(2);
+    expect(infoRecords[1]).not.toEqual(monitoringRecord);
+    await fixture.platform.handleConnectionSuccess();
+    expect(infoRecords).toHaveLength(2);
+});
 
 test.each(['handleGift', 'handleFollow', 'handleConnection'])('%s error emits exactly its connection status contract', async operation => {
     await fixture.platform._handleError(new Error('synthetic processing failure'), { operation, recoverable: operation !== 'handleConnection' });

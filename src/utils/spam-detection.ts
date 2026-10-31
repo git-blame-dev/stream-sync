@@ -446,16 +446,12 @@ class DonationSpamDetection {
             const now = Date.now();
             const windowMs = forceCleanup ? 0 : this.config.detectionWindow * 1000 * 2;
             let cleanedUsers = 0;
-            const totalUsers = Object.keys(this.donationSpamTracker).length;
-
-            this.logger.debug(`Starting cleanup of ${totalUsers} tracked users${forceCleanup ? ' (forced)' : ''}`, 'spam-detection');
 
             for (const userId in this.donationSpamTracker) {
                 const userTracker = this.donationSpamTracker[userId];
                 if (!userTracker) {
                     continue;
                 }
-                const originalNotifications = userTracker.notifications.length;
                 userTracker.notifications = userTracker.notifications.filter(
                     (notification) => (now - notification.timestamp) <= windowMs
                 );
@@ -467,14 +463,12 @@ class DonationSpamDetection {
                     }
                     delete this.donationSpamTracker[userId];
                     cleanedUsers++;
-                    this.logger.debug(`Cleaned up${forceCleanup ? ' (forced)' : ' stale'} entry for user: ${userId}`, 'spam-detection');
-                } else if (originalNotifications !== userTracker.notifications.length) {
-                    this.logger.debug(`Cleaned ${originalNotifications - userTracker.notifications.length} old notifications for user: ${userId}`, 'spam-detection');
                 }
             }
 
-            const remainingUsers = Object.keys(this.donationSpamTracker).length;
-            this.logger[cleanedUsers > 0 ? 'info' : 'debug'](`Cleanup complete: ${cleanedUsers} users removed, ${remainingUsers} users remaining`, 'spam-detection');
+            if (cleanedUsers > 0) {
+                this.logger.debug(`Expired spam tracking entries removed: ${cleanedUsers}; remaining: ${Object.keys(this.donationSpamTracker).length}`, 'spam-detection');
+            }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.handleSpamDetectionError(`Error during spam detection cleanup: ${errorMessage}`, error);

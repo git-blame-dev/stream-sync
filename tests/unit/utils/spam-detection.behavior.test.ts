@@ -10,10 +10,23 @@ import {
   createSpamDetectionConfig,
   createDonationSpamDetection,
 } from "../../../src/utils/spam-detection";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 
 describe("SpamDetection behavior", () => {
   let detection: DonationSpamDetection | null = null;
+
+  it("keeps empty cleanup quiet while preserving subsequent admissions", () => {
+    const logger = createRecordingLogger();
+    detection = createDonationSpamDetection(createSpamDetectionConfig({
+      enabled: true, lowValueThreshold: 5, detectionWindow: 1, maxIndividualNotifications: 1
+    }, { logger }), { logger, autoCleanup: false });
+    logger.entries.length = 0;
+    detection.cleanupSpamDetection();
+    detection.cleanupSpamDetection();
+    expect(logger.entries).toEqual([]);
+    expect(detection.handleDonationSpam("test-donor", "Test Donor", 3, "Test Gift", 1, "tiktok").shouldShow).toBe(true);
+  });
 
   it("does not include a fail-open admission in residuals and can schedule after an empty flush", () => {
     useFakeTimers();

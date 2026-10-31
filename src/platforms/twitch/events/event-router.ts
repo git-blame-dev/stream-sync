@@ -512,7 +512,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
     const handleStreamOnlineEvent = (event: TwitchEventPayload | null | undefined, rawEvent: unknown = event) => {
         logRawIfEnabled('stream_online', rawEvent, 'stream-online-log', 'Error logging raw stream online data');
 
-        safeLogger.info('Stream went online, starting viewer count polling', 'twitch');
         const startedAt = normalizeTimestampValue(event?.started_at);
         const timestamp = getString(event, 'timestamp');
         if (!startedAt || !timestamp) {
@@ -559,11 +558,6 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         event: Record<string, unknown> | null | undefined,
         metadata: Record<string, unknown> | null | undefined
 ) => {
-        safeLogger.debug('EventSub notification received', 'twitch', {
-            subscriptionType,
-            eventKeys: event && typeof event === 'object' ? Object.keys(event).sort() : [],
-            hasEvent: !!event
-        });
         const normalizedEvent = applyNotificationMetadataFallback(event, metadata, subscriptionType);
 
         switch (subscriptionType) {

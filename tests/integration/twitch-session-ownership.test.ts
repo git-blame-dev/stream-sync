@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
@@ -25,6 +25,18 @@ class TestSocket extends EventEmitter {
 }
 const flush = async () => { for (let i = 0; i < 100; i++) await Promise.resolve(); };
 const advance = async (ms: number) => { await advanceTimersByTime(ms); await flush(); };
+async function withMonotonicClock(run: (advanceClock: typeof advance) => Promise<void>) {
+    let now = 0;
+    const clock = spyOn(performance, 'now').mockImplementation(() => now);
+    try {
+        await run(async ms => {
+            now += ms;
+            await advance(ms);
+        });
+    } finally {
+        clock.mockRestore();
+    }
+}
 const instances: TwitchEventSub[] = [];
 let originalToken: string | null;
 type Post = (url?: string, payload?: unknown, config?: unknown) => Promise<unknown>;
@@ -292,7 +304,7 @@ describe('Twitch session ownership through real EventSub and subscription manage
         await expect(eventSub._connectWebSocket()).rejects.toThrow('already active');
         expect(TestSocket.sockets).toHaveLength(1);
     });
-    test('welcome silence expires and loses readiness exactly once', async () => {
+    test('welcome silence expires and loses readiness exactly once', async () => withMonotonicClock(async advanceClock => {
         const eventSub = fixture();
         let disconnected = 0;
         eventSub.on('eventSubDisconnected', () => disconnected++);
@@ -301,10 +313,18 @@ describe('Twitch session ownership through real EventSub and subscription manage
         TestSocket.sockets[0]!.welcome('test-session', 0.025);
         await starting;
         expect(eventSub.isActive()).toBe(true);
-        await advance(45);
+        const silenceDeadlineMs = 25 + 5000;
+        await advanceClock(silenceDeadlineMs - 1);
+        expect(eventSub.isActive()).toBe(true);
+        expect(disconnected).toBe(0);
+        await advanceClock(1);
         expect(eventSub.isActive()).toBe(false);
         expect(disconnected).toBe(1);
-    });
+        await eventSub.cleanup();
+        expect(disconnected).toBe(1);
+        expect(TestSocket.sockets[0]!.readyState).toBe(3);
+        expect(getTimerCount()).toBe(0);
+    }));
     test('cleanup during startup GET cannot create a late socket', async () => {
         let release!: (value: object) => void;
         const response = new Promise<object>(resolve => { release = resolve; });
@@ -318,25 +338,47 @@ describe('Twitch session ownership through real EventSub and subscription manage
         expect(TestSocket.sockets).toHaveLength(0);
         await starting;
     });
-    test('notifications and keepalives reset the silence watchdog at deterministic boundaries', async () => {
+    test('notifications and keepalives reset the silence watchdog at deterministic boundaries', async () => withMonotonicClock(async advanceClock => {
         const eventSub = fixture();
         const starting = eventSub.initialize();
         await flush();
         const socket = TestSocket.sockets[0]!;
         socket.welcome('test-session-reset', 60);
         await starting;
-        await advance(59999);
+        const silenceDeadlineMs = 60000 + 5000;
+        await advanceClock(silenceDeadlineMs - 1);
         expect(eventSub.isActive()).toBe(true);
         socket.message('session_keepalive');
-        await advance(59999);
+        await advanceClock(silenceDeadlineMs - 1);
         expect(eventSub.isActive()).toBe(true);
         socket.message('notification', { subscription: { type: 'test-unknown' }, event: {} });
-        await advance(59999);
+        await advanceClock(silenceDeadlineMs - 1);
         expect(eventSub.isActive()).toBe(true);
-        await advance(1);
+        await advanceClock(1);
         expect(eventSub.isActive()).toBe(false);
         await eventSub.cleanup();
         expect(getTimerCount()).toBe(0);
+    }));
+    test('routine keepalive and notification receipt is silent while notifications are delivered', async () => {
+        let outputCount = 0;
+        const record = () => { outputCount++; };
+        const eventSub = fixture(undefined, { debug: record, info: record, warn: record, error: record });
+        const delivered: unknown[] = [];
+        eventSub.on('streamOnline', event => delivered.push(event));
+        const starting = eventSub.initialize();
+        await flush();
+        const socket = TestSocket.sockets[0]!;
+        socket.welcome('test-silent-receipt');
+        await starting;
+        outputCount = 0;
+        socket.message('session_keepalive');
+        await flush();
+        expect(outputCount).toBe(0);
+        socket.message('notification', { subscription: { type: 'stream.online' }, event: { id: 'test-stream', broadcaster_user_id: 'test-broadcaster', started_at: '2026-01-01T00:00:00.000Z' } });
+        await flush();
+        expect(delivered).toEqual([expect.objectContaining({ platform: 'twitch', streamId: 'test-stream', startedAt: '2026-01-01T00:00:00.000Z' })]);
+        expect(eventSub.isActive()).toBe(true);
+        expect(outputCount).toBe(0);
     });
     test('handoff starts immediately despite exhausted failure allowance, overlaps notifications and preserves subscriptions', async () => {
         let posts = 0;

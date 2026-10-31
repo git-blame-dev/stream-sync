@@ -79,8 +79,7 @@ class HttpRetryExecutor implements RetryExecutor {
                 if (!Number.isFinite(delay) || delay > 2_147_483_647) {
                     throw new RangeError('HTTP retry delay exceeds the supported timer range', { cause: error });
                 }
-                this.logger.warn(sanitizeLogText(`HTTP request failed (attempt ${attempt}): ${this.getErrorMessage(error)}`), sanitizeLogText(scope));
-                this.logger.info(`Retrying in ${delay / 1000} seconds...`, sanitizeLogText(scope));
+                this.logger.warn(sanitizeLogText(`HTTP request failed (attempt ${attempt}); retrying in ${delay}ms: ${this.getErrorMessage(error)}`), sanitizeLogText(scope));
                 if (delay > 0) {
                     await this.safeDelay(delay, delay, 'HttpRetryExecutor delay', options.signal);
                     options.signal?.throwIfAborted();

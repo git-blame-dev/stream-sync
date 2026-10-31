@@ -822,7 +822,6 @@ class TikTokPlatform extends EventEmitter {
             return;
         }
 
-        const username = this.config.username;
         this.connectionActive = true;
         this.offlineMonitoring = false;
         this.connectionTime = Date.now();
@@ -831,7 +830,7 @@ class TikTokPlatform extends EventEmitter {
         this.intervalManager.clearInterval('tiktok-stream-reconnect');
         
         this.isPlannedDisconnection = false;
-        this.logger.info(`Connection successful for TikTok user '${username}'`, 'tiktok');
+        this.logger.info('TikTok ready', 'tiktok');
         
         await this._handleConnection();
     }

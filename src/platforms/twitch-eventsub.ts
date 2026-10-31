@@ -562,8 +562,6 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('EventSub message requires metadata and payload objects');
         }
 
-        this.logger.info(`EventSub message received: ${metadata.message_type}`, 'twitch');
-
         switch (metadata.message_type) {
             case 'session_welcome':
                 this.logger.info('EventSub welcome message received!', 'twitch', {
@@ -575,7 +573,6 @@ class TwitchEventSub extends EventEmitter {
                 break;
 
             case 'session_keepalive':
-                this.logger.debug('EventSub keepalive received', 'twitch');
                 break;
 
             case 'notification':
@@ -710,13 +707,7 @@ class TwitchEventSub extends EventEmitter {
             return false;
         }
 
-        this.logger.debug('Connection validation passed for subscription setup', 'twitch', {
-            sessionId: this.sessionId.substring(0, 8) + '...',
-            isConnected: this._isConnected,
-            wsState: this.ws?.readyState,
-            isInitialized: this.isInitialized,
-            authReady: this.twitchAuth?.isReady?.()
-        });
+
 
         return true;
     }

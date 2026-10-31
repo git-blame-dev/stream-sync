@@ -215,7 +215,7 @@ class PlatformLifecycleService {
 
             const handlers = this.resolveEventHandlers(platformName, eventHandlers);
 
-            this.logger.info(`Initializing platform ${platformName}...`, 'PlatformLifecycleService');
+            this.logger.debug(`Initializing platform ${platformName}`, 'PlatformLifecycleService');
 
             await this.initializePlatformConnection(
                 platformName,
@@ -224,7 +224,6 @@ class PlatformLifecycleService {
                 configCopy
             );
 
-            this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
         } catch (error) {
             this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${getErrorMessage(error)}`, error, 'initialize');
             await this.markPlatformFailure(platformName, error, { expectedInstance: adoptedInstance });
@@ -522,7 +521,7 @@ class PlatformLifecycleService {
 
     async initializePlatformConnection(platformName: string, platformInstance: PlatformInstance, handlers: PlatformEventHandlers, platformConfig: PlatformConfig) {
         const connectCallback = async () => {
-            this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
+            this.logger.debug(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
             const outcome = await platformInstance.initialize(handlers);
             if (this.platforms[platformName] !== platformInstance) return platformInstance;
@@ -539,7 +538,7 @@ class PlatformLifecycleService {
             const shouldRunInBackground = this.shouldRunPlatformInBackground(platformName, platformConfig);
 
             if (shouldRunInBackground) {
-                this.logger.info(`Initializing ${platformName} in background (non-blocking)`, 'PlatformLifecycleService');
+                this.logger.debug(`Initializing ${platformName} in background (non-blocking)`, 'PlatformLifecycleService');
 
                 let backgroundInit: Promise<void>;
                 backgroundInit = this.initializePlatformAsync(
@@ -591,15 +590,9 @@ class PlatformLifecycleService {
 
     async initializePlatformAsync(platformName: string, connectCallback: () => Promise<PlatformInstance>, expectedInstance = this.platforms[platformName]) {
         try {
-            this.logger.info(`[${platformName}] Background initialization started`, 'PlatformLifecycleService');
+            await connectCallback();
 
-            if (platformName === 'tiktok') {
-                await connectCallback();
-            } else {
-                await connectCallback();
-            }
-
-            this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
+            this.logger.debug(`[${platformName}] Background initialization completed`, 'PlatformLifecycleService');
         } catch (error) {
             // Shutdown already owns cleanup and its health outcome. Cancellation
             // of initialization must not start another cleanup or overwrite it.

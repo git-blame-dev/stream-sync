@@ -110,10 +110,6 @@ class PlatformInitializationManager {
         }
 
         this.initializationAttempts += 1;
-        this.logger.info(
-            `Beginning initialization attempt ${this.initializationAttempts}`,
-            this.platformName
-        );
 
         return true;
     }
@@ -127,11 +123,6 @@ class PlatformInitializationManager {
             attempt: this.initializationAttempts,
             ...additionalState
         };
-
-        this.logger.info(
-            `Initialization successful (attempt ${this.initializationAttempts})`,
-            this.platformName
-        );
     }
 
     markInitializationFailure(error: unknown, additionalState: Record<string, unknown> = {}): void {

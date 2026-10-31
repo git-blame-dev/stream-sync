@@ -403,17 +403,16 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             throw new Error('YouTube connection missing event emitter interface (on)');
         }
 
+        let readyReported = false;
         connection.on('start', async (data: unknown) => {
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
                 return;
             }
-            platform.logger.debug(`LiveChat 'start' event for: ${videoId}`, 'youtube');
-            platform.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
+            if (!readyReported) {
+                readyReported = true;
+                platform.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
+            }
             platform.setYouTubeConnectionReady(videoId, attemptId);
-            platform.logger.info(
-                'Viewer engagement message: Welcome to live chat! Remember to guard your privacy and abide by our community guidelines.',
-                'youtube'
-            );
             await applyConfiguredChatMode(connection, videoId, attemptId, data);
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
 

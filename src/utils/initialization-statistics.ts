@@ -201,7 +201,7 @@ class InitializationStatistics {
         this.appendPerformanceMetric('configurationValidationTime', metrics.configValidationTime);
         this.appendPerformanceMetric('dependencyResolutionTime', metrics.dependencyTime);
 
-        this.logger.info(
+        this.logger.debug(
             `Initialization successful in ${duration}ms (attempt ${this.totalAttempts})`,
             this.platformName
         );
