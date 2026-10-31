@@ -62,7 +62,6 @@ function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
-
 class CommandParser {
     commands: Record<string, unknown>;
     farewellCommands: Record<string, unknown>;
@@ -238,8 +237,6 @@ class CommandParser {
                     return keyword;
                 }
             }
-        } else {
-            logger.debug('[CommandParser] Keyword parsing disabled, skipping farewell keyword checks', 'command-parser');
         }
 
         return null;
@@ -253,7 +250,7 @@ class CommandParser {
         }
 
         const commandTrigger = (messageText.split(' ')[0] ?? '').toLowerCase();
-        
+
         const farewellMatch = this.getMatchingFarewell(messageText, commandTrigger);
         if (farewellMatch) {
             return {
@@ -273,7 +270,7 @@ class CommandParser {
                 vfxFilePath: vfx.vfxFilePath,
                 duration: vfx.duration,
                 commandKey: vfx.commandKey,
-                
+
                 command: vfx.command,
                 keyword: vfx.keyword,
                 matchType: vfx.matchType,
@@ -293,19 +290,18 @@ class CommandParser {
         if (typeof newConfig.general?.keywordParsingEnabled === 'boolean') {
             this.keywordParsingEnabled = newConfig.general.keywordParsingEnabled;
         }
-        
+
         this.parsedCommands = this.parseCommandConfigurations();
         this.parsedFarewellCommands = this.parseFarewellConfigurations();
-        
+
         this.regexCache.clear();
-        
     }
 
     getStats() {
         const totalCommands = Object.keys(this.commands).length;
         const totalTriggers = this.parsedCommands ? this.parsedCommands.triggers.size : 0;
         const totalKeywords = this.parsedCommands ? this.parsedCommands.keywords.size : 0;
-        
+
         return {
             totalCommands: totalCommands,
             totalTriggers: totalTriggers,

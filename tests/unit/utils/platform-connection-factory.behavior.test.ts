@@ -139,14 +139,12 @@ describe("platform-connection-factory behavior", () => {
     expect(constructedUsername).toBe("synthetic-user");
   });
 
-  test.each(["abc", "synthetic-key-value-long"])("logs API key presence without fragments for %s", (apiKey) => {
+  test.each(["abc", "synthetic-key-value-long"])("passes API keys to the connection without emitting receipts for %s", (apiKey) => {
     const logger = createLogCollector();
     const factory = new PlatformConnectionFactory(logger);
     secrets.tiktok.apiKey = apiKey;
     expect(factory.buildTikTokConnectionConfig({}).apiKey).toBe(apiKey);
-    expect(logger.entries.filter((entry) => entry.message.includes("EulerStream API key"))).toEqual([
-      { level: "debug", message: "EulerStream API key configured" },
-    ]);
+    expect(logger.entries.filter((entry) => entry.message.includes("EulerStream API key"))).toEqual([]);
     expect(logger.entries.some((entry) => entry.message.includes(apiKey.slice(0, 3)))).toBe(false);
   });
 
@@ -187,7 +185,7 @@ describe("platform-connection-factory behavior", () => {
     ).toThrow("Unsupported platform");
   });
 
-  test("logs masked apiKey when building TikTok connection config", () => {
+  test("keeps configured API keys out of diagnostics", () => {
     const logCollector = createLogCollector();
     const factory = new PlatformConnectionFactory(logCollector);
 
@@ -202,13 +200,13 @@ describe("platform-connection-factory behavior", () => {
           entry.level === "debug" &&
           entry.message.includes("EulerStream API key"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       logCollector.entries.every((entry) => !entry.message.includes(apiKey)),
     ).toBe(true);
   });
 
-  test("warns when TikTok apiKey is missing from config", () => {
+  test("accepts anonymous TikTok configuration without a speculative warning", () => {
     const logCollector = createLogCollector();
     const factory = new PlatformConnectionFactory(logCollector);
 
@@ -216,13 +214,7 @@ describe("platform-connection-factory behavior", () => {
     const config = factory.buildTikTokConnectionConfig({});
 
     expect(config.apiKey).toBeNull();
-    expect(
-      logCollector.entries.some(
-        (entry) =>
-          entry.level === "warn" &&
-          entry.message.toLowerCase().includes("no api key"),
-      ),
-    ).toBe(true);
+    expect(logCollector.entries).toEqual([]);
   });
 
   test("preserves class-based logger prototype methods", () => {
@@ -244,9 +236,9 @@ describe("platform-connection-factory behavior", () => {
     const factory = new PlatformConnectionFactory(logger);
 
     _resetForTesting();
-    factory.buildTikTokConnectionConfig({});
-
-    expect(warnCalls).toBeGreaterThan(0);
+    expect(factory.buildTikTokConnectionConfig({}).apiKey).toBeNull();
+    expect(Object.getPrototypeOf(factory.logger)).toBe(PrototypeLogger.prototype);
+    expect(warnCalls).toBe(0);
   });
 
   test("rejects incomplete logger implementations instead of filling missing methods", () => {

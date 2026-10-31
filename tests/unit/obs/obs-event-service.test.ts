@@ -39,7 +39,7 @@ class SyntheticSDK extends EventEmitter {
     throw new Error(`Unexpected synthetic request: ${method}`);
   }
 }
-function setup() {
+function setup(logger = noOpLogger) {
   const sdk = new SyntheticSDK();
   const connection = new OBSConnectionManager({ obs: sdk, config: { enabled: true, address: 'ws://synthetic.invalid', password: 'synthetic', connectionTimeoutMs: 5000 } });
   const sources = createOBSSourcesManager(connection, { logger: noOpLogger });
@@ -49,7 +49,7 @@ function setup() {
     obsConnection: { connect: async () => { await connection.connect(); }, disconnect: () => connection.disconnect(),
       call: (method, data) => connection.call(method, data), isConnected: () => connection.isConnected(), isReady: () => connection.isReady(),
       addEventListener: (name, handler) => connection.addEventListener(name, handler), removeEventListener: (name, handler) => connection.removeEventListener(name, handler) },
-    obsSources: sources, logger: noOpLogger,
+    obsSources: sources, logger,
   });
   const emit = async (name: string, payload: Record<string, unknown>) => {
     const previous = bus.getEventStats()[name]?.success ?? 0;
@@ -183,4 +183,20 @@ describe('OBS events through real connection and sources', () => {
     } finally { off.mockRestore(); await h.dispose(); }
   });
 
+});
+
+
+test('connection loss preserves event delivery while diagnostics project only the numeric close code', async () => {
+  const diagnostics: unknown[] = [];
+  const h = setup({ ...noOpLogger, warn: (...args: unknown[]) => { diagnostics.push(args); } });
+  const delivered: unknown[] = [];
+  const unsubscribe = h.bus.subscribe('obs:connection-lost', data => { delivered.push(data); });
+  try {
+    await h.service.connect();
+    h.sdk.emit('ConnectionClosed', { code: 4008, reason: 'synthetic-private-close-reason', extra: 'synthetic-private-payload' });
+    await until(() => delivered.length === 1);
+    expect(delivered[0]).toMatchObject({ code: 4008, reason: 'synthetic-private-close-reason' });
+    expect(diagnostics).toEqual([['OBS connection closed; emitting obs:connection-lost event', 'obs-event-service', { code: 4008 }]]);
+    expect(JSON.stringify(diagnostics)).not.toContain('synthetic-private');
+  } finally { unsubscribe(); await h.dispose(); }
 });

@@ -25,10 +25,10 @@ import { createOperatorControlService } from '../../src/services/operator/operat
 import { createOperatorAppearanceService } from '../../src/services/operator/operator-appearance-service';
 import { createFundingGoalService } from '../../src/services/funding-goal-service';
 import { createUsdRateService } from '../../src/services/usd-rate-service';
-import { createDonationSpamDetection } from '../../src/utils/spam-detection';
+import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
 import { createEventBus } from '../../src/core/EventBus';
 import { createConfigFixture } from '../helpers/config-fixture';
-import { useFakeTimers, useRealTimers, getTimerCount } from '../helpers/bun-timers';
+import { useRealTimers } from '../helpers/bun-timers';
 import { noOpLogger } from '../helpers/mock-factories';
 import { captureStdout, captureStderr } from '../helpers/output-capture';
 
@@ -225,17 +225,26 @@ describe('main startup using production owners', () => {
   }
 
 
-  it('retires actual provisional auth, effects and YouTube owners after a constructor logging sink failure', async () => {
+  it('retires actual provisional auth, effects and YouTube owners after a runtime subscription failure', async () => {
     const h = buildOverrides();
     const auths: TwitchAuth[] = [];
     let effects: OBSEffectsManager | undefined;
     let youtube: ReturnType<DependencyFactory['createYoutubeInnertubeService']> | undefined;
-    const failure = new Error('Synthetic constructor logging failure');
+    const failure = new Error('Synthetic runtime subscription failure');
     class RecordingAuth extends TwitchAuth {
       constructor(options: ConstructorParameters<typeof TwitchAuth>[0]) { super(options); auths.push(this); }
     }
     try {
       await expect(main({ ...h.overrides,
+        createEventBus: () => {
+          const bus = createEventBus();
+          const subscribe = bus.subscribe.bind(bus);
+          bus.subscribe = (event, handler) => {
+            if (event === PlatformEvents.VFX_COMMAND_RECEIVED) throw failure;
+            return subscribe(event, handler);
+          };
+          return bus;
+        },
         config: buildMainConfig({ twitch: { enabled: true, clientId: 'synthetic-client', tokenStorePath: path.join(h.dir, 'synthetic-tokens.json') }, youtube: { enabled: true, username: '' } }),
         TwitchAuth: RecordingAuth,
         createProductionDependencies: (...args) => {
@@ -245,7 +254,7 @@ describe('main startup using production owners', () => {
           if (!method) throw new Error('Production factory did not supply the YouTube owner capability');
           const acquire = method.bind(deps.dependencyFactory);
           deps.dependencyFactory.createYoutubeInnertubeService = (...options) => { youtube = acquire(...options); return youtube; };
-          return { ...deps, logging: { ...deps.logging, ...noOpLogger, debug: (message: unknown) => { if (message === 'Constructor completed') throw failure; } } };
+          return deps;
         },
       })).rejects.toBe(failure);
       expect(auths).toHaveLength(1);
@@ -263,68 +272,6 @@ describe('main startup using production owners', () => {
     await expect(main({ ...h.overrides, config: buildMainConfig({ youtube: { enabled: true, username: '' } }), dependencyFactory: {} })).rejects.toThrow('Enabled YouTube requires dependencyFactory.createYoutubeInnertubeService');
     expect(h.getSingleInstanceReleaseCalls()).toHaveLength(1);
   });
-
-  it("unwinds runtime construction when its final diagnostic throws through real main", async () => {
-    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({ cliArgs: { chat: 1 } });
-    const bus = createEventBus();
-    const unrelated = bus.subscribe("platform:event", () => undefined);
-    const listenerBaseline = bus.getListenerSummary();
-    useFakeTimers();
-    const timerBaseline = getTimerCount();
-    const failure = new Error("test final runtime constructor diagnostic");
-    const logging = {
-      ...noOpLogger,
-      debug: (message: unknown) => {
-        if (message === "Constructor completed") throw failure;
-      },
-    };
-    try {
-      const result = await main({
-        ...overrides,
-        config: buildMainConfig(),
-        createEventBus: () => bus,
-        createProductionDependencies: (...args) => { const deps = createProductionDependencies(...args); return { ...deps, logging: { ...deps.logging, ...logging } }; },
-        createDonationSpamDetection,
-      }).catch(error => error);
-      expect(result).toBe(failure);
-      expect(bus.getListenerSummary()).toEqual(listenerBaseline);
-      expect(getTimerCount()).toBe(timerBaseline);
-      expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
-    } finally {
-      unrelated();
-    }
-  });
-
-  for (const stage of ["Periodic cleanup scheduled every 30 seconds", "System initialized"] as const) {
-    it(`unwinds real constructor acquisition when ${stage} throws`, async () => {
-      const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({ cliArgs: { chat: 1 } });
-      const bus = createEventBus();
-      const unrelated = bus.subscribe("config:changed", () => undefined);
-      const baseline = bus.getListenerSummary();
-      useFakeTimers();
-      const timers = getTimerCount();
-      const failure = new Error("test resource constructor diagnostic failure");
-      const failDiagnostic = (message: unknown) => {
-        if (message === stage) throw failure;
-      };
-      const logging = { ...noOpLogger, debug: failDiagnostic, info: failDiagnostic };
-      try {
-        const result = await main({
-          ...overrides,
-          config: buildMainConfig(),
-          createEventBus: () => bus,
-          createProductionDependencies: (...args) => { const deps = createProductionDependencies(...args); return { ...deps, logging: { ...deps.logging, ...logging } }; },
-          createDonationSpamDetection: (config, dependencies) => createDonationSpamDetection(config, { ...dependencies, logger: logging }),
-        }).catch(error => error);
-        expect(result).toBe(failure);
-        expect(bus.getListenerSummary()).toEqual(baseline);
-        expect(getTimerCount()).toBe(timers);
-        expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
-      } finally {
-        unrelated();
-      }
-    });
-  }
 
   it("starts runtime and returns startup status", async () => {
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });

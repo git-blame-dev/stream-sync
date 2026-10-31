@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
@@ -25,6 +26,21 @@ describe("Text Processing", () => {
     mockLogger = noOpLogger;
 
     textProcessing = createTextProcessingManager({ logger: mockLogger });
+  });
+
+  it("extracts messages silently and limits anomalous diagnostics to shape", () => {
+    const logger = createRecordingLogger();
+    const manager = createTextProcessingManager({ logger });
+    const context = { payload: "synthetic-private-context" };
+    expect(manager.extractMessageText([], "twitch", context)).toBe("");
+    expect(manager.extractMessageText("synthetic-private-body", "twitch", context)).toBe("synthetic-private-body");
+    expect(manager.extractMessageText([{ text: "synthetic-private-body" }], "twitch", context)).toBe("synthetic-private-body");
+    expect(logger.entries).toEqual([]);
+    expect(manager.extractMessageText([false], "twitch", context)).toBe("");
+    expect(manager.extractMessageText(42, "twitch", context)).toBe("42");
+    expect(logger.entries).toHaveLength(2);
+    expect(logger.entries.every(entry => entry.level === "warn")).toBe(true);
+    expect(JSON.stringify(logger.entries)).not.toContain("synthetic-private");
   });
 
   describe("when extracting message text", () => {

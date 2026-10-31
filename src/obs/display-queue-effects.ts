@@ -516,7 +516,6 @@ class DisplayQueueEffects {
             logger.debug(`[Display Queue] Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
 
             const ttsStages = MessageTTSHandler.createTTSStages(item.data);
-            logger.debug(`[Display Queue] Generated ${ttsStages.length} TTS stages`, 'display-queue', { stages: ttsStages });
 
             if (item.type === 'platform:gift') {
                 await this.handleGiftEffects(item, ttsStages);

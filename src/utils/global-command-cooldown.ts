@@ -31,10 +31,6 @@ class GlobalCommandCooldownManager {
             this.stats.totalChecks++;
 
             if (typeof commandName !== 'string' || commandName.length === 0 || typeof cooldownMs !== 'number' || cooldownMs <= 0) {
-                this.logger.debug(
-                    `Allowing command execution due to invalid parameters: command="${String(commandName)}", cooldown=${String(cooldownMs)}`,
-                    'global-cooldown'
-                );
                 return false;
             }
 
@@ -42,10 +38,6 @@ class GlobalCommandCooldownManager {
             const lastExecutionTime = this.commandTimestamps.get(commandName);
 
             if (!lastExecutionTime) {
-                this.logger.debug(
-                    `No previous execution found for command ${commandName} - allowing execution`,
-                    'global-cooldown'
-                );
                 return false;
             }
 
@@ -60,10 +52,6 @@ class GlobalCommandCooldownManager {
                 return true;
             }
 
-            this.logger.debug(
-                `Global cooldown expired for command ${commandName}. Last used ${timeSinceLastExecution}ms ago, cooldown: ${cooldownMs}ms`,
-                'global-cooldown'
-            );
             return false;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -78,20 +66,11 @@ class GlobalCommandCooldownManager {
 
     updateCommandTimestamp(commandName: unknown): void {
         if (typeof commandName !== 'string' || commandName.length === 0) {
-            this.logger.debug(
-                `Skipping timestamp update for invalid command name: ${String(commandName)}`,
-                'global-cooldown'
-            );
             return;
         }
 
         this.commandTimestamps.set(commandName, Date.now());
         this.stats.totalUpdates++;
-
-        this.logger.debug(
-            `Updated global cooldown timestamp for command ${commandName}`,
-            'global-cooldown'
-        );
     }
 
     getStats() {
@@ -125,13 +104,6 @@ class GlobalCommandCooldownManager {
             }
         }
 
-        if (removedCount > 0) {
-            this.logger.debug(
-                `Cleared ${removedCount} expired cooldowns (kept ${this.commandTimestamps.size} active)`,
-                'global-cooldown'
-            );
-        }
-
         return removedCount;
     }
 
@@ -151,18 +123,12 @@ class GlobalCommandCooldownManager {
     }
 
     resetAllCooldowns(): void {
-        const clearedCount = this.commandTimestamps.size;
         this.commandTimestamps.clear();
         this.stats = {
             totalChecks: 0,
             totalBlocks: 0,
             totalUpdates: 0
         };
-
-        this.logger.debug(
-            `Reset all global cooldowns (cleared ${clearedCount} commands)`,
-            'global-cooldown'
-        );
     }
 
     private handleCooldownError(message: string, error: unknown, contextData: Record<string, unknown> | null = null): void {

@@ -198,8 +198,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
         try {
             await updateGoalDisplay(platform, formattedText);
-            const eventDescription = eventType === 'paypiggy' ? 'updated with paypiggy' : 'updated';
-            logger.debug(`[Goal Display] ${platform} goal ${eventDescription}: ${formattedText}`, 'goals');
+
         } catch (obsError) {
             if (isOBSNotConnectedError(obsError)) {
                 logger.debug(`[Goal Display] ${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'goals');
@@ -258,7 +257,6 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
             await Promise.all(promises);
 
-            logger.debug('[Goal Display] All goal displays updated successfully', 'goals');
         } catch (error) {
             handleAllDisplaysUpdateError(error);
         }
@@ -295,9 +293,8 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 return;
             }
 
-            logger.debug(`[Goal Display] Updating ${platformCapitalized} goal display: "${finalText}"`, 'goals');
             await updateTextSource(sourceName, finalText);
-            logger.debug(`[Goal Display] Successfully updated ${platformCapitalized} goal display`, 'goals');
+
         } catch (error) {
             handleDisplayUpdateError(platform, error);
         }

@@ -643,8 +643,8 @@ describe("RetrySystem", () => {
     const logger = new PrototypeLogger();
     const retrySystem = new RetrySystem({ logger });
 
-    retrySystem.calculateAdaptiveRetryDelay("TikTok");
-
-    expect(debugCalls).toBeGreaterThan(0);
+    expect(retrySystem.calculateAdaptiveRetryDelay("TikTok")).toBeGreaterThan(0);
+    expect(Object.getPrototypeOf(retrySystem.logger)).toBe(PrototypeLogger.prototype);
+    expect(debugCalls).toBe(0);
   });
 });

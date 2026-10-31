@@ -111,7 +111,9 @@ class OBSEventService {
         }
 
         const handleConnectionClosed = (data: { reason?: unknown; code?: unknown } = {}) => {
-            this.logger.warn('OBS connection closed; emitting obs:connection-lost event', data);
+            this.logger.warn('OBS connection closed; emitting obs:connection-lost event', 'obs-event-service', {
+                code: typeof data.code === 'number' && Number.isFinite(data.code) ? data.code : undefined
+            });
             this.eventBus.emit('obs:connection-lost', {
                 reason: data.reason,
                 code: data.code,

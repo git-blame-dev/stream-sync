@@ -299,7 +299,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
         if (value) {
             process.env[envKey] = value;
             applied[id] = { source: 'env' };
-            safeLogger.debug?.(`Using ${id}`, 'secret-manager');
+
             continue;
         }
 
@@ -310,7 +310,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
                 process.env[envKey] = value;
                 persistUpdates[envKey] = value;
                 applied[id] = { source: 'prompt' };
-                safeLogger.info?.(`Using prompted ${id} for this process`, 'secret-manager');
+                safeLogger.debug?.(`Using prompted ${id} for this process`, 'secret-manager');
                 continue;
             }
         }

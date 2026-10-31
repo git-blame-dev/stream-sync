@@ -11,7 +11,7 @@ type EventHandler = (...args: unknown[]) => unknown;
 type SubscriptionOptions = { once?: boolean; context?: object | null };
 type EventStats = { emitted: number; success: number; error: number; totalDuration: number; avgDuration: number };
 type WrappedEventHandler = EventHandler & { _originalHandler?: EventHandler; _context?: unknown };
-type EventBusOptions = { debugEnabled?: boolean; maxListeners?: number };
+type EventBusOptions = { maxListeners?: number };
 
 function formatEventName(eventName: EventName): string {
     return typeof eventName === 'symbol' ? String(eventName) : eventName;
@@ -31,26 +31,20 @@ function logEventBusError(message: string, error: unknown, eventType = 'event-bu
 }
 
 class EventBus extends EventEmitter {
-    debugEnabled: boolean;
     maxListeners: number;
     eventStats: Map<EventName, EventStats>;
 
     constructor(options: EventBusOptions = {}) {
         super();
 
-        this.debugEnabled = options.debugEnabled || false;
         this.maxListeners = options.maxListeners || 50;
         this.eventStats = new Map();
 
         this.setMaxListeners(this.maxListeners);
-        
+
         this.emit = this.emit.bind(this);
         this.subscribe = this.subscribe.bind(this);
         this.unsubscribe = this.unsubscribe.bind(this);
-        
-        if (this.debugEnabled) {
-            logger?.debug?.('[EventBus] Initialized with debug logging enabled', 'event-bus');
-        }
     }
 
     subscribe(eventName: EventName, handler: EventHandler, options: SubscriptionOptions = {}) {
@@ -64,13 +58,6 @@ class EventBus extends EventEmitter {
             const startTime = performance.now();
 
             try {
-                if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Executing handler for '${formatEventName(eventName)}'`, 'event-bus', {
-                        argsCount: args.length,
-                        context: context?.constructor?.name || 'unknown'
-                    });
-                }
-
                 const result = context ? handler.apply(context, args) : handler(...args);
 
                 if (isPromiseLike(result)) {
@@ -80,11 +67,6 @@ class EventBus extends EventEmitter {
                 const executionTime = Math.max(0, performance.now() - startTime);
 
                 this._updateEventStats(eventName, 'success', executionTime);
-
-                if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Handler completed for '${formatEventName(eventName)}' in ${executionTime}ms`, 'event-bus');
-                }
-
             } catch (error) {
                 const executionTime = Math.max(0, performance.now() - startTime);
                 this._updateEventStats(eventName, 'error', executionTime);
@@ -123,53 +105,27 @@ class EventBus extends EventEmitter {
             this.on(eventName, wrappedHandler);
         }
 
-        if (this.debugEnabled) {
-            logger?.debug?.(`[EventBus] Subscribed to '${formatEventName(eventName)}'`, 'event-bus', {
-                once,
-                context: context?.constructor?.name || 'unknown',
-                totalListeners: this.listenerCount(eventName)
-            });
-        }
-
         return () => this.unsubscribe(eventName, handler, context);
     }
 
     unsubscribe(eventName: EventName, handler: EventHandler, context: unknown = null) {
         const listeners = this.listeners(eventName);
-        
+
         for (const wrappedHandler of listeners as WrappedEventHandler[]) {
             if (wrappedHandler._originalHandler === handler && wrappedHandler._context === context) {
                 this.removeListener(eventName, wrappedHandler);
-                
-                if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Unsubscribed from '${formatEventName(eventName)}'`, 'event-bus', {
-                        context: context?.constructor?.name || 'unknown',
-                        remainingListeners: this.listenerCount(eventName)
-                    });
-                }
-                
+
                 return true;
             }
         }
-        
+
         logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${formatEventName(eventName)}'`, 'event-bus');
         return false;
     }
 
     override emit(eventName: EventName, ...args: unknown[]) {
-        if (this.debugEnabled) {
-            logger?.debug?.(`[EventBus] Emitting '${formatEventName(eventName)}'`, 'event-bus', {
-                argsCount: args.length,
-                listenerCount: this.listenerCount(eventName)
-            });
-        }
-
         const hadListeners = super.emit(eventName, ...args);
         this._updateEventStats(eventName, 'emitted');
-
-        if (!hadListeners && this.debugEnabled) {
-            logger?.debug?.(`[EventBus] No listeners for '${formatEventName(eventName)}'`, 'event-bus');
-        }
 
         return hadListeners;
     }
@@ -193,15 +149,6 @@ class EventBus extends EventEmitter {
     reset() {
         this.removeAllListeners();
         this.eventStats.clear();
-
-        if (this.debugEnabled) {
-            logger?.debug?.('[EventBus] Reset - all listeners and stats cleared', 'event-bus');
-        }
-    }
-
-    setDebugEnabled(enabled: boolean) {
-        this.debugEnabled = enabled;
-        logger?.debug?.(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
     }
 
     _updateEventStats(eventName: EventName, type: keyof Pick<EventStats, 'emitted' | 'success' | 'error'>, duration = 0) {
@@ -214,13 +161,13 @@ class EventBus extends EventEmitter {
                 avgDuration: 0
             });
         }
-        
+
         const stats = this.eventStats.get(eventName);
         if (!stats) {
             return;
         }
         stats[type]++;
-        
+
         if (type === 'success' || type === 'error') {
             stats.totalDuration += duration;
             stats.avgDuration = stats.totalDuration / (stats.success + stats.error);

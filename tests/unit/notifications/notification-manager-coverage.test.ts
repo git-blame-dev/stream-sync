@@ -178,13 +178,54 @@ describe("NotificationManager real runtime outcomes", () => {
     expect(h.queue.getQueueLength()).toBe(1);
   });
 
+  it("reports one meaningful VFX lookup failure while admitting the notification", async () => {
+    const service = manager.vfxCommandService;
+    const output = spyOn(manager.logger, "error");
+    const outcome = spyOn(manager.logger, "warn");
+    manager.vfxCommandService = undefined;
+    try {
+      const result = await manager.handleNotification("platform:gift", "tiktok", gift);
+      expect(result.success).toBe(true);
+      expect(h.queue.getQueueLength()).toBe(1);
+      expect(output).toHaveBeenCalledTimes(1);
+      expect(output.mock.calls[0]?.[0]).toContain("Error getting VFX config");
+      expect(outcome).toHaveBeenCalledTimes(1);
+      expect(outcome.mock.calls[0]?.[0]).toContain("Preparing notification without VFX");
+      expect(output.mock.calls[0]?.[1]).toBe("notification-manager");
+    } finally { manager.vfxCommandService = service; output.mockRestore(); outcome.mockRestore(); }
+  });
+
+  it("reports direct public VFX lookup failures once and rejects the lookup", async () => {
+    const service = manager.vfxCommandService;
+    const output = spyOn(manager.logger, "error");
+    manager.vfxCommandService = undefined;
+    try {
+      await expect(manager.getVFXConfig("gifts", "synthetic-private-body")).rejects.toThrow("VFXCommandService not available");
+      expect(output).toHaveBeenCalledTimes(1);
+      expect(output.mock.calls[0]?.[0]).toContain("Error getting VFX config");
+      expect(JSON.stringify(output.mock.calls)).not.toContain("synthetic-private-body");
+    } finally { manager.vfxCommandService = service; output.mockRestore(); }
+  });
+
+  it("reports invalid data using shape flags without serializing its contents", async () => {
+    const output = spyOn(manager.logger, "warn");
+    try {
+      const result = await manager.handleNotification("platform:gift", "tiktok", ["synthetic-private-body"]);
+      expect(result.success).toBe(false);
+      expect(h.queue.getQueueLength()).toBe(0);
+      expect(output).toHaveBeenCalledTimes(1);
+      expect(output.mock.calls[0]?.[2]).toMatchObject({ dataType: "object", isArray: true, hasData: true });
+      expect(JSON.stringify(output.mock.calls)).not.toContain("synthetic-private-body");
+    } finally { output.mockRestore(); }
+  });
+
   it("publishes the direct error through the real diagnostic owner", () => {
     const output = spyOn(manager.logger, "error");
     try {
       manager._handleNotificationError("Synthetic error message", new Error("synthetic failure"),
         { data: "synthetic" }, { eventType: "synthetic-event" });
       expect(output).toHaveBeenCalledTimes(1);
-      expect(output).toHaveBeenCalledWith("notification-manager", "notification-manager", {
+      expect(output).toHaveBeenCalledWith("Synthetic error message", "notification-manager", {
         error: "synthetic failure", errorDetails: { message: "synthetic failure", name: "Error" },
         eventType: "synthetic-event", eventDataSummary: { fieldCount: 1, hasMessage: false, hasRawData: false, hasPayload: false },
       });

@@ -176,12 +176,6 @@ class ChatNotificationRouter {
         let displayCommitted = false;
         try {
             const messageText = this.getMessageText(safeNormalizedData);
-            this.logger.debug('Chat message via router', 'chat-router', {
-                platform,
-                username: safeNormalizedData.username,
-                messageLength: messageText.length,
-                hasMessageText: messageText.length > 0
-            });
 
             const validation = validateNormalizedMessage(safeNormalizedData) || { isValid: true };
             if (!validation.isValid) {
@@ -223,17 +217,9 @@ class ChatNotificationRouter {
             }
             this.publishChatMessage?.(platform, safeNormalizedData);
 
-            const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
-            if (level === 'console' && typeof this.logger.console === 'function') {
+            if (this.runtime.config.general.logChatMessages && typeof this.logger.console === 'function') {
                 const logSafeData = { ...safeNormalizedData, message: sanitizedMessage.message };
                 this.logger.console(this._formatChatMessage(platform, logSafeData), 'chat-router');
-            } else {
-                this.logger.debug('Chat message accepted for routing', 'chat-router', {
-                    platform,
-                    username: safeNormalizedData.username,
-                    messageLength: sanitizedMessage.message.length,
-                    hasRenderableParts
-                });
             }
 
             const greetingIdentity = platform === 'tiktok'
@@ -573,11 +559,11 @@ class ChatNotificationRouter {
         const commandAllowed = () => {
             const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
             if (!commandCooldownService.checkUserCooldown(normalizedData.userId, perUserCooldown, heavyCooldown)) {
-                this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on per-user cooldown`, platform);
+
                 return false;
             }
             if (!this.checkGlobalCooldown(commandConfig.command, globalCooldown)) {
-                this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on global cooldown`, platform);
+
                 return false;
             }
             return true;

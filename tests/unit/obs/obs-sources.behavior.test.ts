@@ -142,3 +142,22 @@ describe("OBS source operations", () => {
     expect(sanitizeForOBS(null)).toBe("");
   });
 });
+
+it('writes private text and filter settings without copying their contents into diagnostics', async () => {
+  const diagnostics: unknown[] = [];
+  const capture = (...args: unknown[]) => { diagnostics.push(args); };
+  const calls: unknown[] = [];
+  const manager = {
+    ensureConnected: async () => {}, isConnected: () => true, isReady: async () => true,
+    call: async (method: string, data?: Record<string, unknown>) => {
+      calls.push({ method, data });
+      return method === 'GetInputSettings' ? { inputSettings: { font: 'Synthetic font' } } : {};
+    },
+  };
+  const sources = createOBSSourcesManager(manager, { logger: { ...noOpLogger, debug: capture, warn: capture } });
+  await sources.updateTextSource('synthetic-chat', 'synthetic-private-message 🌟');
+  await sources.setSourceFilterSettings('synthetic-chat', 'synthetic-filter', { text: 'synthetic-private-filter' });
+  expect(calls).toContainEqual({ method: 'SetInputSettings', data: { inputName: 'synthetic-chat', inputSettings: { font: 'Synthetic font', text: 'synthetic-private-message ' }, overlay: false } });
+  expect(calls).toContainEqual({ method: 'SetSourceFilterSettings', data: { sourceName: 'synthetic-chat', filterName: 'synthetic-filter', filterSettings: { text: 'synthetic-private-filter' } } });
+  expect(JSON.stringify(diagnostics)).not.toContain('synthetic-private');
+});

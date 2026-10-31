@@ -602,6 +602,7 @@ test('diagnostics never contain signed URLs, arbitrary labels or external error 
     expect(serialized).not.toContain('synthetic-private-query');
     expect(serialized).not.toContain('https://');
     expect(serialized).toContain('download');
+    expect(diagnostics).toHaveLength(1);
 });
 
 for (const runtime of ['node', 'bun']) {

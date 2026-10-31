@@ -137,15 +137,8 @@ class GracefulExitService {
 
         try {
             const exitMessage = `Graceful exit after processing ${this.processedMessageCount} actual messages (target: ${this.targetMessageCount})`;
-            logger.console(`\n[GRACEFUL EXIT] ${exitMessage}`, 'graceful-exit');
-            logger.info(exitMessage, 'system');
+            logger.info(exitMessage, 'graceful-exit');
 
-            const summary = this._buildExitSummary();
-
-            logger.info('Exit summary:', 'system', summary);
-            logger.console(`[GRACEFUL EXIT] Summary: Processed ${this.processedMessageCount}/${this.targetMessageCount} messages`, 'graceful-exit');
-            logger.console(`[GRACEFUL EXIT] Platforms: ${summary.platforms.join(', ')}`, 'graceful-exit');
-            logger.console(`[GRACEFUL EXIT] Starting graceful shutdown...`, 'graceful-exit');
 
             await this.runtime.shutdown();
 
@@ -154,7 +147,6 @@ class GracefulExitService {
         } catch (error: unknown) {
             const errorMessage = resolveErrorMessage(error);
             handleGracefulExitError(`Error during graceful exit: ${errorMessage}`, error, 'shutdown', 'system');
-            handleGracefulExitError(`[GRACEFUL EXIT] Error during graceful exit: ${errorMessage}`, error, 'shutdown');
 
             try {
                 await this.runtime.shutdown();

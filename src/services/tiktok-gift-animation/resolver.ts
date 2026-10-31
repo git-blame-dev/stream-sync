@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { logger } from '../../core/logging';
 import type { AppLogger } from '../../core/logger/types';
-import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import { createArchiveDownloader } from './archive-downloader';
 import { DEFAULT_ZIP_EXTRACTION_LIMITS, extractBoundedZip } from './bounded-zip-extractor';
 
@@ -263,7 +262,6 @@ function createTikTokGiftAnimationResolver(options: ResolverOptions = {}) {
     const timeoutMs = options.timeoutMs ?? 30000;
     if (![maxEntries, maxCacheBytes, maxConcurrent, timeoutMs].every(value => Number.isSafeInteger(value) && value > 0) || timeoutMs > 0x7fffffff) throw unavailable();
     const log = options.logger ?? logger;
-    const errorHandler = createPlatformErrorHandler(log, 'tiktok-gift-animation');
     const download = options.downloadArchive ?? createArchiveDownloader();
     const configuredRoot = path.resolve(options.cacheDirectory || GIFT_ANIMATION_CACHE_DIR);
     const lifetime = new AbortController();
@@ -285,8 +283,8 @@ function createTikTokGiftAnimationResolver(options: ResolverOptions = {}) {
     };
     const report = (key: string, stage: string) => {
         try {
-            errorHandler.handleEventProcessingError(unavailable(), 'gift-animation-resolve', { cacheKey: key, stage }, 'Failed resolving TikTok gift animation asset candidate');
-            log.debug?.('Gift animation candidate unavailable', 'tiktok-gift-animation', { cacheKey: key, stage });
+            log.warn('Gift animation candidate unavailable', 'tiktok-gift-animation', { cacheKey: key, stage });
+
         } catch { /* Diagnostics must not interrupt cleanup or optional fallback. */ }
     };
     const rootDirectory = () => rootPromise ??= (async () => {

@@ -48,7 +48,7 @@ class TextProcessingManager {
         return username.substring(0, maxLength);
     }
 
-    extractMessageText(messageParts: unknown, platform = 'unknown', context: Record<string, unknown> = {}): string {
+    extractMessageText(messageParts: unknown, platform = 'unknown', _context: Record<string, unknown> = {}): string {
         if (platform.toLowerCase() === 'youtube') {
             if (Array.isArray(messageParts)) {
                 return messageParts.map((part) => {
@@ -67,30 +67,20 @@ class TextProcessingManager {
         }
 
         if (!messageParts) {
-            this.logger.debug(`Empty messageParts for ${platform}`, 'text-processing', context);
             return '';
         }
 
         if (typeof messageParts === 'string') {
-            this.logger.debug(`String message for ${platform}: "${messageParts}"`, 'text-processing', context);
             return messageParts.trim();
         }
 
         if (Array.isArray(messageParts)) {
             if (messageParts.length === 0) {
-                this.logger.debug(`Empty messageParts array for ${platform}`, 'text-processing', context);
                 return '';
             }
 
-            this.logger.debug(`Processing array message for ${platform}`, 'text-processing', {
-                messageParts,
-                length: messageParts.length,
-                context
-            });
-
             const extractedText = messageParts.map((part) => {
                 if (typeof part === 'string') {
-                    this.logger.debug(`String part: "${part}"`, 'text-processing', context);
                     return part;
                 }
 
@@ -100,39 +90,17 @@ class TextProcessingManager {
                         ? objectPart.text
                         : (typeof objectPart.message === 'string' ? objectPart.message : '');
 
-                    this.logger.debug('Object part', 'text-processing', {
-                        part,
-                        extractedText: textCandidate,
-                        context
-                    });
                     return textCandidate;
                 }
 
-                this.logger.debug('Unknown part type', 'text-processing', {
-                    part,
-                    partType: typeof part,
-                    context
-                });
+                this.logger.warn('Unknown message part type', 'text-processing', { platform, partType: typeof part });
                 return '';
             }).join('');
-
-            if (!extractedText && messageParts.length > 0) {
-                this.logger.debug(`Empty result from non-empty messageParts for ${platform}`, 'text-processing', {
-                    messageParts,
-                    context
-                });
-            } else {
-                this.logger.debug(`Final extracted text for ${platform}: "${extractedText}"`, 'text-processing', context);
-            }
 
             return extractedText;
         }
 
-        this.logger.debug(`Unexpected messageParts type for ${platform}`, 'text-processing', {
-            type: typeof messageParts,
-            value: messageParts,
-            context
-        });
+        this.logger.warn('Unexpected message parts type', 'text-processing', { platform, type: typeof messageParts });
         return String(messageParts).trim();
     }
 
@@ -436,7 +404,6 @@ class TextProcessingManager {
 function createTextProcessingManager(dependencies?: { logger?: unknown }): TextProcessingManager {
     return new TextProcessingManager(dependencies);
 }
-
 
 export {
     TextProcessingManager,

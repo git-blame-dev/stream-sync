@@ -146,9 +146,9 @@ class ViewerCountSystem {
         this.isPolling = false;
         this.pollingInterval = null;
         this.pollingHandles = {};
-        
+
         this.observers = new Map();
-        
+
         this.counts = {
             tiktok: VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO,
             twitch: VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO,
@@ -156,19 +156,19 @@ class ViewerCountSystem {
         };
         this.activePolls = new Set();
         this.pollGenerations = new Map();
-        
+
         this.streamStatus = this._initializeStreamStatus();
-        
+
         this.statusChangeHistory = new Map();
         this.lastStatusUpdate = new Map();
-        
+
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
             startTime: this._now(),
             memoryOptimized: true
         };
-        
+
         this.memoryConfig = {
             maxHistoryEntries: 3,
             cleanupInterval: 2 * 60 * 1000,
@@ -219,7 +219,6 @@ class ViewerCountSystem {
                 return;
             }
             status[platform] = platformDefault.default;
-            this.logger.debug(`Initialized ${platform} stream status: ${status[platform]} (${platformDefault.reason})`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         });
 
         return status;
@@ -248,7 +247,7 @@ class ViewerCountSystem {
         }
 
         this.lastStatusUpdate.set(platform, change.timestamp);
-        
+
         const totalHistoryEntries = (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
             .reduce((total: number, hist) => total + hist.length, 0);
         if (totalHistoryEntries > 10) {
@@ -263,25 +262,22 @@ class ViewerCountSystem {
         return 'stream_remained_offline';
     }
 
-
     addObserver(observer: ViewerCountObserver) {
         if (!validateObserverInterface(observer)) {
             throw new Error(VIEWER_COUNT_CONSTANTS.ERROR_MESSAGES.MISSING_OBSERVER_INTERFACE);
         }
-        
+
         const observerId = observer.getObserverId();
         if (typeof observerId !== 'string' || observerId.trim().length === 0) {
             throw new Error('Observer ID must be a non-empty string');
         }
-        
+
         this.observers.set(observerId, observer);
-        this.logger.info(`Registered viewer count observer: ${observerId}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
     }
 
     removeObserver(observerId: string) {
         if (this.observers.has(observerId)) {
             this.observers.delete(observerId);
-            this.logger.info(`Unregistered viewer count observer: ${observerId}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
     }
 
@@ -338,7 +334,7 @@ class ViewerCountSystem {
             return;
         }
         const wasLive = this.streamStatus[platformKey] ?? false;
-        
+
         const revision = (this.statusRevisions.get(platformKey) ?? 0) + 1;
         this.statusRevisions.set(platformKey, revision);
         // Retire pre-transition polls before observers can yield to a newer status.
@@ -349,13 +345,11 @@ class ViewerCountSystem {
         }
         this.streamStatus[platformKey] = isLive;
         this._trackStatusChange(platformKey, wasLive, isLive);
-        
+
         if (wasLive !== isLive) {
             this.logger.info(`Stream status changed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
             await this.notifyStreamStatusChange(platformKey, isLive, wasLive);
-        } else {
-            this.logger.debug(`Stream status confirmed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
 
         if (this.statusRevisions.get(platformKey) !== revision) return;
@@ -371,12 +365,10 @@ class ViewerCountSystem {
             return;
         }
         if (isLive && this.isPolling) {
-            this.logger.debug(`Auto-starting polling for ${platformKey} (system already active)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             this.startPlatformPolling(platformKey);
         } else if (!isLive) {
             this.stopPlatformPolling(platformKey);
             await this.updateViewerCount(platformKey, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
-            this.logger.debug(`Reset viewer count for ${platformKey} to 0 (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
     }
 
@@ -422,38 +414,32 @@ class ViewerCountSystem {
     }
 
     async initialize() {
-        this.logger.info('Viewer count system initialized with counts: ' + JSON.stringify(this.counts), 'viewer-count');
         this._startMemoryOptimization();
 
         this.hasUnifiedInitialization = true;
 
         await this.initializeObservers();
-        
+
         return Promise.resolve();
     }
 
-
     async initializeObservers() {
         const initializationPromises: Array<Promise<unknown>> = [];
-        
+
         for (const [observerId, observer] of this.observers) {
             try {
                 if (typeof observer.initialize === 'function') {
                     initializationPromises.push(Promise.resolve(observer.initialize()));
-                    this.logger.debug(`Initializing observer: ${observerId}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 }
             } catch (error) {
                 this._handleViewerCountError(`Error initializing observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-init', { observerId });
             }
         }
-        
+
         await Promise.allSettled(initializationPromises);
-        this.logger.info(`Initialized ${this.observers.size} viewer count observers`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
     }
 
     startPolling() {
-        this.logger.debug(`startPolling() called, current isPolling: ${this.isPolling}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-        
         if (this.isPolling) {
             this.logger.warn('Polling is already active.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
@@ -462,7 +448,6 @@ class ViewerCountSystem {
         this.pollingInterval = this.pollingIntervalMs;
         const intervalMs = this.pollingInterval ?? 0;
         const pollingIntervalSeconds = intervalMs / VIEWER_COUNT_CONSTANTS.MS_PER_SECOND;
-        this.logger.debug(`Polling interval configured: ${pollingIntervalSeconds}s (${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
         if (intervalMs <= 0) {
             this.logger.warn('Polling interval is zero or negative. Viewer count polling disabled.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -470,21 +455,16 @@ class ViewerCountSystem {
         }
 
         this.isPolling = true;
-        this.logger.info(`Starting stream-aware viewer count polling every ${pollingIntervalSeconds} seconds`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+        this.logger.debug(`Starting stream-aware viewer count polling every ${pollingIntervalSeconds} seconds`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
         const platforms = this._getPlatforms();
         const platformNames = Object.keys(platforms);
-        this.logger.debug(`Checking platforms for polling start. Available platforms: ${platformNames.join(', ')}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-        
+
         for (const platformName of platformNames) {
             const isLive = this.isStreamLive(platformName);
-            this.logger.debug(`Platform ${platformName}: isLive=${isLive}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            
+
             if (isLive || (platformName === 'youtube' && this._hasObservationCapability(platforms[platformName]))) {
-                this.logger.debug(`Starting polling for ${platformName} (stream is live)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 this.startPlatformPolling(platformName);
-            } else {
-                this.logger.debug(`Skipping polling for ${platformName} (stream not live)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
         }
         // Registration and chat initialization may still be pending. Reserve the
@@ -492,28 +472,23 @@ class ViewerCountSystem {
         if (this.youtubePollingEnabled && !this.pollingHandles.youtube) this.startPlatformPolling('youtube');
     }
 
-
     startPlatformPolling(platformName: string) {
         const platformKey = this._normalizePlatformName(platformName);
-        this.logger.debug(`startPlatformPolling called for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-        
+
         if (this.pollingHandles[platformKey]) {
-            this.logger.debug(`Polling already active for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
         }
 
-        this.logger.info(`Starting viewer count polling for ${platformKey} (interval: ${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-        
+        this.logger.debug(`Starting viewer count polling for ${platformKey} (interval: ${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+
         void this.pollPlatformImmediately(platformKey);
-        
+
         this.pollingHandles[platformKey] = safeSetInterval(
             () => {
-                this.logger.debug(`Interval poll triggered for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 void this.pollPlatform(platformKey);
             },
             this.pollingInterval
         );
-        this.logger.debug(`Interval polling set up for ${platformKey} (handle ID: ${this.pollingHandles[platformKey]})`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
     }
 
     stopPlatformPolling(platformName: string) {
@@ -523,12 +498,11 @@ class ViewerCountSystem {
         if (handle) {
             clearInterval(handle);
             delete this.pollingHandles[platformKey];
-            this._runCleanupDiagnostic(() => this.logger.info(`Stopping viewer count polling for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
+            this._runCleanupDiagnostic(() => this.logger.debug(`Stopping viewer count polling for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
     }
 
     async pollPlatformImmediately(platformName: string) {
-        this.logger.debug(`Performing immediate poll for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         await this.pollPlatform(platformName);
     }
 
@@ -540,7 +514,7 @@ class ViewerCountSystem {
     getPollingEfficiency() {
         const { totalPolls, successfulPolls, startTime } = this.pollingStats;
         const runtime = this._now() - startTime;
-        
+
         return {
             successRate: totalPolls > 0 ? (successfulPolls / totalPolls) * 100 : 0,
             totalPolls,
@@ -558,7 +532,7 @@ class ViewerCountSystem {
 
     getSystemStatus() {
         const efficiency = this.getPollingEfficiency();
-        
+
         return {
             isPolling: this.isPolling,
             pollingInterval: this.pollingInterval,
@@ -582,26 +556,23 @@ class ViewerCountSystem {
 
     _performMemoryOptimization() {
         const now = this._now();
-        
+
         if (now - this.memoryConfig.lastCleanup < this.memoryConfig.cleanupInterval - 10000) {
             return;
         }
-        
+
         try {
-            this.logger.debug('Performing viewer count system memory optimization', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            
-            for (const [platform, history] of this.statusChangeHistory) {
+            for (const history of this.statusChangeHistory.values()) {
                 if (history.length > this.memoryConfig.maxHistoryEntries) {
                     const excess = history.length - this.memoryConfig.maxHistoryEntries;
                     history.splice(0, excess);
-                    this.logger.debug(`Trimmed ${excess} history entries for ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 }
-                
+
                 if (history.length > 2) {
                     history.splice(0, history.length - 2);
                 }
             }
-            
+
             if (this.lastStatusUpdate.size > 3) {
                 const entries = Array.from(this.lastStatusUpdate.entries()) as Array<[string, number]>;
                 entries.sort((a, b) => b[1] - a[1]);
@@ -611,14 +582,14 @@ class ViewerCountSystem {
                     this.lastStatusUpdate.set(platform, timestamp);
                 });
             }
-            
+
             if (this.pollingStats.totalPolls > 10000) {
                 this.pollingStats.totalPolls = Math.min(this.pollingStats.totalPolls, 1000);
                 this.pollingStats.successfulPolls = Math.min(this.pollingStats.successfulPolls, this.pollingStats.totalPolls);
             }
-            
+
             this.memoryConfig.lastCleanup = now;
-            
+
             if (global.gc) {
                 global.gc();
             }
@@ -632,32 +603,29 @@ class ViewerCountSystem {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
         }
-        
+
         for (const handle of Object.values(this.pollingHandles)) {
             if (handle) {
                 clearInterval(handle as ReturnType<typeof setInterval>);
             }
         }
         this.pollingHandles = {};
-        
+
         this.observers.clear();
         this.statusChangeHistory.clear();
         this.lastStatusUpdate.clear();
-        
+
         Object.keys(this.counts).forEach(platform => {
             this.counts[platform] = VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
         });
         this.observations = {};
-        
+
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
             startTime: this._now(),
             memoryOptimized: true
         };
-        
-        this._runCleanupDiagnostic(() => this.logger.debug('Memory cleanup completed', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
-        
     }
 
     _getMemoryUsage() {
@@ -730,9 +698,9 @@ class ViewerCountSystem {
             this.stopPlatformPolling(platformName);
         }
         this.pollingHandles = {};
-        
+
         if (wasPolling) {
-            this._runCleanupDiagnostic(() => this.logger.info('Polling stopped.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
+            this._runCleanupDiagnostic(() => this.logger.debug('Polling stopped.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
     }
 
@@ -740,20 +708,20 @@ class ViewerCountSystem {
         const platformKey = this._normalizePlatformName(platformName);
         const platforms = this._getPlatforms();
         const platform = platforms[platformKey];
-        
+
         if (!platform) {
             return { valid: false, reason: `No platform found for ${platformKey}` };
         }
-        
+
         if (platformKey === 'youtube' && this._hasObservationCapability(platform)) return { valid: true, platform };
         if (typeof platform.getViewerCount !== 'function') {
             return { valid: false, reason: `No getViewerCount method for ${platformKey}` };
         }
-        
+
         if (!this.isStreamLive(platformKey)) {
             return { valid: false, reason: `Stream offline for ${platformKey}` };
         }
-        
+
         return { valid: true, platform };
     }
 
@@ -783,19 +751,15 @@ class ViewerCountSystem {
     async pollPlatform(platformName: string) {
         const platformKey = this._normalizePlatformName(platformName);
         if (this.activePolls.has(platformKey)) {
-            this.logger.debug(`Skipping overlapping viewer count poll for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
         }
-        
+
         const validation = this.validatePlatformForPolling(platformKey);
-        
+
         if (!validation.valid) {
             const reasonText = typeof validation.reason === 'string' ? validation.reason : 'Viewer count polling validation failed';
-            if (platformKey === 'youtube' && this.youtubePollingEnabled && reasonText.includes('No platform found')) {
-                this.logger.debug('Waiting for YouTube platform registration', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            } else if (reasonText.includes('offline')) {
-                this.logger.debug(`Skipping viewer count poll for ${platformKey} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            } else {
+            const waitingForRegistration = platformKey === 'youtube' && this.youtubePollingEnabled && reasonText.includes('No platform found');
+            if (!waitingForRegistration && !reasonText.includes('offline')) {
                 this.logger.warn(reasonText, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
             return;
@@ -869,16 +833,15 @@ class ViewerCountSystem {
             this.statusRevisions.set(platform, (this.statusRevisions.get(platform) ?? 0) + 1);
         }
         this.stopPolling();
-        
+
         if (this.memoryOptimizationInterval) {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
         }
-        this._runCleanupDiagnostic(() => this.logger.info('Cleaning up viewer count system', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
-        
+
         const cleanupPromises: Array<Promise<unknown>> = [];
         const observerEntries = Array.from(this.observers.entries()) as Array<[string, { cleanup?: () => Promise<unknown> | unknown }]>;
-        
+
         for (const [observerId, observer] of observerEntries) {
             try {
                 if (typeof observer.cleanup === 'function') {
@@ -892,7 +855,7 @@ class ViewerCountSystem {
                 this._runCleanupDiagnostic(() => this._handleViewerCountError(`Error initiating cleanup for observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId }));
             }
         }
-        
+
         // Wait for observer cleanups with timeout to prevent hanging
         try {
             await withTimeout(Promise.allSettled(cleanupPromises), 5000, {
@@ -901,10 +864,8 @@ class ViewerCountSystem {
         } catch (error) {
             this._runCleanupDiagnostic(() => this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
-        
+
         this._performMemoryCleanup();
-        
-        this._runCleanupDiagnostic(() => this.logger.info(`Viewer count system cleanup complete (cleaned ${observerEntries.length} observers)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
     }
 }
 

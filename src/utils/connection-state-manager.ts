@@ -80,11 +80,8 @@ class ConnectionStateManager {
 
     ensureConnection(): ConnectionLike {
         if (this.connection && this.isConnectionValid(this.connection)) {
-            this.logger?.debug(`Connection already exists and is valid for ${this.platform}`, this.platform);
             return this.connection;
         }
-
-        this.logger?.debug(`Creating new connection for ${this.platform}`, this.platform);
 
         if (!this.config || !this.dependencies) {
             throw new Error(`Cannot create connection - state manager not properly initialized for ${this.platform}`);
@@ -208,9 +205,6 @@ class ConnectionStateManager {
                 void Promise.resolve(result).catch(error => reportFailure(error, 'disconnect'));
             } catch (error) { reportFailure(error, 'disconnect'); }
         }
-
-        try { this.logger?.debug(`Connection state manager cleaned up for ${this.platform}`, this.platform); }
-        catch { /* Logical retirement is already complete; diagnostics are not resource ownership. */ }
     }
 
     getConnectionInfo(): {

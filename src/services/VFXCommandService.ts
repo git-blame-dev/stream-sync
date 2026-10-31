@@ -188,12 +188,7 @@ class VFXCommandService {
             cooldownBlocked: 0,
             avgExecutionTime: 0
         };
-        
-        logger.debug('[VFXCommandService] Initialized', 'vfx-service', {
-            hasConfig: !!config,
-            hasEventBus: !!eventBus,
-            hasCommandParser: !!this.commandParser
-        });
+
     }
 
     async executeCommand(command: string, context: CommandExecutionContext): Promise<CommandExecutionResult> {
@@ -361,7 +356,6 @@ class VFXCommandService {
             if (claimedCommand !== undefined) this.inflightCommands.delete(claimedCommand);
         }
     }
-
 
     async selectVFXCommand(message: string, contextMessage: string | null): Promise<VFXConfig | null> {
         if (!this.commandParser) {
@@ -594,7 +588,6 @@ class VFXCommandService {
             };
 
             this.commandParser = new CommandParser(parserConfig);
-            logger.debug('[VFXCommandService] CommandParser initialized', 'vfx-service');
 
         } catch (error) {
             handleVFXCommandError(`[VFXCommandService] Error initializing CommandParser: ${getErrorMessage(error)}`, error, 'parser-init');

@@ -70,7 +70,6 @@ class RetrySystem {
             ADAPTIVE_RETRY_CONFIG.MAX_DELAY
         );
 
-        this.logger.debug(`Calculated adaptive retry delay: ${delay}ms for attempt ${retryCount + 1}`, 'retry-system');
         return delay;
     }
 
@@ -81,16 +80,12 @@ class RetrySystem {
 
         this.platformRetryCount[platform] = (this.platformRetryCount[platform] || 0) + 1;
         const delay = this.calculateAdaptiveRetryDelay(platform);
-        this.logger.debug(`Incremented retry count to ${this.platformRetryCount[platform]}, next delay: ${delay}ms`, 'retry-system');
+
         return delay;
     }
 
     resetRetryCount(platform: string): void {
-        const oldCount = this.platformRetryCount[platform] || 0;
         this.platformRetryCount[platform] = 0;
-        if (oldCount > 0) {
-            this.logger.debug(`Reset retry count from ${oldCount} to 0`, 'retry-system');
-        }
     }
 
     getRetryCount(platform: string): number {
@@ -245,8 +240,7 @@ class RetrySystem {
             return;
         }
 
-        this._handleRetryError(`Connection failed (attempt ${retryAttempt}): ${errorMessage}`, null, 'connection', platform);
-        this.logger.info(`Retrying in ${adaptiveDelay / 1000} seconds...`, platform);
+        this._handleRetryError(`Connection failed (attempt ${retryAttempt}); retrying in ${adaptiveDelay / 1000} seconds: ${errorMessage}`, null, 'connection', platform);
 
         const scheduleReconnect = (): void => {
             if (!retryIsActive()) {
@@ -289,7 +283,7 @@ class RetrySystem {
                     if (!retryIsActive()) {
                         return;
                     }
-                    this.logger.debug(`Error in scheduled reconnection: ${this.extractErrorMessage(reconnectError)}`, 'retry-system');
+
                     this.handleConnectionError(platform, reconnectError, reconnectFunction, cleanupFunction, setConnectionStateFn);
                 }
             };
@@ -358,17 +352,13 @@ class RetrySystem {
         try {
             cleanupResult = cleanupFunction();
         } catch (cleanupError) {
-            this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
             this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
             return Promise.resolve();
         }
 
         const cleanupPromise = Promise.resolve(cleanupResult)
-            .then(() => {
-                this.logger.debug('Cleanup function executed successfully', 'retry-system');
-            })
+            .then(() => undefined)
             .catch((cleanupError) => {
-                this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
                 this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
             })
             .finally(() => {
@@ -408,8 +398,6 @@ class RetrySystem {
         for (const platform of platforms) {
             this.resetRetryCount(platform);
         }
-
-        this.logger.debug(`Reset retry counts for: ${platforms.join(', ')}`, 'retry-system');
     }
 
     validateRetryConfig(): true {
@@ -427,7 +415,6 @@ class RetrySystem {
             throw new Error('BACKOFF_MULTIPLIER must be greater than 1');
         }
 
-        this.logger.debug('Configuration validation passed', 'retry-system');
         return true;
     }
 

@@ -267,7 +267,7 @@ class EnhancedHttpClient {
 
             const makeRequest = async (): Promise<Record<string, unknown>> => {
                 signal.throwIfAborted();
-                this.logger.debug(sanitizeLogText(`HTTP ${method}: ${url}`), 'enhanced-http-client');
+
                 let response: Record<string, unknown>;
 
                 switch (method) {
@@ -299,7 +299,6 @@ class EnhancedHttpClient {
                     response.config = response.config || {};
                 }
 
-                this.logger.debug(sanitizeLogText(`HTTP ${method} Success: ${url} (${String(response.status)})`), 'enhanced-http-client');
                 return response;
             };
 

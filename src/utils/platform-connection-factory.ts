@@ -81,7 +81,6 @@ function ensureEmitterInterface(connection: unknown, logger: FactoryLogger, plat
         mutableConnection.off = mutableConnection.removeListener.bind(mutableConnection);
     }
 
-    logger?.debug(`Hardened ${platform} connection with EventEmitter wrapper`, platform);
     return mutableConnection;
 }
 
@@ -110,8 +109,6 @@ class PlatformConnectionFactory {
     }
 
     createConnection(platform: string, config: Record<string, unknown>, dependencies: PlatformDependencies): unknown {
-        this.logger.debug(`Creating connection for platform: ${platform}`, platform);
-
         if (!platform || typeof platform !== 'string') {
             throw new Error('Platform name is required and must be a string');
         }
@@ -166,9 +163,6 @@ class PlatformConnectionFactory {
         const rawUsername = config.username;
         const cleanUsername = rawUsername.trim().replace(/^@+/, '').trim();
         if (!cleanUsername) throw new Error('TikTok username is required and must not be blank or only @ markers');
-        if (cleanUsername !== rawUsername) {
-            this.logger.debug(`TikTok username cleaned from '${rawUsername}' to '${cleanUsername}'`, 'tiktok');
-        }
 
         const hasWebsocketClient = typeof dependencies.TikTokWebSocketClient === 'function';
         if (!hasWebsocketClient) {
@@ -178,8 +172,6 @@ class PlatformConnectionFactory {
         const connectionConfig = this.buildTikTokConnectionConfig(config, dependencies);
 
         try {
-            this.logger.debug(`Creating TikTok connection for user: '${cleanUsername}'`, 'tiktok');
-
             const ClientConstructor = dependencies.TikTokWebSocketClient as new (
                 username: string,
                 config: Record<string, unknown>
@@ -187,13 +179,13 @@ class PlatformConnectionFactory {
             const connection = new ClientConstructor(cleanUsername, connectionConfig);
 
             if (!connection) {
-                throw new Error(`TikTok connection constructor returned null for user '${cleanUsername}'`);
+                throw new Error(`TikTok connection constructor returned null`);
             }
 
             const essentialMethods = ['connect'];
             for (const method of essentialMethods) {
                 if (typeof connection[method] !== 'function') {
-                    throw new Error(`TikTok connection for user '${cleanUsername}' missing essential method: ${method}`);
+                    throw new Error(`TikTok connection missing essential method: ${method}`);
                 }
             }
 
@@ -208,8 +200,8 @@ class PlatformConnectionFactory {
             return connection;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.handleFactoryError(`Failed to create TikTok connection for user '${cleanUsername}': ${errorMessage}`, error, 'tiktok');
-            throw new Error(`Failed to create TikTok connection for user '${cleanUsername}': ${errorMessage}`);
+            this.handleFactoryError(`Failed to create TikTok connection: ${errorMessage}`, error, 'tiktok');
+            throw new Error(`Failed to create TikTok connection: ${errorMessage}`);
         }
     }
 
@@ -221,12 +213,6 @@ class PlatformConnectionFactory {
             WebSocketCtor: dependencies.WebSocketCtor,
             autoReconnect: false
         };
-
-        if (apiKey) {
-            this.logger.debug('EulerStream API key configured', 'tiktok');
-        } else {
-            this.logger.warn('No API key configured - WebSocket may fail', 'tiktok');
-        }
 
         return baseConfig;
     }

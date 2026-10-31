@@ -136,7 +136,7 @@ describe("EnhancedHttpClient behavior", () => {
     });
   }
 
-  it("sanitizes successful request diagnostics without changing the functional URL", async () => {
+  it("preserves the functional URL without successful request diagnostics", async () => {
     const messages: string[] = [];
     const logger = { ...noOpLogger, debug: (message: string) => { messages.push(message); } };
     const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
@@ -144,7 +144,7 @@ describe("EnhancedHttpClient behavior", () => {
     const url = "https://synthetic-user:synthetic-password@synthetic.example.invalid/%ZZ?access_token=synthetic-success-token";
     await client.get(url);
     expect(get.mock.calls[0]?.[0]).toBe(url);
-    expect(messages.some((message) => message.startsWith("HTTP GET Success:"))).toBe(true);
+    expect(messages).toEqual([]);
     for (const secret of ["synthetic-user", "synthetic-password", "synthetic-success-token"]) expect(messages.join("\n")).not.toContain(secret);
   });
 
@@ -440,6 +440,7 @@ describe("EnhancedHttpClient behavior", () => {
 
     await client.get("https://example.com");
 
-    expect(debugCalls).toBeGreaterThan(0);
+    expect(debugCalls).toBe(0);
+    expect(Object.getPrototypeOf(client.logger)).toBe(PrototypeLogger.prototype);
   });
 });

@@ -146,12 +146,10 @@ class PlatformLifecycleService {
         this.shutdownRequested = false;
         this.platformCleanupPromises = new Map();
 
-        this.logger.debug('PlatformLifecycleService initialized', 'PlatformLifecycleService');
     }
 
     async initializeAllPlatforms(platformModules: Record<string, PlatformConstructor>, eventHandlers: PlatformEventHandlerMap | null = null) {
         this.shutdownRequested = false;
-        this.logger.info('Initializing platform connections...', 'PlatformLifecycleService');
 
         const initTasks = Object.entries(platformModules || {}).map(([platformName, PlatformClass]) =>
             this.initializePlatform(platformName, PlatformClass, eventHandlers)
@@ -159,23 +157,21 @@ class PlatformLifecycleService {
 
         await Promise.allSettled(initTasks);
 
-        this.logger.debug('Platform initialization loop completed', 'PlatformLifecycleService');
         return this.platforms;
     }
 
     async initializePlatform(platformName: string, PlatformClass: PlatformConstructor, eventHandlers: PlatformEventHandlerMap | null = null) {
-        this.logger.debug(`Processing platform: ${platformName}`, 'PlatformLifecycleService');
+
         const platformConfig = this.config?.[platformName];
 
         this.ensurePlatformHealthEntry(platformName);
 
         if (!platformConfig || !platformConfig.enabled) {
-            this.logger.debug(`Skipping platform: ${platformName} (disabled or not configured)`, 'PlatformLifecycleService');
+
             this.updatePlatformHealth(platformName, { state: 'disabled' });
             return;
         }
 
-        this.logger.debug(`Platform ${platformName} is enabled, initializing...`, 'PlatformLifecycleService');
         this.updatePlatformHealth(platformName, { state: 'initializing' });
 
         // Only an adopted instance belongs to this attempt. A failed construction
@@ -211,11 +207,8 @@ class PlatformLifecycleService {
 
             this.platforms[platformName] = platformInstance;
             adoptedInstance = platformInstance;
-            this.logger.debug(`Platform ${platformName} added to platforms object`, 'PlatformLifecycleService');
 
             const handlers = this.resolveEventHandlers(platformName, eventHandlers);
-
-            this.logger.debug(`Initializing platform ${platformName}`, 'PlatformLifecycleService');
 
             await this.initializePlatformConnection(
                 platformName,
@@ -458,8 +451,7 @@ class PlatformLifecycleService {
             } else {
                 const factoryMethod = this.getDependencyFactoryMethod(platformName);
                 if (!factoryMethod) {
-                    const factoryMethodName = this.getDependencyFactoryMethodName(platformName);
-                    this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
+
                     instance = new PlatformClass(config);
                 } else {
                     const dependencies = factoryMethod.call(this.dependencyFactory, config, this.sharedDependencies);
@@ -468,7 +460,6 @@ class PlatformLifecycleService {
                         if (detector !== this.sharedDependencies.streamDetectionService) localYoutubeDetection = detector;
                     }
 
-                    this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
                     instance = new PlatformClass(config, dependencies);
                 }
             }
@@ -521,7 +512,6 @@ class PlatformLifecycleService {
 
     async initializePlatformConnection(platformName: string, platformInstance: PlatformInstance, handlers: PlatformEventHandlers, platformConfig: PlatformConfig) {
         const connectCallback = async () => {
-            this.logger.debug(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
             const outcome = await platformInstance.initialize(handlers);
             if (this.platforms[platformName] !== platformInstance) return platformInstance;
@@ -538,7 +528,6 @@ class PlatformLifecycleService {
             const shouldRunInBackground = this.shouldRunPlatformInBackground(platformName, platformConfig);
 
             if (shouldRunInBackground) {
-                this.logger.debug(`Initializing ${platformName} in background (non-blocking)`, 'PlatformLifecycleService');
 
                 let backgroundInit: Promise<void>;
                 backgroundInit = this.initializePlatformAsync(
@@ -553,22 +542,6 @@ class PlatformLifecycleService {
                     platform: platformName,
                     promise: backgroundInit
                 });
-                return;
-            }
-
-            if (platformName === 'tiktok') {
-                this.logger.info(`Using TikTok platform's built-in stream detection`, 'PlatformLifecycleService');
-                await connectCallback();
-                return;
-            }
-            if (platformName === 'youtube') {
-                this.logger.info(`Using YouTube platform-managed stream monitoring`, 'PlatformLifecycleService');
-                await connectCallback();
-                return;
-            }
-            if (platformName === 'twitch') {
-                this.logger.info('Using Twitch chat direct connection (no stream detection)', 'PlatformLifecycleService');
-                await connectCallback();
                 return;
             }
 
@@ -592,7 +565,6 @@ class PlatformLifecycleService {
         try {
             await connectCallback();
 
-            this.logger.debug(`[${platformName}] Background initialization completed`, 'PlatformLifecycleService');
         } catch (error) {
             // Shutdown already owns cleanup and its health outcome. Cancellation
             // of initialization must not start another cleanup or overwrite it.
@@ -604,7 +576,7 @@ class PlatformLifecycleService {
 
     recordPlatformConnection(platformName: string, timestampMs = Date.now()) {
         this.platformConnectionTimes[platformName] = timestampMs;
-        this.logger.debug(`Platform ${platformName} connection time recorded`, 'PlatformLifecycleService');
+
     }
 
     getPlatformConnectionTime(platformName: string) {
@@ -627,8 +599,6 @@ class PlatformLifecycleService {
         if (this.backgroundPlatformInits.length === 0) {
             return;
         }
-
-        this.logger.info('Waiting for background platform initializations to complete...', 'PlatformLifecycleService');
 
         const abort = new AbortController();
         const timeout = safeDelay(timeoutMs, timeoutMs, 'platformLifecycle:backgroundInitWait', abort.signal);
@@ -832,7 +802,7 @@ class PlatformLifecycleService {
     }
 
     private async retireAllPlatforms() {
-        this.logger.info('Cleaning up all platforms...', 'PlatformLifecycleService');
+
         this.shutdownRequested = true;
 
         // Admit every owner's cancellation before joining any slow cleanup.
@@ -841,7 +811,7 @@ class PlatformLifecycleService {
             try {
                 if (platform && typeof platform.cleanup === 'function') {
                     await this.cleanupPlatformInstance(platform);
-                    this.logger.info(`Cleaned up ${platformName}`, 'PlatformLifecycleService');
+
                 } else {
                     cleanupError = new Error(`Platform ${platformName} is missing cleanup()`);
                     this._handleLifecycleError(`Unable to cleanup ${platformName}: cleanup() missing`, cleanupError, 'cleanup');
@@ -899,7 +869,6 @@ class PlatformLifecycleService {
         this.shutdownRequested = false;
         this.platformCleanupPromises.clear();
 
-        this.logger.debug('PlatformLifecycleService disposed', 'PlatformLifecycleService');
     }
 
     _handleLifecycleError(message: string, error: unknown, eventType = 'lifecycle') {

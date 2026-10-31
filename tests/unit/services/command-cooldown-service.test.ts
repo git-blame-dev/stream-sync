@@ -14,36 +14,6 @@ import { useFakeTimers, useRealTimers, getTimerCount } from "../../helpers/bun-t
 
 type CommandCooldownTestService = InstanceType<typeof CommandCooldownService>;
 
-it("retires cooldown constructor timers and listeners after its final diagnostic fails", () => {
-  useFakeTimers();
-  const bus = new EventBus();
-  const unrelated = bus.subscribe("config:changed", () => undefined);
-  const baseline = bus.getListenerSummary();
-  const timers = getTimerCount();
-  const failure = new Error("test final cooldown diagnostic failure");
-  let result: unknown;
-  try {
-    try {
-      new CommandCooldownService({
-        config: createConfigFixture(),
-        eventBus: { subscribe: (name, handler) => bus.subscribe(name, payload => handler(payload as ConfigChangePayload)) },
-        logger: { ...noOpLogger, debug: (message) => {
-          if (message === "CommandCooldownService initialized") throw failure;
-          if (message === "CommandCooldownService disposed") throw new Error("test retirement diagnostic failure");
-        } },
-      });
-    } catch (error) {
-      result = error;
-    }
-    expect(result).toBe(failure);
-    expect(bus.getListenerSummary()).toEqual(baseline);
-    expect(getTimerCount()).toBe(timers);
-  } finally {
-    unrelated();
-    useRealTimers();
-  }
-});
-
 it("unwinds partial cooldown listener acquisition without masking the original failure", () => {
   useFakeTimers();
   const bus = new EventBus();

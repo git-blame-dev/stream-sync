@@ -138,7 +138,9 @@ class OBSConnectionManager {
             // During acquisition the SDK's attempt promise owns close failures.
             // Retirement closes belong to the old transport, never a queued one.
             if (this.transportRetirement || this.isConnecting) return;
-            this.logger.debug(`[OBS Connection] Connection Closed: ${data?.reason} (${data?.code})`, 'obs-connection', data);
+            this.logger.debug('[OBS Connection] Connection closed', 'obs-connection', {
+                code: typeof data?.code === 'number' && Number.isFinite(data.code) ? data.code : undefined
+            });
             this._isConnected = false;
             this.lifecycleState = this.isDisposed
                 ? 'disposed'
@@ -241,7 +243,7 @@ class OBSConnectionManager {
                 }
             }
         }
-        this.logger.debug(`[OBS Connection] Updated config - Address: ${this.config.address}, Password: ${this.config.password ? 'Yes' : 'No'}`, 'obs-connection');
+
     }
 
     private createDisabledError() {
@@ -263,9 +265,6 @@ class OBSConnectionManager {
             this.logger.debug('[OBS Connection] Connection in progress, returning existing promise', 'obs-connection');
             return this.connectionPromise;
         }
-
-        this.logger.debug(`[OBS Connection] Attempting to connect to: ${this.config.address}`, 'obs-connection');
-        this.logger.debug(`[OBS Connection] Password configured: ${this.config.password ? 'Yes' : 'No'}`, 'obs-connection');
 
         this.clearReconnectTimer();
         this.isIntentionalDisconnect = false;
@@ -331,11 +330,10 @@ class OBSConnectionManager {
                 }, identifiedTimeoutMs);
                 
                 this.transportInUse = true;
-                const { obsWebSocketVersion, negotiatedRpcVersion } = await this.obs.connect(this.config.address, this.config.password);
+                await this.obs.connect(this.config.address, this.config.password);
                 if (this.activeConnectAttemptVersion !== attemptVersion) return;
                 sdkConnected = true;
                 completeConnection();
-                this.logger.debug(`[OBS Connection] WebSocket connected to server ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`, 'obs-connection');
                 
                 // Connection established, but now we wait for Identified event
                 // The resolve() will be called by the existing 'Identified' handler in setupEventHandlers()
@@ -365,14 +363,6 @@ class OBSConnectionManager {
                 }
 
                 this._handleConnectionError(userFriendlyMessage, connectionError, { requestType: 'Connect' });
-                this.logger.debug(`Target address: ${this.config.address}`, 'OBS');
-                this.logger.debug('Troubleshooting steps:', 'OBS');
-                this.logger.debug('1. Check if OBS is running', 'OBS');
-                this.logger.debug('2. Go to Tools > WebSocket Server Settings in OBS', 'OBS');
-                this.logger.debug('3. Ensure "Enable WebSocket server" is checked', 'OBS');
-                this.logger.debug(`4. Verify server port matches config (current: ${this.config.address})`, 'OBS');
-                this.logger.debug('5. Check if password in config.ini matches OBS WebSocket password', 'OBS');
-                
                 this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
                 if (!this.isIntentionalDisconnect && !this.isDisposed) {
                     this.scheduleReconnect('connect-failed');
@@ -619,14 +609,11 @@ function getOBSConnectionManager(dependencies: ConnectionDependencies = {}): OBS
 function createOBSConnectionManager(dependencies: ConnectionDependencies = {}) {
     const manager = new OBSConnectionManager(dependencies);
 
-    logger.debug('[OBS] Initializing OBS WebSocket connection manager (v5)...', 'OBS');
-
     return manager;
 }
 
 async function initializeOBSConnection(config: ObsConfig = {}, dependencies: ConnectionDependencies = {}) {
-    logger.debug('[OBS] initializeOBSConnection() called...', 'OBS');
-    
+
     const combinedDependencies = {
         ...dependencies,
         config: {
@@ -634,46 +621,38 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
             ...config
         }
     };
-    
-    logger.debug('[OBS] Getting OBS connection manager...', 'OBS');
+
     const manager = getOBSConnectionManager(combinedDependencies);
-    logger.debug('[OBS] OBS connection manager obtained', 'OBS');
-    
-    logger.debug(`[OBS] Connection Config Check: enabled=${config.enabled}`, 'OBS');
+
     let outcome: 'connected' | 'degraded' | 'disabled' = config.enabled === true ? 'degraded' : 'disabled';
     if (config.enabled === true) {
-        logger.debug('[OBS] OBS is enabled, attempting to connect...', 'OBS');
+
         try {
             if (dependencies.obsEventService && typeof dependencies.obsEventService.connect === 'function') {
-                logger.debug('[OBS] Using OBSEventService for connection lifecycle', 'OBS');
+
                 await dependencies.obsEventService.connect();
             } else {
                 await manager.connect();
             }
-            logger.debug('[OBS] OBS connection successful', 'OBS');
+
             outcome = 'connected';
             
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
                 try {
                     await initializeHandcamGlow(manager, handcamConfig);
-                    logger.debug('[OBS] Handcam glow initialized to 0 (startup reset)', 'OBS');
+
                 } catch (glowError) {
                     const glowErrorMessage = glowError instanceof Error ? glowError.message : String(glowError);
                     logger.debug(`[OBS] Handcam glow initialization failed: ${glowErrorMessage}`, 'OBS');
                 }
-            } else {
-                logger.debug('[OBS] Handcam glow initialization skipped - not enabled', 'OBS');
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logger.debug(`[OBS] OBS connection failed: ${errorMessage}`, 'OBS');
         }
-    } else {
-        logger.debug('[OBS] OBS is disabled, skipping connection', 'OBS');
     }
-    
-    logger.debug('[OBS] OBS connection initialization completed', 'OBS');
+
     return { manager, outcome };
 }
 

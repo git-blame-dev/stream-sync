@@ -54,6 +54,18 @@ describe("GlobalCommandCooldownManager behavior", () => {
     expect(manager.commandTimestamps.size).toBe(0);
   });
 
+  it("resets cooldown state and statistics without routine diagnostics", () => {
+    const logger = { ...noOpLogger, debug: createMockFn() };
+    const manager = new GlobalCommandCooldownManager(logger);
+    testClock.set(1000);
+    manager.updateCommandTimestamp("!synthetic");
+    expect(manager.getStats()).toMatchObject({ totalTrackedCommands: 1, totalUpdates: 1 });
+    manager.resetAllCooldowns();
+    expect(manager.getStats()).toMatchObject({ totalTrackedCommands: 0, totalUpdates: 0, totalChecks: 0, totalBlocks: 0 });
+    expect(manager.getRemainingCooldown("!synthetic", 1000)).toBe(0);
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
   it("fails open when internal errors occur", () => {
     const erroringLogger = {
       debug: createMockFn(() => {
@@ -65,8 +77,12 @@ describe("GlobalCommandCooldownManager behavior", () => {
     };
     const manager = new GlobalCommandCooldownManager(erroringLogger);
 
+    testClock.set(1000);
+    manager.updateCommandTimestamp("!testboom");
+    testClock.set(1100);
     const allowed = manager.isCommandOnCooldown("!testboom", 1000);
 
     expect(allowed).toBe(false);
+    expect(erroringLogger.error).toHaveBeenCalledTimes(1);
   });
 });

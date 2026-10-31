@@ -66,8 +66,10 @@ export async function createUsdRateService(options: UsdRateServiceOptions = {}):
         if (parsed.version !== 1 || parsed.base !== 'USD') throw new Error('cache metadata is invalid');
         table = validRates(parsed.rates);
         if (!table) throw new Error('cache rates are invalid');
-    } catch {
-        warn('USD rate cache unavailable or invalid; attempting Frankfurter refresh');
+    } catch (error) {
+        if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') {
+            warn('USD rate cache unavailable or invalid; attempting Frankfurter refresh');
+        }
     }
 
     try {

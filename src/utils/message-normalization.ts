@@ -432,7 +432,6 @@ function buildYouTubeMessageParts(messageObj: unknown): MessagePart[] {
         .filter((part) => part !== null);
 }
 
-
 function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
     try {
         if (!isRecord(chatItem)) {
@@ -514,7 +513,6 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
             normalized.message.parts = messageParts;
         }
 
-        logger.debug(`Normalized YouTube message: textLength=${normalizedMessage.length}, hasEmotes=${hasRenderableEmote}`, 'message-normalization');
         return normalized;
     } catch (error) {
         const chatRecord = isRecord(chatItem) ? chatItem : {};
@@ -600,7 +598,6 @@ function normalizeTikTokMessage(data: unknown, platformName = 'tiktok') {
             normalized.message.parts = messageParts;
         }
 
-        logger.debug(`Normalized TikTok message: textLength=${message.length}, partCount=${messageParts.length}`, 'message-normalization');
         return normalized;
     } catch (error) {
         handleNormalizationError(`Failed to normalize TikTok message: ${error instanceof Error ? error.message : String(error)}`, error, 'tiktok', {
@@ -615,22 +612,22 @@ function extractTwitchMessageData(messageObj: unknown) {
     if (!isRecord(messageObj)) {
         return { textContent: '', cheermoteInfo: null };
     }
-    
+
     // Require EventSub fragments for cheermote extraction
     if (!Array.isArray(messageObj.fragments) || messageObj.fragments.length === 0) {
         return { textContent: '', cheermoteInfo: null };
     }
-    
+
     const fragments = messageObj.fragments.filter(isRecord);
     const textParts = fragments
         .filter((fragment) => fragment.type === 'text')
         .map((fragment) => typeof fragment.text === 'string' ? fragment.text : '')
         .join('');
-    
+
     const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
     const cheermoteFragments = 'fragments' in processedData ? processedData.fragments : [];
     let cheermoteInfo: (Record<string, unknown> & { totalBits?: unknown }) | null = null;
-    
+
     if (cheermoteFragments.length > 0) {
         const primaryPrefix = CheermoteProcessor.findPrimaryType(Object.fromEntries(
             processedData.types.map(type => [type.prefix, { count: type.count, bits: type.totalBits }])
@@ -643,7 +640,7 @@ function extractTwitchMessageData(messageObj: unknown) {
             const tier = Number.isFinite(parsedTier) && parsedTier > 0
                 ? parsedTier
                 : undefined;
-            
+
             cheermoteInfo = {
                 prefix: primaryPrefix,
                 text: primaryCheermote.text,
@@ -657,16 +654,15 @@ function extractTwitchMessageData(messageObj: unknown) {
             };
         }
     }
-    
+
     const result = {
         textContent: textParts.trim() || (cheermoteInfo ? cheermoteFragments
             .map(fragment => typeof fragment.text === 'string' ? fragment.text.trim() : '')
             .filter(Boolean).join(' ') : ''),
         cheermoteInfo: cheermoteInfo
     };
-    
-    const inputText = typeof messageObj.text === 'string' ? messageObj.text : '';
-    logger.debug(`[extractTwitchMessageData] inputLength=${inputText.length}, textLength=${result.textContent.length}, hasCheermote=${!!cheermoteInfo}`, 'message-normalization');
+
+
     return result;
 }
 
@@ -762,18 +758,18 @@ function extractYouTubeMessageText(messageObj: unknown): string {
     } else {
         result = '';
     }
-    logger.debug(`[extractYouTubeMessageText] inputType=${typeof messageObj}, outputLength=${result.length}, hasOutput=${result.length > 0}`, 'message-normalization');
+
     return result;
 }
 
 function validateNormalizedMessage(normalizedMessage: unknown) {
     const issues: string[] = [];
-    
+
     if (!normalizedMessage || typeof normalizedMessage !== 'object') {
         issues.push('Message is not an object');
         return { isValid: false, errors: issues };
     }
-    
+
     const messageRecord = normalizedMessage as MessageRecord;
 
     const requiredFields = ['platform', 'userId', 'username', 'timestamp'];
@@ -804,7 +800,7 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
     if (!hasText && !hasParts) {
         issues.push('message must contain text or renderable parts');
     }
-    
+
     const booleanFields = ['isMod', 'isPaypiggy', 'isBroadcaster'];
     for (const field of booleanFields) {
         if (messageRecord[field] === undefined || messageRecord[field] === null) {
@@ -813,22 +809,22 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
             issues.push(`${field} must be a boolean`);
         }
     }
-    
+
     const validPlatforms = ['twitch', 'youtube', 'tiktok', 'tiktok-gift'];
     const platform = typeof messageRecord.platform === 'string' ? messageRecord.platform : '';
     if (platform && !validPlatforms.includes(platform.toLowerCase())) {
         issues.push(`Invalid platform: ${platform}`);
     }
-    
+
     if (!isRecord(messageRecord.metadata)) {
         issues.push('Missing or invalid metadata field');
     }
-    
+
     const timestamp = typeof messageRecord.timestamp === 'string' ? messageRecord.timestamp : '';
     if (timestamp && isNaN(Date.parse(timestamp))) {
         issues.push('Invalid timestamp format');
     }
-    
+
     return {
         isValid: issues.length === 0,
         errors: issues

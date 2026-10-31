@@ -29,7 +29,7 @@ function setup() {
   const manager = new OBSConnectionManager({ obs: socket, config: {
     enabled: true, password: 'synthetic-only', address: 'ws://synthetic.invalid', connectionTimeoutMs: 5000,
   } });
-  const bus = createEventBus({ debugEnabled: false });
+  const bus = createEventBus();
   const config = createConfigFixture();
   expect(config.general.envFileReadEnabled).toBe(false);
   expect(config.general.envFileWriteEnabled).toBe(false);

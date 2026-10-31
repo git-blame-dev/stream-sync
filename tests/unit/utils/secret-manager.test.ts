@@ -198,7 +198,7 @@ describe("secret-manager", () => {
     });
 
     expect(result.missingRequired).toEqual([]);
-    expect(logger.entries.filter((entry) => entry.level === "debug").map((entry) => entry.message)).toEqual(["Using TIKTOK_API_KEY", "Using TWITCH_CLIENT_SECRET", "Using OBS_PASSWORD", "Using STREAMELEMENTS_JWT_TOKEN"]);
+    expect(logger.entries.filter((entry) => entry.level === "debug")).toEqual([]);
     expect(process.env.TIKTOK_API_KEY).toBe("env_tiktok_key");
     expect(process.env.OBS_PASSWORD).toBe("env_obs_password");
     expect(envFilePath in fileStore).toBe(false);
@@ -234,7 +234,7 @@ describe("secret-manager", () => {
       promptFor,
     });
 
-    expect(logger.entries.filter((entry) => entry.level === "info").map((entry) => entry.message)).toEqual(["Using prompted TIKTOK_API_KEY for this process", "Using prompted TWITCH_CLIENT_SECRET for this process", "Using prompted OBS_PASSWORD for this process", "Using prompted STREAMELEMENTS_JWT_TOKEN for this process"]);
+    expect(logger.entries.filter((entry) => entry.level === "debug").map((entry) => entry.message)).toEqual(["Using prompted TIKTOK_API_KEY for this process", "Using prompted TWITCH_CLIENT_SECRET for this process", "Using prompted OBS_PASSWORD for this process", "Using prompted STREAMELEMENTS_JWT_TOKEN for this process"]);
     const envContent = fileStore[envFilePath];
     expect(envContent).toContain("EXISTING=keep");
     expect(envContent).toContain("TIKTOK_API_KEY=prompt_tiktok");
@@ -558,6 +558,6 @@ describe("secret-manager", () => {
     });
 
     expect(result.missingRequired).toEqual([]);
-    expect(debugCalls).toBeGreaterThan(0);
+    expect(debugCalls).toBe(0);
   });
 });

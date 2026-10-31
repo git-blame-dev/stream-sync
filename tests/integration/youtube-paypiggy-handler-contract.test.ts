@@ -76,7 +76,7 @@ describe("YouTube paypiggy handler contract (integration)", () => {
   });
 
   test("forwards membership chat events through lifecycle default handlers to event bus", async () => {
-    const eventBus = createEventBus({ debugEnabled: false });
+    const eventBus = createEventBus();
     const lifecycle = new PlatformLifecycleService({
       config: {
         youtube: {

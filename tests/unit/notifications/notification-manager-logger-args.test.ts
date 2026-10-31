@@ -119,7 +119,7 @@ describe("NotificationManager logger argument order", () => {
   }
 
   describe("spam detection logging", () => {
-    it("logs suppression message with platform as source when spam blocks a gift", async () => {
+    it("suppresses spam without logging donor identity", async () => {
       const mockSpamDetector = {
         handleDonationSpam: createMockFn().mockReturnValue({
           shouldShow: false,
@@ -141,17 +141,9 @@ describe("NotificationManager logger argument order", () => {
         false,
       );
 
-      const spamCall = spyLogger.debug.mock.calls.find(
-        ([msg]) =>
-          typeof msg === "string" && msg.includes("Spam gift suppressed"),
-      );
-      expect(spamCall).toBeDefined();
-      if (spamCall === undefined) {
-        throw new Error("Expected spam suppression debug log");
-      }
-      const [message, source] = spamCall;
-      expect(message).toContain("TestUser");
-      expect(source).toBe("tiktok");
+      expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalledTimes(1);
+      expect(spyLogger.debug).not.toHaveBeenCalled();
+      expect(spyLogger.info).not.toHaveBeenCalled();
     });
 
     it("logs error with platform as source when spam detection throws", async () => {
@@ -191,10 +183,10 @@ describe("NotificationManager logger argument order", () => {
   });
 
   describe("debug notification logging", () => {
-    it("logs generated message with platform as source when debug enabled", async () => {
+    it("prepares the display item without a duplicate presentation log when debug enabled", async () => {
       const manager = createManager();
 
-      await manager.handleNotificationInternal(
+      const result = await manager.handleNotificationInternal(
         "platform:gift",
         "twitch",
         {
@@ -208,16 +200,9 @@ describe("NotificationManager logger argument order", () => {
         false,
       );
 
-      const platformLogCall = spyLogger.info.mock.calls.find(
-        ([, src]) => src === "twitch",
-      );
-      expect(platformLogCall).toBeDefined();
-      if (platformLogCall === undefined) {
-        throw new Error("Expected platform info log");
-      }
-      const [message, source] = platformLogCall;
-      expect(message).toContain("TestUser");
-      expect(source).toBe("twitch");
+      expect(result).toMatchObject({ success: true, platform: "twitch" });
+      expect(spyLogger.info).not.toHaveBeenCalled();
+      expect(spyLogger.debug).not.toHaveBeenCalled();
     });
   });
 });

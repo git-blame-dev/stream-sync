@@ -17,7 +17,7 @@ function createSceneEventBusAdapter(): SceneEventBus & {
   getListenerSummary: ReturnType<typeof createEventBus>["getListenerSummary"];
   reset: ReturnType<typeof createEventBus>["reset"];
 } {
-  const eventBus = createEventBus({ debugEnabled: false });
+  const eventBus = createEventBus();
 
   return {
     subscribe(eventName, handler) {

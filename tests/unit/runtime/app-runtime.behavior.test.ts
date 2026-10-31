@@ -158,41 +158,6 @@ describe('AppRuntime with production main owners', () => {
     expect(items()[0]?.type).toBe('platform:gift');
   });
 
-  for (const fault of [new Error('Synthetic manager logging Error'), 'Synthetic manager logging string']) {
-    it(`contains actual manager logging rejection (${fault instanceof Error ? 'Error' : 'string'}) and admits healthy recovery`, async () => {
-      const manager = h.runtime.notificationManager as NotificationManager;
-      const logger = manager.logger;
-      const enabled = h.config.youtube.giftsEnabled;
-      const handling = spyOn(manager, 'handleNotification');
-      const diagnostic = '[youtube] platform:gift notifications disabled, skipping for synthetic-viewer';
-      let diagnosticCalls = 0;
-      h.config.youtube.giftsEnabled = false;
-      manager.logger = { ...noOpLogger, debug: (message: unknown) => {
-        if (message === diagnostic) { diagnosticCalls++; throw fault; }
-      } };
-      try {
-        expect(await h.runtime.handleGiftNotification('youtube', 'synthetic-viewer', gift)).toEqual({
-          success: false, error: fault instanceof Error ? fault.message : fault,
-          notificationType: 'platform:gift', platform: 'youtube', username: 'synthetic-viewer',
-        });
-        expect(diagnosticCalls).toBe(1);
-        expect(handling).toHaveBeenCalledTimes(1);
-        await expect(handling.mock.results[0]?.value).rejects.toBe(fault);
-        expect(items()).toHaveLength(0);
-        expect(h.rows).toHaveLength(0);
-        manager.logger = logger;
-        h.config.youtube.giftsEnabled = true;
-        expect(await h.runtime.handleGiftNotification('youtube', 'synthetic-viewer', gift)).toMatchObject({ success: true });
-        expect(handling).toHaveBeenCalledTimes(2);
-        expect(items()).toHaveLength(1);
-        expect(items()[0]).toMatchObject({ type: 'platform:gift', platform: 'youtube', data: { username: 'synthetic-viewer', amount: 5 } });
-      } finally {
-        manager.logger = logger; h.config.youtube.giftsEnabled = enabled;
-        try { await h.runtime.shutdown(); } finally { handling.mockRestore(); }
-      }
-    });
-  }
-
   it('preserves anonymous and marked YouTube jewels inputs through the actual manager', async () => {
     expect(await h.runtime.handleGiftNotification('twitch', undefined, { ...gift, userId: undefined, isAnonymous: true, currency: 'bits' })).toMatchObject({ success: true });
     expect(await h.runtime.handleGiftNotification('youtube', 'synthetic-viewer', { ...gift, id: 'synthetic-jewels', userId: undefined, amount: undefined, currency: 'jewels', metadata: { missingFields: ['amount', 'userId'] } })).toMatchObject({ success: true });
@@ -246,12 +211,8 @@ describe('AppRuntime with production main owners', () => {
     expect(Reflect.get(h.runtime, 'recordPlatformConnection')).toBeUndefined();
   });
 
-  it('retains the public YouTube reconnect seam with actual initialization, contained failure and recovery', async () => {
-    let failing = false;
-    const failure = new Error('Synthetic YouTube initialization logging failure');
-    const logger = { ...noOpLogger, info: (message: unknown) => {
-      if (failing && message === 'Initializing YouTube platform with retry system...') throw failure;
-    } };
+  it('retains the public YouTube reconnect seam with actual repeated initialization and disposal', async () => {
+    const logger = noOpLogger;
     const config = { ...h.config.youtube, username: 'synthetic-channel', enabled: false,
       enableAPI: false, dataLoggingEnabled: false, envFileReadEnabled: false, envFileWriteEnabled: false };
     const dependencies = new DependencyFactory().createYoutubeDependencies(config, { config: h.config, logger });
@@ -262,8 +223,7 @@ describe('AppRuntime with production main owners', () => {
       platform = new YouTubePlatform(config, dependencies);
       h.runtime.youtube = platform as unknown as NonNullable<AppRuntime['youtube']>;
       const initialize = spyOn(platform, 'initialize');
-      const warning = spyOn(h.runtime.logger, 'warn');
-      restore = () => { initialize.mockRestore(); warning.mockRestore(); };
+      restore = () => { initialize.mockRestore(); };
       const event = { eventType: 'stream-detected', newStreamIds: ['synthetic-video'] };
       await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
       expect(initialize.mock.calls).toEqual([[{}, true]]);
@@ -273,21 +233,15 @@ describe('AppRuntime with production main owners', () => {
       await h.runtime.handleStreamDetected('youtube', { eventType: 'stream-detected', newStreamIds: [] });
       await h.runtime.handleStreamDetected('twitch', event);
       expect(initialize).toHaveBeenCalledTimes(1);
-      failing = true;
       await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
       expect(initialize.mock.calls).toEqual([[{}, true], [{}, true]]);
-      await expect(initialize.mock.results[1]?.value).rejects.toBe(failure);
-      expect(warning.mock.calls.filter(call => call[0] === '[EventHandler] YouTube reconnection attempted but may have already been processed')).toEqual([
-        ['[EventHandler] YouTube reconnection attempted but may have already been processed', 'AppRuntime'],
-      ]);
+      await expect(initialize.mock.results[1]?.value).resolves.toBeUndefined();
       expect(h.runtime.isStarted).toBe(true);
-      failing = false;
       await h.runtime.handleStreamDetected('youtube', event);
       expect(initialize.mock.calls).toEqual([[{}, true], [{}, true], [{}, true]]);
       await expect(initialize.mock.results[2]?.value).resolves.toBeUndefined();
       expect(platform.isInitialized).toBe(true);
     } finally {
-      failing = false;
       if (previous === undefined) delete h.runtime.youtube; else h.runtime.youtube = previous;
       try { await platform?.cleanup(); }
       finally { try { await dependencies.innertubeService.dispose(); } finally { restore(); } }
@@ -400,8 +354,8 @@ describe('AppRuntime with production main owners', () => {
       }
     });
 
-    for (const diagnosticFails of [false, true]) {
-      it(`retires actual detector before held funding during ${mode}, diagnostic failure ${diagnosticFails}`, async () => {
+    {
+      it(`retires actual detector before held funding during ${mode}`, async () => {
         const entered = Promise.withResolvers<void>();
         const release = Promise.withResolvers<void>();
         const filePath = join(h.dir, 'held-funding.json');
@@ -428,15 +382,9 @@ describe('AppRuntime with production main owners', () => {
         });
         useFakeTimers();
         const timerBaseline = getTimerCount();
-        let diagnosticCalls = 0;
         const detector = createDonationSpamDetection(createSpamDetectionConfig({ enabled: true,
           lowValueThreshold: 10, detectionWindow: 10, maxIndividualNotifications: 1 }, { logger: noOpLogger }), {
-          logger: { ...noOpLogger, debug: (message: unknown) => {
-            if (message === 'Periodic cleanup interval cleared') {
-              diagnosticCalls++;
-              if (diagnosticFails) throw new Error('Synthetic detector cleanup logging failure');
-            }
-          } }, onAggregatedDonation: payload => manager.handleAggregatedDonation(payload),
+          logger: noOpLogger, onAggregatedDonation: payload => manager.handleAggregatedDonation(payload),
         });
         manager.donationSpamDetector = detector;
         h.runtime.fundingGoal = funding;
@@ -454,7 +402,6 @@ describe('AppRuntime with production main owners', () => {
           stopping = h.runtime[mode]().then(() => { completed = true; });
           expect(detector.cleanupInterval).toBeNull();
           expect(detector.getStatistics().trackedUsers).toBe(0);
-          expect(diagnosticCalls).toBe(1);
           expect(getTimerCount()).toBe(timerBaseline);
           await disposalEntered.promise;
           expect(disposing).toHaveBeenCalledTimes(1);
@@ -594,17 +541,6 @@ describe('AppRuntime with production main owners', () => {
       expect(runtime.platforms).toEqual({});
     } finally { await runtime.shutdown(); await auth.dispose(); }
   });
-
-  for (const diagnostic of ['Registering event handlers...', 'Event handlers registered successfully', 'Constructor completed']) {
-    it(`unwinds real constructor subscriptions after ${diagnostic}`, () => {
-      const baseline = h.bus.getListenerSummary();
-      const failure = new Error('Synthetic constructor logging sink failure');
-      const logging = { ...h.runtime.logger, ...noOpLogger, debug: (message: unknown) => { if (message === diagnostic) throw failure; } };
-      expect(() => new AppRuntime(h.config, { ...h.runtime.dependencies, logging })).toThrow(failure);
-      expect(h.bus.getListenerSummary()).toEqual(baseline);
-    });
-  }
-
 
   for (const mode of ['shutdown', 'rollbackStartup', 'automatic-rollback'] as const) {
     it(`joins actual early OBS observer initialization during ${mode}`, async () => {
@@ -807,20 +743,6 @@ describe('AppRuntime with production main owners', () => {
     }
   });
 
-
-  it('contains an actual early viewer initialization logging failure without starting polling', async () => {
-    let failures = 0;
-    const logging = { ...noOpLogger, info: (message: unknown) => {
-      if (typeof message === 'string' && message.startsWith('Viewer count system initialized')) throw new Error('Synthetic viewer initialization logging failure');
-    }, error: () => { failures++; } };
-    const runtime = new AppRuntime(h.config, { ...h.runtime.dependencies, logging });
-    try {
-      await runtime.startViewerCountSystemEarly();
-      expect(failures).toBe(1);
-      expect(runtime.viewerCountSystem.isPolling).toBe(false);
-      expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
-    } finally { await runtime.rollbackStartup(); }
-  });
 
   it("throws when unified notification options are missing", async () => {
     const runtime = h.runtime;

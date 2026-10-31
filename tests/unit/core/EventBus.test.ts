@@ -6,14 +6,6 @@ import { waitForDelay } from '../../helpers/time-utils';
 import { EventBus, createEventBus } from '../../../src/core/EventBus.ts';
 import { PlatformEvents } from '../../../src/interfaces/PlatformEvents.ts';
 
-type AssertTrue<T extends true> = T;
-type IsExact<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)
-  ? ((<T>() => T extends B ? 1 : 2) extends (<T>() => T extends A ? 1 : 2) ? true : false)
-  : false;
-type _EventBusSetDebugEnabledType = AssertTrue<
-    IsExact<Parameters<EventBus['setDebugEnabled']>[0], boolean>
->;
-
 type EventStatsSnapshot = ReturnType<EventBus['getEventStats']>;
 
 type HandlerErrorEvent = {
@@ -60,7 +52,7 @@ describe('EventBus', () => {
     beforeEach(() => {
         useFakeTimers();
         clearAllMocks();
-        eventBus = new EventBus({ debugEnabled: true });
+        eventBus = new EventBus({});
     });
     
     afterEach(() => {
@@ -73,7 +65,6 @@ describe('EventBus', () => {
     describe('Constructor and Initialization', () => {
         test('should create EventBus with default options', () => {
             const bus = new EventBus();
-            expect(bus.debugEnabled).toBe(false);
             expect(bus.maxListeners).toBe(50);
             expect(bus.eventStats).toBeInstanceOf(Map);
             expect(bus.getMaxListeners()).toBe(50);
@@ -81,17 +72,10 @@ describe('EventBus', () => {
 
         test('should create EventBus with custom options', () => {
             const bus = new EventBus({ 
-                debugEnabled: true, 
                 maxListeners: 100 
             });
-            expect(bus.debugEnabled).toBe(true);
             expect(bus.maxListeners).toBe(100);
             expect(bus.getMaxListeners()).toBe(100);
-        });
-
-        test('should enable debug mode when debugEnabled is true', () => {
-            const bus = new EventBus({ debugEnabled: true });
-            expect(bus.debugEnabled).toBe(true);
         });
 
         test('should bind methods to preserve context', () => {
@@ -492,53 +476,6 @@ describe('EventBus', () => {
         });
     });
 
-    describe('Debug Logging', () => {
-        test('should track subscription when debug enabled', () => {
-            const handler = createMockFn();
-            eventBus.subscribe('test-event', handler);
-            
-            expect(eventBus.listenerCount('test-event')).toBe(1);
-            expect(eventBus.debugEnabled).toBe(true);
-        });
-
-        test('should track emission when debug enabled', () => {
-            eventBus.emit('test-event', 'data');
-            
-            expect(eventBus.debugEnabled).toBe(true);
-        });
-
-        test('should track handler execution when debug enabled', async () => {
-            const handler = createMockFn();
-            eventBus.subscribe('test-event', handler);
-            
-            eventBus.emit('test-event', 'data');
-
-            await settleHandlers();
-            
-            expect(handler).toHaveBeenCalledTimes(1);
-            expect(eventBus.debugEnabled).toBe(true);
-        });
-
-        test('should not log when debug disabled', () => {
-            const quietBus = new EventBus({ debugEnabled: false });
-            const handler = createMockFn();
-
-            quietBus.subscribe('test-event', handler);
-            quietBus.emit('test-event');
-
-            expect(quietBus.debugEnabled).toBe(false);
-            expect(handler).toHaveBeenCalledTimes(1);
-        });
-
-        test('should toggle debug logging', () => {
-            eventBus.setDebugEnabled(false);
-            expect(eventBus.debugEnabled).toBe(false);
-            
-            eventBus.setDebugEnabled(true);
-            expect(eventBus.debugEnabled).toBe(true);
-        });
-    });
-
     describe('Event Statistics', () => {
         test('should track event emission statistics', () => {
             const handler = createMockFn();
@@ -704,10 +641,9 @@ describe('EventBus', () => {
 
     describe('Factory Function', () => {
         test('should create EventBus instance via factory', () => {
-            const bus = createEventBus({ debugEnabled: true, maxListeners: 25 });
+            const bus = createEventBus({ maxListeners: 25 });
             
             expect(bus).toBeInstanceOf(EventBus);
-            expect(bus.debugEnabled).toBe(true);
             expect(bus.maxListeners).toBe(25);
         });
 
@@ -715,7 +651,6 @@ describe('EventBus', () => {
             const bus = createEventBus();
             
             expect(bus).toBeInstanceOf(EventBus);
-            expect(bus.debugEnabled).toBe(false);
             expect(bus.maxListeners).toBe(50);
         });
     });

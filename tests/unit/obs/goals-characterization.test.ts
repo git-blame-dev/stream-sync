@@ -70,3 +70,40 @@ test('five memberships update the real tracker without output while OBS is disco
     }]);
   } finally { await h.dispose(); }
 });
+
+test('goal status and state survive a missing configured source and an actual failed OBS write', async () => {
+  const h = await createMainPresentationFixture();
+  h.config.logging.file.enabled = false;
+  Object.assign(h.config.goals, { enabled: true, tiktokGoalEnabled: true, youtubeGoalEnabled: true, twitchGoalEnabled: true,
+    tiktokGoalSource: '', youtubeGoalSource: 'synthetic-youtube-goal', twitchGoalSource: 'synthetic-twitch-goal' });
+  try {
+    await h.start();
+    const tracker = createGoalTracker({ config: h.config });
+    const sources = createOBSSourcesManager(h.obs);
+    const goals = createOBSGoalsManager(h.obs, { config: h.config, goalTracker: tracker, updateTextSource: sources.updateTextSource });
+    await goals.initializeGoalDisplay();
+    h.socket.writes.length = 0;
+    await goals.updateGoalDisplay('tiktok');
+    expect(h.socket.writes).toEqual([]);
+    expect(Object.keys(goals.getAllCurrentGoalStatuses()).sort()).toEqual(['tiktok', 'twitch', 'youtube']);
+    const before = goals.getCurrentGoalStatus('tiktok');
+    expect(before).not.toBeNull();
+    Object.assign(h.config.goals, { tiktokGoalSource: 'synthetic-tiktok-goal' });
+    const call = h.socket.call.bind(h.socket);
+    h.socket.call = async (method, data) => {
+      if (method === 'SetInputSettings') throw new Error('Synthetic OBS write failure');
+      return call(method, data);
+    };
+    expect(await goals.processDonationGoal('tiktok', 1, 'coins')).toMatchObject({ success: true });
+    expect(goals.getCurrentGoalStatus('tiktok')?.current).not.toBe(before?.current);
+    expect(h.socket.writes).toEqual([]);
+    h.socket.call = call;
+    await goals.updateGoalDisplay('tiktok');
+    expect(h.socket.writes).toHaveLength(1);
+    h.config.goals.enabled = false;
+    expect(goals.getCurrentGoalStatus('tiktok')).toBeNull();
+    expect(goals.getAllCurrentGoalStatuses()).toEqual({});
+    expect(await goals.processDonationGoal('tiktok', 1, 'coins')).toMatchObject({ success: false });
+    expect(await goals.processPaypiggyGoal('tiktok')).toMatchObject({ success: false });
+  } finally { await h.dispose(); }
+});

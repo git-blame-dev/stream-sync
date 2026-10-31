@@ -174,9 +174,10 @@ class ViewerCountExtractionService {
     async extractViewerCount(videoId: string, options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse> {
         const startTime = performance.now();
         this.stats.totalRequests++;
+        let stage: 'request' | 'parse' = 'request';
         
         try {
-            this.logger?.debug?.('[ViewerCountExtraction] Extracting viewer count', 'viewer-extraction');
+
             
             const extractionResult = await this.innertubeService.withMetadataOperation({
                 timeoutMs: resolvePositiveNumber(options.timeout, this.config.timeout),
@@ -184,6 +185,7 @@ class ViewerCountExtractionService {
             }, async client => {
                 const info = await client.getInfo(videoId, { client: 'WEB' });
                 options.signal?.throwIfAborted();
+                stage = 'parse';
                 const result = this.YouTubeViewerExtractor.extractConcurrentViewers(
                     info && typeof info === 'object' && !Array.isArray(info) ? info as Record<string, unknown> : {},
                     {
@@ -200,10 +202,7 @@ class ViewerCountExtractionService {
             this._updateStats(success, responseTime);
             
             if (success) {
-                this.logger?.debug?.(
-                    `[ViewerCountExtraction] Successfully extracted ${extractionResult.count} viewers`,
-                    'viewer-extraction'
-                );
+
                 
                 const metadata = toMetadataRecord(extractionResult.metadata);
                 return {
@@ -235,7 +234,7 @@ class ViewerCountExtractionService {
             const responseTime = performance.now() - startTime;
             this._updateStats(false, responseTime, error);
             
-            this._handleExtractionError(EXTRACTION_FAILURE, new Error(EXTRACTION_FAILURE));
+            this._handleExtractionError(`${EXTRACTION_FAILURE} during ${stage} (${getErrorType(error)})`, new Error(EXTRACTION_FAILURE));
             
             return {
                 success: false,
@@ -253,7 +252,7 @@ class ViewerCountExtractionService {
         const maxConcurrency = requested === 0 ? 3 : Math.min(5, requested);
         const results: ExtractionResponse[] = [];
         
-        this.logger?.debug?.(`[ViewerCountExtraction] Batch extracting ${videoIds.length} videos with concurrency ${maxConcurrency}`, 'viewer-extraction');
+
         
         // Process in batches to avoid overwhelming the service
         for (let i = 0; i < videoIds.length; i += maxConcurrency) {
@@ -303,7 +302,7 @@ error?: string;
             };
         }
         
-        this.logger?.debug?.(`[ViewerCountExtraction] Aggregating viewer count from ${videoIds.length} streams`, 'viewer-extraction');
+
         
         const results = await this.extractViewerCountsBatch(videoIds, options);
         
@@ -337,10 +336,6 @@ error?: string;
         });
 
         if (failedStreams > 0 || !safeTotal || results.length !== videoIds.length) {
-            this.logger?.debug?.(
-                `[ViewerCountExtraction] Aggregation unavailable: ${successfulStreams}/${videoIds.length} streams extracted successfully; safe total: ${safeTotal}`,
-                'viewer-extraction'
-            );
 
             return {
                 success: false,
@@ -352,10 +347,7 @@ error?: string;
             };
         }
         
-        this.logger?.debug?.(
-            `[ViewerCountExtraction] Aggregation complete: ${totalCount} total viewers from ${successfulStreams}/${videoIds.length} streams`, 
-            'viewer-extraction'
-        );
+
         
         return {
             success: true,
@@ -383,7 +375,7 @@ updateConfig(newConfig: Record<string, unknown> | null | undefined): void {
             debug: resolveBoolean(newConfig.debug, this.config.debug),
             retries: resolveNonNegativeInteger(newConfig.retries, this.config.retries)
         };
-        this.logger?.debug?.('[ViewerCountExtraction] Configuration updated', 'viewer-extraction');
+
     }
     
 _updateStats(success: boolean, responseTime: number, error: unknown = null): void {

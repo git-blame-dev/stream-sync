@@ -61,8 +61,6 @@ class PlatformInitializationManager {
         this.initializationState = {};
         this.allowReinitialization = false;
         this.maxAttempts = 5;
-
-        this.logger.debug('PlatformInitializationManager created', this.platformName);
     }
 
     isInitialized(): boolean {
@@ -85,14 +83,11 @@ class PlatformInitializationManager {
 
         if (this.isInitialized() && !forceReinitialize && !this.allowReinitialization) {
             this.preventedReinitializations += 1;
-            this.logger.warn(
+            this.logger.debug(
                 `Already initialized, skipping reinitialization attempt #${this.preventedReinitializations}`,
                 this.platformName
             );
-            this.logger.debug(
-                `Prevented reinitialization attempt ${this.preventedReinitializations}`,
-                this.platformName
-            );
+
             return false;
         }
 
@@ -179,8 +174,6 @@ class PlatformInitializationManager {
         this.initializationAttempts = 0;
         this.preventedReinitializations = 0;
         this.initializationState = {};
-
-        this.logger.debug('Initialization state reset', this.platformName);
     }
 
     configure(options: InitializationConfig = {}): void {
@@ -191,8 +184,6 @@ class PlatformInitializationManager {
         if (typeof options.maxAttempts === 'number' && options.maxAttempts > 0) {
             this.maxAttempts = options.maxAttempts;
         }
-
-        this.logger.debug('Initialization manager configured', this.platformName, options);
     }
 
     private handleInitializationError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null): void {

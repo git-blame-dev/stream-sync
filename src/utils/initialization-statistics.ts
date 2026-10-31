@@ -132,8 +132,6 @@ class InitializationStatistics {
         };
         this.firstInitializationTime = null;
         this.lastInitializationTime = null;
-
-        this.logger.debug('InitializationStatistics tracker created', this.platformName);
     }
 
     startInitializationAttempt(metadata: Record<string, unknown> = {}): string {
@@ -202,7 +200,7 @@ class InitializationStatistics {
         this.appendPerformanceMetric('dependencyResolutionTime', metrics.dependencyTime);
 
         this.logger.debug(
-            `Initialization successful in ${duration}ms (attempt ${this.totalAttempts})`,
+            `Initialization attempt completed in ${duration}ms (attempt ${this.totalAttempts})`,
             this.platformName
         );
     }
@@ -375,8 +373,6 @@ class InitializationStatistics {
         this.firstInitializationTime = null;
         this.lastInitializationTime = null;
         this.activeAttempts.clear();
-
-        this.logger.debug('Initialization statistics reset', this.platformName);
     }
 
     private appendPerformanceMetric(metric: keyof PerformanceBuckets, value: unknown): void {

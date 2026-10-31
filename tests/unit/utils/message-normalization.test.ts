@@ -80,7 +80,7 @@ describe("Canonical normalization residuals", () => {
       cheermoteInfo: { totalBits: 150, count: 2, textContent: "" } });
   });
 
-  test("debug diagnostics retain lengths and flags, not chat bodies or identity strings", () => {
+  test("normalizes chat without emitting per-message diagnostics", () => {
     const calls: unknown[][] = [];
     const debug = spyOn(getUnifiedLogger(), "debug").mockImplementation((...args) => { calls.push(args); });
     try {
@@ -88,11 +88,10 @@ describe("Canonical normalization residuals", () => {
       extractYouTubeMessageText({ text: "synthetic-private-body" });
       normalizeYouTubeMessage(youtubeItem({ message: "synthetic-private-body" }));
       normalizeTikTokMessage(tiktokData({ comment: "synthetic-private-body" }));
-      expect(calls.length).toBeGreaterThan(0);
+      expect(calls).toEqual([]);
       const output = JSON.stringify(calls);
       expect(output).not.toContain("synthetic-private-body");
       expect(output).not.toContain("Synthetic Viewer");
-      expect(output).toContain("Length");
     } finally { debug.mockRestore(); }
   });
 

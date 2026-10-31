@@ -125,11 +125,9 @@ class TwitchApiClient {
                 });
             };
 
-            this.logger.debug('Making Twitch API request', 'twitch-api');
-
             try {
                 const response = await executeRequest();
-                this.logger.debug(`Twitch API response received`, 'twitch-api');
+
                 return response.data;
             } catch (error) {
                 signal.throwIfAborted();

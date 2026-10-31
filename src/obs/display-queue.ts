@@ -552,7 +552,7 @@ class DisplayQueue {
         for (const item of this.activeSequenceRemaining) this.retire(item);
         this.activeSequenceRemaining = [];
         for (const [item, record] of this.records) if (!record.active) this.retire(item);
-        logger.debug('[Display Queue] Queue cleared', 'display-queue');
+
     }
 
     stop(): Promise<void> {
@@ -636,7 +636,7 @@ function initializeDisplayQueue(
 ) {
     if (!displayQueueInstance) {
         displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus, dependencies);
-        logger.debug('Display Queue system initialized.');
+
     } else {
         displayQueueInstance.obsManager = obsManager;
         displayQueueInstance.effects.obsManager = obsManager;

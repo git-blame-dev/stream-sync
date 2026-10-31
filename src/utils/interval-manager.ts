@@ -54,8 +54,6 @@ class IntervalManager {
         this.intervalCount = 0;
         this.totalIntervalsCreated = 0;
         this.totalIntervalsCleaned = 0;
-
-        this.logger.debug('IntervalManager initialized', this.platformName);
     }
 
     createInterval(
@@ -66,7 +64,6 @@ class IntervalManager {
         options: Record<string, unknown> = {}
     ): ReturnType<typeof globalThis.setInterval> {
         if (this.activeIntervals.has(name)) {
-            this.logger.debug(`Cleaning up existing interval '${name}' before creating new one`, this.platformName);
             this.clearInterval(name);
         }
 
@@ -102,11 +99,6 @@ class IntervalManager {
             action: 'created'
         });
 
-        this.logger.debug(
-            `Created ${type} interval '${name}' (${effectiveIntervalMs}ms) with ID: ${String(intervalId)}`,
-            this.platformName
-        );
-
         return intervalId;
     }
 
@@ -114,7 +106,6 @@ class IntervalManager {
         const intervalInfo = this.activeIntervals.get(name);
 
         if (!intervalInfo) {
-            this.logger.debug(`No active interval found with name '${name}'`, this.platformName);
             return false;
         }
 
@@ -128,11 +119,6 @@ class IntervalManager {
             clearedAt: getSystemTimestampISO(),
             duration: Date.now() - new Date(intervalInfo.startTime).getTime()
         });
-
-        this.logger.debug(
-            `Cleared ${intervalInfo.type} interval '${name}' (ID: ${String(intervalInfo.id)})`,
-            this.platformName
-        );
 
         return true;
     }
@@ -154,11 +140,6 @@ class IntervalManager {
                 clearedCount += 1;
             }
         }
-
-        this.logger.debug(
-            `Cleared ${clearedCount} intervals${type ? ` of type '${type}'` : ''}`,
-            this.platformName
-        );
 
         return clearedCount;
     }
@@ -234,12 +215,7 @@ class IntervalManager {
     }
 
     cleanup(): void {
-        const clearedCount = this.clearAllIntervals();
-
-        this.logger.info(
-            `IntervalManager cleanup complete: cleared ${clearedCount} intervals`,
-            this.platformName
-        );
+        this.clearAllIntervals();
 
         this.intervalCount = 0;
     }

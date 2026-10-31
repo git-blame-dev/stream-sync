@@ -79,12 +79,9 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     }
 
     override async initialize() {
-        this.logger.info('Initializing OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
-        
+
         if (this.obsManager && this.obsManager.isConnected()) {
             await this.initializeObsViewerCounts();
-        } else {
-            this.logger.debug('OBS not connected during observer initialization', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         }
     }
 
@@ -99,15 +96,13 @@ class OBSViewerCountObserver extends ViewerCountObserver {
                 this.logger.debug(`Could not initialize ${platformName} viewer count (source may not exist): ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             }
         }
-        
-        this.logger.info('Observed viewer snapshots replayed to OBS', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
+
     }
 
     override async onViewerCountUpdate(update: ViewerCountUpdate) {
         const { platform, count, isStreamLive } = update;
         
         if (!isStreamLive && !(platform.toLowerCase() === 'youtube' && update.observationKind === 'complete')) {
-            this.logger.debug(`Skipping OBS update for ${platform} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
         }
 
@@ -122,7 +117,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         const { platform, isLive, wasLive } = statusUpdate;
         
         if (platform.toLowerCase() !== 'youtube' && wasLive && !isLive) {
-            this.logger.info(`Stream went offline for ${platform}, resetting viewer count to 0`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             try {
                 await this.updateObsCount(platform, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
             } catch (error: unknown) {
@@ -130,7 +124,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             }
         }
         
-        this.logger.info(`OBS observer notified of ${platform} status change: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
     validateObsUpdateParameters(platformName: unknown, count: unknown) {
@@ -170,13 +163,11 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
 
         if (!this.obsManager || !this.obsManager.isConnected()) {
-            this.logger.debug(VIEWER_COUNT_CONSTANTS.ERROR_MESSAGES.MISSING_OBS_CONNECTION, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
         }
 
         const platformConfig = this.config[platformName.toLowerCase()];
         if (!platformConfig || !platformConfig.viewerCountEnabled) {
-            this.logger.debug(`Viewer count not enabled for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
         }
 
@@ -214,9 +205,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
     }
 
-    override async cleanup() {
-        this.logger.info('Cleaning up OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
-    }
 }
 
 export { OBSViewerCountObserver };

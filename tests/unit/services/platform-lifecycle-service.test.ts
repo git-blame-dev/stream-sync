@@ -721,15 +721,13 @@ describe("PlatformLifecycleService", () => {
   });
 
   describe("Platform Instance Creation", () => {
-    it("retires local detection when diagnostics fail between dependency acquisition and construction", async () => {
-      const failure = new Error("synthetic construction diagnostic failure");
+    it("retires local detection when platform construction fails", async () => {
+      const failure = new Error("synthetic platform construction failure");
       let stopped = false;
-      const lifecycle = new PlatformLifecycleService({ logger: { ...noOpLogger, debug: message => {
-        if (message.includes("platform instance created via factory")) throw failure;
-      } }, dependencyFactory: { createYoutubeDependencies: () => ({
+      const lifecycle = new PlatformLifecycleService({ logger: noOpLogger, dependencyFactory: { createYoutubeDependencies: () => ({
         streamDetectionService: { cleanup: async () => { stopped = true; } },
       }) } });
-      await expect(lifecycle.createPlatformInstance("youtube", createPlatformConstructor(), {})).rejects.toBe(failure);
+      await expect(lifecycle.createPlatformInstance("youtube", createPlatformConstructor(() => { throw failure; }), {})).rejects.toBe(failure);
       expect(stopped).toBe(true);
     });
 

@@ -84,8 +84,6 @@ class GoalTracker {
 
     initializeGoalTracker() {
         try {
-            this.logger.debug('Initializing goal tracking system...', 'goal-tracker');
-
             this.goalState = createDefaultGoalState();
 
             if (this.config.goals.tiktokGoalEnabled) {
@@ -102,12 +100,6 @@ class GoalTracker {
                 this.goalState.twitch.target = Number(this.config.goals.twitchGoalTarget);
                 this.goalState.twitch.currency = normalizeGoalCurrency(this.config.goals.twitchGoalCurrency || this.goalState.twitch.currency);
             }
-
-            this.logger.debug('Goal tracking system initialized successfully', 'goal-tracker');
-            this.logger.debug(
-                `Current state: twitch=${this.goalState.twitch.current}/${this.goalState.twitch.target} ${this.goalState.twitch.currency}, youtube=${this.goalState.youtube.current}/${this.goalState.youtube.target} ${this.goalState.youtube.currency}`,
-                'goal-tracker'
-            );
         } catch (error) {
             this._handleGoalTrackerError('[Goal Tracker] Error initializing goal tracker', error, {
                 method: 'initializeGoalTracker'
@@ -230,17 +222,17 @@ class GoalTracker {
                 case 'tiktok':
                     paypiggyAmount = membershipNativeUnits(this.config.monetizationValues?.tiktokMembershipUsd, this.config.monetizationValues?.tiktokGiftUnitUsd);
                     paypiggyCurrency = 'coins';
-                    this.logger.debug(`Converting TikTok paypiggy to ${paypiggyAmount} coins`, 'goal-tracker');
+
                     break;
                 case 'youtube':
                     paypiggyAmount = Number(this.config.monetizationValues?.youtubeMembershipUsd);
                     paypiggyCurrency = 'USD';
-                    this.logger.debug(`Converting YouTube paypiggy to $${paypiggyAmount}`, 'goal-tracker');
+
                     break;
                 case 'twitch':
                     paypiggyAmount = membershipNativeUnits(this.config.monetizationValues?.twitchMembershipUsd, this.config.monetizationValues?.twitchBitUsd);
                     paypiggyCurrency = 'bits';
-                    this.logger.debug(`Converting Twitch paypiggy to ${paypiggyAmount} bits`, 'goal-tracker');
+
                     break;
                 default:
                     return {

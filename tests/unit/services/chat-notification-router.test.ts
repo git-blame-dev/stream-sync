@@ -233,7 +233,7 @@ describe("ChatNotificationRouter", () => {
     expect(published).toHaveLength(0);
   });
 
-  it("logs routine chat summaries without removing display message content", async () => {
+  it("keeps private chat content in display rows without diagnostic payloads", async () => {
     mockLogger = createRecordingLogger();
     const { router, runtime } = createRouter();
 
@@ -250,7 +250,6 @@ describe("ChatNotificationRouter", () => {
       throw new Error("Expected queued chat row to contain a text message object");
     }
     expect(queuedMessage.text).toBe("test-private-router-message");
-    expect(serializedLogs).toContain("messageLength");
     expect(serializedLogs).not.toContain("test-private-router-message");
   });
 

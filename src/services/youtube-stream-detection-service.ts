@@ -183,8 +183,6 @@ class YouTubeStreamDetectionService {
                 return this._formatErrorResponse(error, options.debug, startTime, false);
             }
 
-            this.logger.debug?.('Detecting live streams for channel', 'youtube-stream-detection');
-
             if (!this.client || this._isShuttingDown) {
                 throw new Error('YouTube stream detection client is not configured');
             }

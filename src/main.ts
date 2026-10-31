@@ -715,8 +715,6 @@ async function main(overrides: MainOverrides = {}) {
         };
         guiGiftAnimationState.guiEnabled = guiGiftAnimationState.enableDock || guiGiftAnimationState.enableOverlay;
         guiGiftAnimationState.giftAnimationsEnabled = guiGiftAnimationState.guiEnabled && guiGiftAnimationState.showGifts;
-        
-        logger.debug('[Display Queue Config] GUI gift animation gating state', 'Main', guiGiftAnimationState);
 
         if (guiGiftAnimationState.giftAnimationsEnabled) {
             const giftAnimationDependencies = getGiftAnimationDependencyStatus();
@@ -734,13 +732,11 @@ async function main(overrides: MainOverrides = {}) {
         const displayQueueConstants = {
             PRIORITY_LEVELS: priorityLevels
         };
-        
-        logger.debug('Creating EventBus...', 'Main');
+
         const eventBus = createEventBusFn({ 
-            debugEnabled: config.general.debugEnabled,
             maxListeners: 100
         });
-        logger.debug('EventBus created', 'Main');
+
         fundingGoal = await createFundingGoalServiceFn({
             config: config.fundingGoal as unknown as FundingGoalConfig,
             monetizationValuesConfig: config.monetizationValues as unknown as MonetizationValuesConfig,
@@ -765,7 +761,6 @@ async function main(overrides: MainOverrides = {}) {
         construction.push(async () => { await provisionalObsService.disconnect?.(); });
         construction.push(() => obsSubsystem.effectsManager.dispose());
 
-        logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
             sourcesManager: obsSubsystem.sourcesManager,
             goalsManager: obsSubsystem.goalsManager,
@@ -792,23 +787,15 @@ async function main(overrides: MainOverrides = {}) {
                 displayQueueDependencies
             );
         construction.push(() => displayQueue.stop?.());
-        logger.debug('Display queue initialized', 'Main');
-        
-        logger.debug('Creating VFXCommandService...', 'Main');
+
         const vfxCommandService = createVFXCommandServiceFn(config, eventBus, {
             effectsManager: obsSubsystem.effectsManager
         });
-        logger.debug('VFXCommandService created', 'Main');
-        
-        logger.debug('Creating UserTrackingService...', 'Main');
+
         const userTrackingService = createUserTrackingServiceFn();
-        logger.debug('UserTrackingService created', 'Main');
 
-        logger.debug('Creating OBS event-driven services...', 'Main');
         const obsEventService = obsSubsystem.obsEventService;
-        logger.debug('OBSEventService created', 'Main');
 
-        logger.debug('About to create notification manager...', 'Main');
         const notificationManager = new NotificationManagerCtor({
             displayQueue: displayQueue,
             eventBus: eventBus,
@@ -819,8 +806,7 @@ async function main(overrides: MainOverrides = {}) {
             constants: coreConstants,
             textProcessing
         });
-        
-        logger.debug('Creating spam detection service...', 'Main');
+
         const spamConfig = createSpamDetectionConfigFn(config.spam, { logger });
         const donationSpamDetector = createDonationSpamDetectionFn(spamConfig, {
             logger,
@@ -828,8 +814,7 @@ async function main(overrides: MainOverrides = {}) {
         });
         construction.push(() => donationSpamDetector.destroy());
         notificationManager.donationSpamDetector = donationSpamDetector;
-        logger.debug('Spam detection service created and wired', 'Main');
-        
+
         if (config.twitch.enabled) {
             if (!authValid) {
                 logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
@@ -941,16 +926,12 @@ async function main(overrides: MainOverrides = {}) {
         }
         
         logger.info('Runtime main components are running. Holding process open.', 'system');
-        logger.debug('Runtime main components are running. Holding process open.', 'Main');
 
         if (!runtimeCliArgs.chat) {
-            logger.debug('Setting up keep-alive interval (graceful exit not enabled)', 'Main');
+
             const keepAliveInterval = safeSetInterval(() => {
                 try {
-                    const cleanedCount = clearExpiredGlobalCooldowns(300000);
-                    if (cleanedCount > 0) {
-                        logger.debug(`Periodic cleanup: removed ${cleanedCount} expired global cooldowns`, 'maintenance');
-                    }
+                    clearExpiredGlobalCooldowns(300000);
                 } catch (error) {
                     logMainError('Error during periodic global cooldown cleanup', error, null, { eventType: 'maintenance', logContext: 'maintenance' });
                 }
@@ -959,11 +940,8 @@ async function main(overrides: MainOverrides = {}) {
             if (app) {
                 app.keepAliveInterval = keepAliveInterval;
             }
-        } else {
-            logger.debug('Graceful exit enabled - no keep-alive interval needed', 'Main');
         }
 
-        logger.debug('Main function completing successfully', 'Main');
         return {
             success: true,
             appStarted: true,

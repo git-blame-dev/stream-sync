@@ -106,7 +106,6 @@ class OBSEffectsManager {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-effects');
     }
 
-
     private assertActive() {
         if (this.disposed) throw cancellationError('OBS effects manager is disposed');
     }
@@ -186,7 +185,7 @@ class OBSEffectsManager {
                 await this.awaitRequest(request, request.waiter.promise);
                 this.assertRequest(request);
             }
-            this.logger.debug(`[VFX] Successfully played media: ${commandConfig.filename}`, 'effects');
+
         } catch (error) {
             if (!request.reason) this._handleEffectsError(`[VFX] Failed to play media: ${commandConfig.filename}`, error, { command: commandConfig });
             throw error;

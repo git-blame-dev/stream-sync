@@ -436,7 +436,7 @@ class AppRuntime {
         if (!this.logger || typeof this.logger.debug !== 'function') {
             throw new Error('AppRuntime requires logger');
         }
-        this.logger.debug('[AppRuntime] Constructor starting...', 'system');
+
         this.config = config;
 
         this.twitchAuth = this.dependencies.twitchAuth;
@@ -559,7 +559,6 @@ class AppRuntime {
             });
             this.registerEventHandlers();
 
-            this.logger.debug('Constructor completed', 'AppRuntime');
             construction.length = 0;
         } catch (error) {
             while (construction.length > 0) {
@@ -581,8 +580,6 @@ class AppRuntime {
         if (!this.eventBus) {
             throw new Error('EventBus required for event handler registration');
         }
-
-        this.logger.debug('Registering event handlers...', 'AppRuntime');
 
         this.viewerCountStatusCleanup = wireStreamStatusHandlers({
             eventBus: this.eventBus,
@@ -664,7 +661,6 @@ class AppRuntime {
             }
         });
 
-        this.logger.debug('Event handlers registered successfully', 'AppRuntime');
     }
 
     async handleStreamDetected(platform: string, data: RuntimeRecord) {
@@ -689,11 +685,13 @@ class AppRuntime {
         this.logger.info(`[EventHandler] Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'AppRuntime');
 
         if (platform === 'youtube' && this.youtube && typeof this.youtube.initialize === 'function') {
-            this.logger.info(`[EventHandler] Triggering YouTube reconnection for ${newStreamIds.length} new stream(s)`, 'AppRuntime');
+            this.logger.debug(`Requesting YouTube reconnection for ${newStreamIds.length} discovered stream(s)`, 'AppRuntime');
             try {
                 await this.youtube.initialize({}, true);
-            } catch (_reconnectError) {
-                this.logger.warn('[EventHandler] YouTube reconnection attempted but may have already been processed', 'AppRuntime');
+            } catch (reconnectError) {
+                this._handleAppRuntimeError('YouTube reconnection request failed', reconnectError, null, {
+                    eventType: 'stream-detected', logContext: 'AppRuntime'
+                });
             }
         }
     }
@@ -706,16 +704,13 @@ class AppRuntime {
     }
 
     async initializePlatforms() {
-        this.logger.info('Initializing platform connections...', 'AppRuntime');
 
-        this.logger.debug('Loading platform modules...', 'AppRuntime');
         const {
             TikTokPlatform,
             TwitchPlatform,
             YouTubePlatform,
             StreamElementsPlatform
         } = await import('../platforms');
-        this.logger.debug('Platform modules loaded', 'AppRuntime');
 
         const platformModules = {
             twitch: TwitchPlatform,
@@ -726,31 +721,10 @@ class AppRuntime {
 
         await this.platformLifecycleService.initializeAllPlatforms(platformModules);
 
-        this.logger.debug('Platform initialization delegated to service', 'AppRuntime');
     }
 
     async handleChatMessage(platform: string, normalizedData: RuntimeRecord) {
         try {
-            const messageRecord = normalizedData.message && typeof normalizedData.message === 'object'
-                ? normalizedData.message as RuntimeRecord
-                : null;
-            const messageText = typeof normalizedData.message === 'string'
-                ? normalizedData.message
-                : (typeof messageRecord?.text === 'string' ? messageRecord.text : '');
-            this.logger.debug('Received chat message', 'chat-handler', {
-                platform,
-                username: normalizedData?.username,
-                messageLength: messageText.length,
-                hasMessageText: messageText.length > 0
-            });
-            if (platform === 'tiktok') {
-                this.logger.debug('[TikTok Debug] Message received in main handler', 'system', {
-                    username: normalizedData?.username,
-                    messageLength: messageText.length,
-                    hasMessageText: messageText.length > 0
-                });
-            }
-
             if (this.chatNotificationRouter) {
                 await this.chatNotificationRouter.handleChatMessage(platform, normalizedData);
             } else {
@@ -880,7 +854,7 @@ class AppRuntime {
         }
         try {
             this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
-            this.logger.debug('[Shutdown] Marking process exit code and scheduling forced-exit fallback', 'system');
+
         } catch {
             // Completion diagnostics must not prevent scheduling process termination.
         }
@@ -920,8 +894,6 @@ class AppRuntime {
     private async startRuntime() {
         this.isStarting = true;
 
-        this.logger.debug('Start method called...', 'AppRuntime');
-
         try {
             if (this.config.twitch?.enabled && this.twitchAuth?.isReady()) {
                 const lifecycle = this.platformLifecycleService;
@@ -951,7 +923,7 @@ class AppRuntime {
             }
 
             if (this._isTtsEnabled()) {
-                this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
+
                 try {
                     const neuralTtsProcessManager = this._getNeuralTtsProcessManager();
                     await neuralTtsProcessManager?.ensureStarted();
@@ -967,7 +939,6 @@ class AppRuntime {
             }
             this.assertActiveLifetime();
 
-            this.logger.debug('Initializing platforms...', 'AppRuntime');
             try {
                 await this.initializePlatforms();
                 this.assertActiveLifetime();
@@ -986,10 +957,7 @@ class AppRuntime {
                 );
                 throw error;
             }
-            this.logger.debug('Starting system initialization (OBS, ViewerCount)', 'AppRuntime');
-            this.logger.debug('ViewerCount system exists?', this.viewerCountSystem ? 'YES' : 'NO', 'AppRuntime');
 
-            this.logger.info('Initializing OBS connection...', 'AppRuntime');
             try {
                 const obsConnectionDependencies = {
                     handcam: this.config.handcam,
@@ -1000,11 +968,9 @@ class AppRuntime {
                 const { outcome } = await initializeOBSConnection(this.config.obs, {
                     ...obsConnectionDependencies
                 });
-                if (outcome === 'connected') {
-                    this.logger.info('OBS connected', 'AppRuntime');
-                } else if (outcome === 'disabled') {
+                if (outcome === 'disabled') {
                     this.logger.info('OBS integration disabled', 'AppRuntime');
-                } else {
+                } else if (outcome !== 'connected') {
                     this.logger.warn('OBS unavailable; continuing in degraded mode', 'AppRuntime');
                 }
             } catch (obsError) {
@@ -1024,20 +990,16 @@ class AppRuntime {
 
             const obsManager = this._getObsConnectionManager();
 
-            this.logger.info('Initializing goal display...', 'AppRuntime');
             const goalsManager = this._getDefaultGoalsManager();
             await goalsManager.initializeGoalDisplay();
             this.assertActiveLifetime();
-            this.logger.info('Goal display initialized', 'AppRuntime');
 
             const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config,
                 getViewerCountSnapshot: platform => this.viewerCountSystem.getViewerCountSnapshot(platform) });
             this.viewerCountSystem.addObserver(obsObserver);
-            this.logger.info('Initializing viewer count system...', 'AppRuntime');
-            this.logger.debug('Starting viewerCountSystem.initialize()', 'AppRuntime');
+
             await this.viewerCountSystem.initialize();
             this.assertActiveLifetime();
-            this.logger.debug('viewerCountSystem.initialize() completed', 'AppRuntime');
 
             await this.viewerCountSystem.startPolling();
             this.assertActiveLifetime();
@@ -1099,13 +1061,11 @@ class AppRuntime {
 
     private async initializeViewerCountSystemEarly() {
         try {
-            this.logger.debug('ViewerCount system initialization starting', 'AppRuntime');
 
             await this.viewerCountSystem.initialize();
             if (this.stopped) return;
-            this.logger.debug('ViewerCount system initialization completed', 'AppRuntime');
+
             await this.viewerCountSystem.startPolling();
-            this.logger.debug('ViewerCount system polling started successfully', 'AppRuntime');
 
         } catch (error) {
             this._handleAppRuntimeError(

@@ -99,7 +99,6 @@ class CommandCooldownService {
             this.loadCooldownConfig();
             this.registerConfigListeners();
             this.cleanupInterval = safeSetInterval(() => this.cleanupExpiredCooldowns(), 60000);
-            this.logger.debug('CommandCooldownService initialized', 'CommandCooldownService');
         } catch (error) {
             this.dispose();
             throw error;
@@ -122,7 +121,7 @@ class CommandCooldownService {
         if (this.userHeavyLimit.get(userId)) {
             const remainingTime = heavyCooldownMs - (now - lastCommandTime);
             if (remainingTime > 0) {
-                this.logger.debug(`User ${userId} is under heavy command limit (${Math.ceil(remainingTime / 1000)}s remaining)`, 'CommandCooldownService');
+                this.logger.debug('Command rejected by heavy cooldown', 'CommandCooldownService');
 
                 if (this.eventBus?.emit) {
                     this.eventBus.emit('cooldown:blocked', {
@@ -137,12 +136,12 @@ class CommandCooldownService {
             }
 
             this.userHeavyLimit.set(userId, false);
-            this.logger.debug(`Reset heavy command limit for user ${userId}`, 'CommandCooldownService');
+            this.logger.debug('Heavy command cooldown expired', 'CommandCooldownService');
         }
 
         const remainingCooldown = platformCooldownMs - (now - lastCommandTime);
         if (remainingCooldown > 0) {
-            this.logger.debug(`User ${userId} is on regular cooldown (${Math.ceil(remainingCooldown / 1000)}s remaining)`, 'CommandCooldownService');
+            this.logger.debug('Command rejected by per-user cooldown', 'CommandCooldownService');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:blocked', {
@@ -165,7 +164,7 @@ class CommandCooldownService {
         const remainingTime = globalCooldownMs - (now - lastExecutionTime);
 
         if (remainingTime > 0) {
-            this.logger.debug(`Command ${commandName} is on global cooldown (${Math.ceil(remainingTime / 1000)}s remaining)`, 'CommandCooldownService');
+            this.logger.debug('Command rejected by global cooldown', 'CommandCooldownService');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:global-blocked', {
@@ -224,7 +223,7 @@ class CommandCooldownService {
 
         if (filteredTimestamps.length >= this.cooldownConfig.heavyCommandThreshold) {
             this.userHeavyLimit.set(userId, true);
-            this.logger.debug(`User ${userId} is now under heavy command limit (${filteredTimestamps.length} commands in ${this.cooldownConfig.heavyCommandWindow}ms)`, 'CommandCooldownService');
+            this.logger.debug('Heavy command cooldown activated', 'CommandCooldownService');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:heavy-detected', {
@@ -275,7 +274,7 @@ class CommandCooldownService {
         this.userHeavyLimit.delete(userId);
         this.userCommandTimestamps.delete(userId);
 
-        this.logger.debug(`Reset all cooldowns for user ${userId}`, 'CommandCooldownService');
+        this.logger.debug('User cooldowns reset', 'CommandCooldownService');
 
         if (this.eventBus?.emit) {
             this.eventBus.emit('cooldown:reset', {
@@ -313,11 +312,6 @@ class CommandCooldownService {
         this.userCommandTimestamps.clear();
         this.globalCommandCooldowns.clear();
 
-        try {
-            this.logger.debug('CommandCooldownService disposed', 'CommandCooldownService');
-        } catch {
-            // Resource retirement is complete even if its diagnostic fails.
-        }
     }
 
     loadCooldownConfig(overrides: Partial<CooldownConfig> | null = null): void {
@@ -354,7 +348,6 @@ class CommandCooldownService {
 
         this.cooldownConfig = normalizedConfig;
         this.lastConfigRefresh = getSystemTimestampISO();
-        this.logger.debug('Cooldown configuration loaded', 'CommandCooldownService', normalizedConfig);
     }
 
     normalizeDuration(value: unknown, fallback: number): number {

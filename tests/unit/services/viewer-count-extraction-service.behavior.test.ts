@@ -237,3 +237,20 @@ describe("ViewerCountExtractionService with real metadata and extraction owners"
     });
   }
 });
+
+it('keeps extraction results and one safe failure cause without batch progress diagnostics', async () => {
+  const diagnostics: unknown[] = [];
+  const capture = (...args: unknown[]) => { diagnostics.push(args); };
+  const logger = { ...noOpLogger, debug: capture, warn: capture, error: capture };
+  const { service } = fixture(async id => {
+    if (id === 'synthetic-failed') throw new TypeError('synthetic-private-request-body');
+    return { video_details: { viewer_count: 12 } };
+  }, { logger });
+  const aggregate = await service.getAggregatedViewerCount(['synthetic-one', 'synthetic-two']);
+  expect(aggregate).toMatchObject({ success: true, totalCount: 24, successfulStreams: 2 });
+  expect(diagnostics).toEqual([]);
+  expect(await service.extractViewerCount('synthetic-failed')).toMatchObject({ success: false, errorType: 'TypeError' });
+  expect(diagnostics).toHaveLength(1);
+  expect(JSON.stringify(diagnostics)).toContain('request (TypeError)');
+  expect(JSON.stringify(diagnostics)).not.toContain('synthetic-private');
+});

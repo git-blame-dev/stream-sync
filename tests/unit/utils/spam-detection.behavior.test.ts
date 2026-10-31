@@ -28,26 +28,49 @@ describe("SpamDetection behavior", () => {
     expect(detection.handleDonationSpam("test-donor", "Test Donor", 3, "Test Gift", 1, "tiktok").shouldShow).toBe(true);
   });
 
-  it("does not include a fail-open admission in residuals and can schedule after an empty flush", () => {
+  it("delivers aggregated gifts with only bounded operational diagnostics", () => {
     useFakeTimers();
-    let failSuppression = true;
+    const logger = createRecordingLogger();
+    const summaries: number[] = [];
+    detection = createDonationSpamDetection(createSpamDetectionConfig({
+      enabled: true, lowValueThreshold: 5, detectionWindow: 1, maxIndividualNotifications: 1
+    }, { logger }), { logger, autoCleanup: false, onAggregatedDonation: summary => summaries.push(summary.totalCoins) });
+    logger.entries.length = 0;
+    const send = () => detection!.handleDonationSpam("synthetic-private-id", "Synthetic Private Donor", 3, "Synthetic Private Gift", 1, "tiktok");
+    expect(send().shouldShow).toBe(true);
+    expect(logger.entries).toEqual([]);
+    expect(send().shouldShow).toBe(false);
+    expect(send().shouldShow).toBe(false);
+    advanceTimersByTime(1000);
+    expect(summaries).toEqual([6]);
+    expect(logger.entries).toHaveLength(2);
+    expect(logger.entries.every(entry => entry.level === "debug")).toBe(true);
+    const diagnostics = JSON.stringify(logger.entries);
+    expect(diagnostics).not.toContain("synthetic-private-id");
+    expect(diagnostics).not.toContain("Synthetic Private");
+    expect(diagnostics).toContain("count=2");
+  });
+
+  it("retains callback failures for a later successful aggregation", () => {
+    useFakeTimers();
+    let failDelivery = true;
     const summaries: number[] = [];
     detection = createDonationSpamDetection(createSpamDetectionConfig({
       enabled: true, lowValueThreshold: 5, detectionWindow: 1, maxIndividualNotifications: 0
     }, { logger: noOpLogger }), {
-      logger: { ...noOpLogger, info: message => {
-        if (failSuppression && message.includes("Suppressing individual")) throw new Error("test diagnostic failure");
-      } },
-      autoCleanup: false,
-      onAggregatedDonation: summary => { summaries.push(summary.totalCoins); }
+      logger: noOpLogger, autoCleanup: false,
+      onAggregatedDonation: summary => {
+        if (failDelivery) throw new Error("synthetic callback failure");
+        summaries.push(summary.totalCoins);
+      }
     });
-    expect(detection.handleDonationSpam("test-donor", "Test Donor", 5, "Rose", 1, "tiktok").shouldShow).toBe(true);
+    expect(detection.handleDonationSpam("test-donor", "Test Donor", 5, "Rose", 1, "tiktok").shouldShow).toBe(false);
     advanceTimersByTime(1000);
     expect(summaries).toEqual([]);
-    failSuppression = false;
+    failDelivery = false;
     expect(detection.handleDonationSpam("test-donor", "Test Donor", 3, "Rose", 1, "tiktok").shouldShow).toBe(false);
     advanceTimersByTime(1000);
-    expect(summaries).toEqual([3]);
+    expect(summaries).toEqual([8]);
   });
 
   it("retains a failed currency group without replaying an already emitted group", () => {

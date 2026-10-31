@@ -30,9 +30,7 @@ class UserTrackingService {
         this.seenUsers = new Set();
         this.streamSupportersByPlatform = new Map();
         this.pendingStreamSupportersByUsername = new Map();
-        logger.debug('[UserTrackingService] Initialized', 'user-tracking', {
-            trackedUsers: 0
-        });
+
     }
 
     private canonicalizePlatform(platform: unknown): string | null {
@@ -131,10 +129,7 @@ markMessageSeen(userId: string | null | undefined, context: TrackingContext = {}
 
         try {
             this.seenUsers.add(userId);
-            logger.debug('[UserTrackingService] Message marked as seen', 'user-tracking', {
-                userId,
-                platform: context.platform
-            });
+
             return true;
         } catch (error) {
             handleServiceError('[UserTrackingService] Error marking message as seen', error, {

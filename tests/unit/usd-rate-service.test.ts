@@ -19,12 +19,12 @@ describe('USD rate service', () => {
         expect(service.rates.USD).toBe(1);
     });
 
-    test('survives provider failure and invalid cache', async () => {
-        const warnings: string[] = [];
-        const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => { throw new Error('offline'); }, warn: message => warnings.push(message) });
+    test('warns about provider failure after an expected missing cache', async () => {
+        let warningCount = 0;
+        const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => { throw new Error('offline'); }, warn: () => { warningCount++; } });
         expect(service.convertToUsd(3, 'USD')).toBe(3);
         expect(service.convertToUsd(3, 'EUR')).toBeNull();
-        expect(warnings.length).toBeGreaterThanOrEqual(2);
+        expect(warningCount).toBe(1);
     });
 
     test('rejects invalid cache metadata and rate tables', async () => {
@@ -53,4 +53,25 @@ describe('USD rate service', () => {
         const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => ({ ok: true, status: 200, json: async () => [{ date: '2026-08-22', base: 'USD', quote: 'EUR', rate: 0.8 }] }) });
         expect(service.convertToUsd(8, 'EUR')).toBe(10);
     });
+});
+
+test('a first-start missing cache refreshes and persists usable rates without warnings', async () => {
+    const fs = memoryFs();
+    let warningCount = 0;
+    const service = await createUsdRateService({ cachePath: 'cache.json', fs,
+        fetch: async () => ({ ok: true, status: 200, json: async () => [{ base: 'USD', quote: 'EUR', rate: 0.8 }] }),
+        warn: () => { warningCount++; } });
+    expect(service.convertToUsd(8, 'EUR')).toBe(10);
+    expect(JSON.parse(fs.files.get('cache.json')!).rates).toEqual({ USD: 1, EUR: 0.8 });
+    expect(warningCount).toBe(0);
+});
+
+test('invalid and inaccessible caches still warn, and refresh failure remains visible', async () => {
+    for (const fs of [memoryFs('synthetic-invalid-json'), { ...memoryFs(), readFile: async () => { throw Object.assign(new Error('synthetic-access-denied'), { code: 'EACCES' }); } }]) {
+        let warningCount = 0;
+        const service = await createUsdRateService({ cachePath: 'cache.json', fs,
+            fetch: async () => { throw new Error('synthetic-offline'); }, warn: () => { warningCount++; } });
+        expect(service.convertToUsd(1, 'EUR')).toBeNull();
+        expect(warningCount).toBe(2);
+    }
 });

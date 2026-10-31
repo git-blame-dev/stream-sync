@@ -147,12 +147,7 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
             if (signal?.aborted) return;
             
             const sanitizedMessage = sanitizeForOBS(message);
-            
-            logger.debug(`[OBS Source] Updating text source "${sourceName}" with: ${sanitizedMessage}`, 'obs-sources');
-            
-            if (sanitizedMessage !== message) {
-                logger.debug(`[OBS Source] Text sanitized for OBS safety: "${message}" → "${sanitizedMessage}"`, 'obs-sources');
-            }
+
             if (signal?.aborted) return;
             const { inputSettings } = await callOBS('GetInputSettings', { inputName: sourceName }) as InputSettingsResponse;
             const currentInputSettings = inputSettings && typeof inputSettings === 'object' ? inputSettings : {};
@@ -254,20 +249,16 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         );
     }
 
-
     async function setSourceFilterEnabled(sourceName: string, filterName: string, enabled: boolean): Promise<void> {
         try {
             await ensureConnected();
-            
-            logger.debug(`[OBS Filter] Setting ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'OBS');
-            
+
             await callOBS('SetSourceFilterEnabled', {
                 sourceName: sourceName,
                 filterName: filterName,
                 filterEnabled: enabled
             });
             
-            logger.debug(`[OBS Filter] Successfully set ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'OBS');
         } catch (err) {
             handleSourcesError(`[OBS Filter] Error setting ${sourceName}:${filterName}`, err, {
                 sourceName,
@@ -281,15 +272,12 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     async function getSourceFilterSettings(sourceName: string, filterName: string): Promise<Record<string, unknown> | undefined> {
         try {
             await ensureConnected();
-            
-            logger.debug(`[OBS Filter] Getting filter settings for ${sourceName}:${filterName}`, 'OBS');
-            
+
             const filterInfo = await callOBS('GetSourceFilter', {
                 sourceName: sourceName,
                 filterName: filterName
             }) as SourceFilterResponse;
             
-            logger.debug(`[OBS Filter] Retrieved filter settings for ${sourceName}:${filterName}`, 'OBS');
             return filterInfo.filterSettings;
         } catch (err) {
             handleSourcesError(`[OBS Filter] Error getting filter settings for ${sourceName}:${filterName}`, err, {
@@ -304,16 +292,13 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     async function setSourceFilterSettings(sourceName: string, filterName: string, filterSettings: Record<string, unknown>): Promise<void> {
         try {
             await ensureConnected();
-            
-            logger.debug(`[OBS Filter] Setting filter settings for ${sourceName}:${filterName}`, 'OBS', filterSettings);
-            
+
             await callOBS('SetSourceFilterSettings', {
                 sourceName: sourceName,
                 filterName: filterName,
                 filterSettings: filterSettings
             });
             
-            logger.debug(`[OBS Filter] Successfully updated filter settings for ${sourceName}:${filterName}`, 'OBS');
         } catch (err) {
             handleSourcesError(`[OBS Filter] Error setting filter settings for ${sourceName}:${filterName}`, err, {
                 sourceName,

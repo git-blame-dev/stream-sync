@@ -61,20 +61,13 @@ class RawPlatformDataLoggingService {
         }
 
         try {
-            const result = await this.rawEventLogWriter.writeRawEvent({
+            await this.rawEventLogWriter.writeRawEvent({
                 dataLoggingPath: this.dataLoggingPath,
                 platform,
                 eventType,
                 payload: data
             });
 
-            if (platformConfig.dataLoggingVerbose) {
-                this.logger.debug?.('Logged platform data to raw event file', 'RawPlatformDataLoggingService', {
-                    platform,
-                    eventType,
-                    fileName: result.fileName
-                });
-            }
         } catch {
             this._handleLoggingError('Raw platform data capture failed', new Error('Raw platform data capture failed'));
         }
