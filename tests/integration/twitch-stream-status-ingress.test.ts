@@ -87,6 +87,7 @@ test('real Twitch ingress drives offline and online store recovery and retires c
         const auth = owners.auth = createSyntheticAuth(dir);
         const h = owners.main = await createMainPresentationFixture();
         h.config.twitch.viewerCountEnabled = true;
+        h.config.logging.file.enabled = false;
         let attempts = 0;
         const http = new EnhancedHttpClient({ logger: noOpLogger, axios: {
             get: async () => { attempts++; return { data: { data: [{ viewer_count: 17 }] } }; },
