@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { TikTokLiveConnection, RouteConfig, ControlEvent } from 'tiktok-live-connector';
+import { RouteConfig, ControlEvent } from 'tiktok-live-connector';
 import { ProtoMessageFetchResult, BaseProtoMessage, WebcastPushFrame, WebcastChatMessage, WebcastEmoteChatMessage, WebcastGiftMessage, WebcastRoomUserSeqMessage, WebcastSubNotifyMessage, WebcastSocialMessage, WebcastBarrageMessage, CommonMessageData, User, Gift, ImageModel, UserIdentity, BadgeStruct, ImageBadge, CombineBadgeStruct, EmoteModel } from 'tiktok-live-proto/v3';
 import { TikTokWebSocketClient, type Connector } from '../../src/platforms/tiktok-websocket-client';
 import { createTikTokConnector } from '../../src/platforms/tiktok/tiktok-connector';
@@ -36,7 +36,20 @@ async function main(){
     RouteConfig.fetchRoomInfo=async()=>({data:{status:2}});
     RouteConfig.fetchSignedWebSocketFromProvider=async()=>({fetchResult:{...ProtoMessageFetchResult.decode(empty),cursor:'synthetic-cursor',pushServer:`ws://127.0.0.1:${address.port}`},fetchResultCookieHeader:'synthetic-cookie=test-only',fetchResultRoomId:roomId});
     server.on('connection',socket=>socket.on('message',raw=>{if(WebcastPushFrame.decode(new Uint8Array(raw as Buffer)).payloadType==='im_enter_room')socket.send(frame('im_enter_room_resp'));}));
-    const client=new TikTokWebSocketClient('synthetic-streamer',{connectorFactory:async()=>new TikTokLiveConnection('synthetic-streamer',{processInitialData:false,enableExtendedGiftInfo:false}) as unknown as Connector});
+    const diagnosticEntries: { level: string; data: unknown }[] = [];
+    const diagnosticLogger = {
+        debug: (_message: unknown, _source?: string, data?: unknown) => { diagnosticEntries.push({ level: 'debug', data }); },
+        warn: (_message: unknown, _source?: string, data?: unknown) => { diagnosticEntries.push({ level: 'warn', data }); },
+    };
+    RouteConfig.fetchSignedWebSocketFromProvider=async()=>({fetchResult:{...ProtoMessageFetchResult.decode(empty),cursor:'synthetic-cursor',pushServer:'wss://webcast-ws.tiktok.com'},fetchResultCookieHeader:'synthetic-cookie=test-only',fetchResultRoomId:roomId});
+    const client=new TikTokWebSocketClient('synthetic-streamer',{connectorFactory:async(username,key,signal)=>{
+        const connector = await createTikTokConnector(username, key, signal, diagnosticLogger);
+        type Provider = { _wsClientProvider: (params: Record<string, unknown>) => unknown };
+        const boundary = connector as unknown as Provider;
+        const provideSocket = boundary._wsClientProvider;
+        boundary._wsClientProvider = params => provideSocket({ ...params, baseUrl: `ws://127.0.0.1:${address.port}` });
+        return connector as unknown as Connector;
+    }});
     try{
         await client.connect();assert.equal(client.isConnected,true);
         const chat=once(client,'chat',{signal:AbortSignal.timeout(2000)});const gift=once(client,'gift',{signal:AbortSignal.timeout(2000)});const viewer=once(client,'roomUser',{signal:AbortSignal.timeout(2000)});const subscription=once(client,'subscribe',{signal:AbortSignal.timeout(2000)});
@@ -105,9 +118,27 @@ async function main(){
         const member = (await purchase)[0];
         assert.equal(memberships.length, 1);
         assert.equal(createTikTokEventFactory().createSuperfan(member).avatarUrl, 'https://example.invalid/synthetic-avatar.png');
+        const followingChat = once(client, 'chat', { signal: AbortSignal.timeout(2000) });
+        for (const socket of server.clients) {
+            socket.send(message('WebcastChatMessage', Uint8Array.from([255])));
+            socket.send(message('SyntheticUnknownMessage', empty));
+            socket.send(message('WebcastChatMessage', WebcastChatMessage.encode({ ...WebcastChatMessage.decode(empty), common, user, content: 'synthetic following chat' }).finish()));
+        }
+        assert.equal((await followingChat)[0].comment, 'synthetic following chat');
         client.disconnect();assert.equal(client.isConnected,false);
+        assert.equal(diagnosticEntries.filter(entry => entry.level === 'warn').length, 1);
+        assert.ok(diagnosticEntries.some(entry => {
+            const data = entry.data as Record<string, unknown>;
+            return data?.stage === 'closed' && data.chatMessages === 3 && data.emoteMessages === 1
+                && data.decodeFailures === 1 && data.chatDecodeFailures === 1 && data.undecodedWithoutError === 1;
+        }));
+        const serializedDiagnostics = JSON.stringify(diagnosticEntries);
+        for (const sensitive of [common.msgId, user.displayId, user.nickname, 'synthetic following chat', 'SyntheticUnknownMessage', 'Failed to decode']) {
+            assert.equal(serializedDiagnostics.includes(sensitive), false);
+        }
     }finally{client.disconnect();for(const socket of server.clients)socket.terminate();server.close();}
 
+    RouteConfig.fetchSignedWebSocketFromProvider=async()=>({fetchResult:{...ProtoMessageFetchResult.decode(empty),cursor:'synthetic-cursor',pushServer:`ws://127.0.0.1:${address.port}`},fetchResultCookieHeader:'synthetic-cookie=test-only',fetchResultRoomId:roomId});
     // The actual default factory validates signer destinations before opening a socket.
     const abort=new AbortController();const guarded=await createTikTokConnector('synthetic-streamer','synthetic-key',abort.signal);
     guarded.on(ControlEvent.ERROR,()=>{});
@@ -143,6 +174,6 @@ async function main(){
         try {await assert.rejects(wrapped.connect(),error=>!!(error&&typeof error==='object'&&'code' in error&&error.code===(status===401?4401:status===403?4403:4429)));}
         finally {wrapped.disconnect();http.closeAllConnections();http.close();}
     }
-    process.stdout.write(JSON.stringify({wireChat:true,wireGift:true,wireViewers:true,wireSubscription:true,wireEmotes:true,wireMedia:true,wireSocial:true,wireMembershipAliases:true,destinationGuard:true,signingCancellation:true,lateSocketCancellation:true,httpStatusClassification:true})+'\n');
+    process.stdout.write(JSON.stringify({wireDiagnostics:true,wireChat:true,wireGift:true,wireViewers:true,wireSubscription:true,wireEmotes:true,wireMedia:true,wireSocial:true,wireMembershipAliases:true,destinationGuard:true,signingCancellation:true,lateSocketCancellation:true,httpStatusClassification:true})+'\n');
 }
 test('actual TikTok SDK transport and signer contracts',main,15000);
