@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { NOTIFICATION_CONFIGS } from '../core/constants';
 import { isIsoTimestamp } from '../utils/timestamp';
@@ -49,11 +50,7 @@ const ALIAS_PAID_TYPES = [
 
 type RouterRecord = Record<string, unknown>;
 
-type RouterLogger = {
-    debug: (message: string, scope: string, data?: unknown) => void;
-    warn: (message: string, scope: string, data?: unknown) => void;
-    error: (message: string, scope: string, data?: unknown) => void;
-};
+type RouterLogger = Pick<AppLogger<string>, 'debug' | 'warn' | 'error'>;
 
 type RouterEventBus = {
     subscribe: (eventName: string, handler: (event: unknown) => Promise<void>) => (() => void) | void;
@@ -217,7 +214,7 @@ class PlatformEventRouter {
 
         if (type !== PlatformEvents.CHAT_MESSAGE && isNotificationType(type) && NOTIFICATION_CONFIGS[type]?.settingKey) {
             if (this._isNotificationEnabled(type, platform) === false) {
-                this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
+                this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'platform-event-router');
                 return;
             }
         }
@@ -324,7 +321,7 @@ class PlatformEventRouter {
                 this.subscription();
             } catch (error: unknown) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                this.logger.warn(`Error unsubscribing platform:event handler: ${errorMessage}`, 'PlatformEventRouter');
+                this.logger.warn(`Error unsubscribing platform:event handler: ${errorMessage}`, 'platform-event-router');
             }
         }
         this.subscription = null;
@@ -334,7 +331,7 @@ class PlatformEventRouter {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
-            this.errorHandler?.logOperationalError(message, 'PlatformEventRouter', error);
+            this.errorHandler?.logOperationalError(message, 'platform-event-router', error);
         }
     }
 

@@ -1,3 +1,5 @@
+import type { AppLogger } from '../core/logger/types';
+
 type StreamStatusEvent = {
     type?: unknown;
     platform?: unknown;
@@ -13,9 +15,7 @@ type WireStreamStatusHandlersOptions = {
     viewerCountSystem?: {
         updateStreamStatus?: (platform: string, isLive: boolean) => Promise<unknown>;
     } | null;
-    logger?: {
-        warn?: (message: string) => void;
-    } | null;
+    logger?: Partial<Pick<AppLogger<string>, 'warn'>> | null;
     isViewerCountEnabled?: ((platform: string) => boolean) | null;
 };
 
@@ -39,7 +39,7 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
             try {
                 return isViewerCountEnabled(platform) !== false;
             } catch (error) {
-                logger?.warn?.(`[ViewerCount] isViewerCountEnabled threw: ${getErrorMessage(error)}`);
+                logger?.warn?.(`[ViewerCount] isViewerCountEnabled threw: ${getErrorMessage(error)}`, 'stream-status-handler');
             }
         }
         return true;
@@ -57,7 +57,7 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
         try {
             await viewerCountSystem.updateStreamStatus(platform, isLive);
         } catch (error) {
-            logger?.warn?.(`[ViewerCount] Failed to update ${platform} stream status: ${getErrorMessage(error)}`);
+            logger?.warn?.(`[ViewerCount] Failed to update ${platform} stream status: ${getErrorMessage(error)}`, 'stream-status-handler');
         }
     };
 
@@ -92,7 +92,7 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
                 try {
                     unsubscribe();
                 } catch (error) {
-                    logger?.warn?.(`[ViewerCount] Error unsubscribing stream status handler: ${getErrorMessage(error)}`);
+                    logger?.warn?.(`[ViewerCount] Error unsubscribing stream status handler: ${getErrorMessage(error)}`, 'stream-status-handler');
                 }
             }
         });

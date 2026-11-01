@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 type EventBusLike = {
@@ -21,9 +22,7 @@ type ObsSourcesLike = {
     setSourceVisibility: (sceneName: string, sourceName: string, visible: boolean) => Promise<void>;
 };
 
-type ObsEventLogger = {
-    warn: (message: string, context?: unknown, payload?: unknown) => void;
-};
+type ObsEventLogger = Pick<AppLogger<string>, 'warn'>;
 
 type ObsEventState = {
     lastError: Error | null;

@@ -1,11 +1,8 @@
+import type { AppLogger } from '../../../core/logger/types';
 import crypto from 'node:crypto';
 import type { OperationDeadlineContext } from '../../../utils/timeout-wrapper';
 
-type LifecycleLogger = {
-  debug?: (message: string, scope?: string, payload?: unknown) => void;
-  info?: (message: string, scope?: string, payload?: unknown) => void;
-  warn?: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LifecycleLogger = Partial<Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>>;
 
 type LifecycleWebSocket = {
   readyState: number;

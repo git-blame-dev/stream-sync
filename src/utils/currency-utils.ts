@@ -1,8 +1,7 @@
+import type { AppLogger } from '../core/logger/types';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 
-type LoggerLike = {
-    warn: (message: string, context: string) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'warn'>;
 
 const MANUAL_SYMBOL_TO_CODE: Record<string, string> = {
     '₽': 'RUB',

@@ -1,13 +1,10 @@
+import type { AppLogger } from '../core/logger/types';
 import { safeSetInterval, safeSetTimeout } from './timeout-validator';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { copyNotificationContributions, type NotificationContribution } from '../notifications/notification-contribution';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 
-type SpamLogger = {
-    debug: (message: string, source?: string) => void;
-    info: (message: string, source?: string) => void;
-    warn?: (message: string, source?: string) => void;
-};
+type SpamLogger = Pick<AppLogger<string>, 'debug' | 'info'> & Partial<Pick<AppLogger<string>, 'warn'>>;
 
 type SpamConfigShape = {
     enabled?: boolean;

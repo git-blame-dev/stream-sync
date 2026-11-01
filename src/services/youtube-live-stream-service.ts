@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { withTimeout } from '../utils/timeout-wrapper';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
@@ -10,11 +11,7 @@ import {
 
 const MAX_CHANNEL_CACHE_ENTRIES = 64;
 
-type LoggerLike = {
-    error: (message: string, scope?: string, payload?: unknown) => void;
-    debug?: (message: string, scope?: string, payload?: unknown) => void;
-    warn?: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'error'> & Partial<Pick<AppLogger<string>, 'debug' | 'warn'>>;
 
 type ChannelVideo = {
     id?: string;

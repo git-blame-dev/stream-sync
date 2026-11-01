@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 
 import { STREAMELEMENTS } from '../core/endpoints';
 import type { AppLogger } from '../core/logger/types';
+import { classifyLogWriteError } from '../core/logger/log-write-error';
 import { getUnifiedLogger } from '../core/logging';
 import { secrets } from '../core/secrets';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
@@ -544,7 +545,7 @@ class StreamElementsPlatform extends EventEmitter {
 
         try {
             if (!this.config.dataLoggingPath) {
-                this.errorHandler.handleDataLoggingError(new Error('Data logging path is not configured'), 'platform');
+                this.errorHandler.handleRawCaptureError('streamelements', eventType, 'configuration');
                 return;
             }
 
@@ -556,7 +557,8 @@ class StreamElementsPlatform extends EventEmitter {
             });
 
         } catch (error) {
-            this.errorHandler.handleDataLoggingError(error, 'platform');
+            const { failure, code } = classifyLogWriteError(error);
+            this.errorHandler.handleRawCaptureError('streamelements', eventType, failure, code);
         }
     }
 

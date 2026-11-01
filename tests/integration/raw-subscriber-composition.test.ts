@@ -131,9 +131,11 @@ test('enabled subscriber survives an obstructed capture root and persists after 
     const diagnostic = spyOn(h.runtime.logger, 'error').mockImplementation(() => {});
     try {
         await expect(platform.logRawPlatformData('follow', { displayName: 'Synthetic blocked subscriber' })).resolves.toBeUndefined();
-        expect(diagnostic).toHaveBeenCalledWith('Error logging platform data: Raw event capture write failed', 'streamelements-platform');
+        expect(diagnostic).toHaveBeenCalledWith('Raw platform data capture failed', 'raw-platform-data-logging', {
+            platform: 'streamelements', eventType: 'follow', failure: 'filesystem', code: 'ENOTDIR'
+        });
         expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(obstruction);
-        expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('ENOTDIR');
+        expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('Synthetic blocked subscriber');
         expect(h.runtime.isStarted).toBe(true);
         expect(platform.isConnected()).toBe(true);
         await fs.unlink(obstruction);

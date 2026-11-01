@@ -82,7 +82,7 @@ class GracefulExitService {
         };
 
         if (this.isEnabled()) {
-            logger.debug(`[GracefulExitService] Initialized with target: ${targetMessageCount} messages`, 'graceful-exit');
+            logger.debug(`Initialized with target: ${targetMessageCount} messages`, 'graceful-exit');
         }
 
     }
@@ -126,7 +126,7 @@ class GracefulExitService {
 
     async triggerExit(): Promise<void> {
         if (this.isShuttingDown) {
-            logger.warn('[GracefulExitService] Shutdown already in progress', 'graceful-exit');
+            logger.warn('Shutdown already in progress', 'graceful-exit');
             return;
         }
 
@@ -186,7 +186,7 @@ class GracefulExitService {
 
     stop(): void {
         this.clearForceExitTimeout();
-        logger.debug('[GracefulExitService] Stopping service', 'graceful-exit');
+        logger.debug('Stopping service', 'graceful-exit');
         this.isShuttingDown = true;
     }
 

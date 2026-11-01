@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { logger } from '../core/logging';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createRetrySystem } from '../utils/retry-system';
@@ -5,10 +6,7 @@ import { safeDelay, safeSetTimeout } from '../utils/timeout-validator';
 import { getOBSConnectionManager } from './connection';
 import { getDefaultSourcesManager } from './sources';
 
-type EffectsLogger = {
-    debug: (message: string, context?: string, payload?: unknown) => void;
-    warn: (message: string, context?: string, payload?: unknown) => void;
-};
+type EffectsLogger = Pick<AppLogger<string>, 'debug' | 'warn'>;
 
 type ObsManagerLike = {
     ensureConnected: () => Promise<void>;
@@ -164,7 +162,7 @@ class OBSEffectsManager {
             await this.awaitRequest(request, this.ensureOBSConnected());
             this.assertRequest(request);
             const filePath = `${commandConfig.vfxFilePath}/${commandConfig.filename}.mp4`;
-            this.logger.debug(`[VFX] Playing media: ${commandConfig.filename} in source: ${source} from path: ${filePath}`, 'effects');
+            this.logger.debug(`Playing media: ${commandConfig.filename} in source: ${source} from path: ${filePath}`, 'obs-effects');
             await this.awaitRequest(request, this.obsCall('SetInputSettings', {
                 inputName: source,
                 inputSettings: { local_file: filePath, looping: false },
@@ -197,7 +195,7 @@ class OBSEffectsManager {
     async waitForMediaCompletion(mediaSourceName: string, timeoutMs = 10000) {
         this.assertActive();
         if (!this.obsManager) {
-            this.logger.warn('[VFX] No OBS manager available, skipping wait', 'effects');
+            this.logger.warn('No OBS manager available, skipping wait', 'obs-effects');
             return;
         }
         return this.createMediaWaiter(mediaSourceName, timeoutMs).promise;
@@ -231,7 +229,7 @@ class OBSEffectsManager {
         this.waiters.add(waiter);
         obs.addEventListener('MediaInputPlaybackEnded', onEnd);
         timer = safeSetTimeout(() => {
-            this.logger.warn(`[VFX] Media completion wait timed out: ${source}`, 'effects', { timeoutMs });
+            this.logger.warn(`Media completion wait timed out: ${source}`, 'obs-effects', { timeoutMs });
             settle();
         }, timeoutMs);
         return waiter;
@@ -244,7 +242,7 @@ class OBSEffectsManager {
             this.assertRequest(request);
             await this.awaitRequest(request, this.obsCall('TriggerMediaInputAction', { inputName, mediaAction }));
             this.assertRequest(request);
-            this.logger.debug(`[Media] Successfully triggered action on: ${inputName}`, 'effects');
+            this.logger.debug(`Successfully triggered action on: ${inputName}`, 'obs-effects');
         } catch (error) {
             if (!request.reason) this._handleEffectsError(`[Media] Error triggering action on ${inputName}`, error, { inputName, mediaAction });
             throw error;

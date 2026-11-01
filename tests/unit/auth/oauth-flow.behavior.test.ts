@@ -13,6 +13,8 @@ import { installTimerTracking, restoreTimerTracking } from "../../helpers/bun-ti
 
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createRecordingLogger } from "../../helpers/recording-logger";
+import { createLogger } from '../../../src/core/logging';
+import { captureStdout } from '../../helpers/output-capture';
 import {
   initializeStaticSecrets,
   secrets,
@@ -34,6 +36,7 @@ import {
 describe("oauth-flow behavior", () => {
   let tempDir: string;
   let tokenStorePath: string;
+  let stdout: ReturnType<typeof captureStdout>;
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   const fetchLocal = (options: https.RequestOptions) =>
@@ -127,6 +130,7 @@ describe("oauth-flow behavior", () => {
   };
 
   beforeEach(async () => {
+    stdout = captureStdout();
     _resetForTesting();
     secrets.twitch.clientSecret = "test-client-secret";
     tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "oauth-flow-"));
@@ -134,12 +138,31 @@ describe("oauth-flow behavior", () => {
   });
 
   afterEach(async () => {
+    stdout.restore();
     vi.restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
     if (tempDir) {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('shows a complete manual OAuth link locally without retaining its query in diagnostics', async () => {
+    const logger = createLogger({}, { operatorCaptureEnabled: true });
+    let browserUrl = '';
+    const result = await runOAuthFlow({ clientId: 'synthetic-client', tokenStorePath, logger, persistTokens: false }, {
+      startCallbackServer: async () => createCallbackServerStub(),
+      openBrowser: url => { browserUrl = url; },
+      exchangeCodeForTokens: async () => ({ accessToken: 'synthetic-access-token' }),
+    });
+    expect(result?.accessToken).toBe('synthetic-access-token');
+    expect(stdout.output.join('')).toContain(browserUrl);
+    const parsed = new URL(browserUrl);
+    expect(parsed.searchParams.get('client_id')).toBe('synthetic-client');
+    expect(parsed.searchParams.get('state')).toBeTruthy();
+    const retained = JSON.stringify(logger.getOperatorLogSource()!.history().entries);
+    expect(retained).not.toContain(parsed.searchParams.get('state')!);
+    expect(retained).not.toContain('synthetic-access-token');
   });
 
 it("exposes oauth-flow helper functions", () => {

@@ -1,3 +1,4 @@
+import type { AppLogger } from '../../../core/logger/types';
 import * as axiosModule from 'axios';
 import { withOperationDeadline, type OperationDeadlineContext } from '../../../utils/timeout-wrapper';
 import type { AxiosResponse } from 'axios';
@@ -11,11 +12,7 @@ const STARTUP_STALE_WEBSOCKET_STATUS = 'websocket_disconnected';
 const CLEANUP_PAGE_LIMIT = 100;
 const CLEANUP_CURSOR_MAX_LENGTH = 4096;
 
-type LoggerLike = {
-  info: (message: string, scope?: string, payload?: unknown) => void;
-  warn: (message: string, scope?: string, payload?: unknown) => void;
-  debug: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'info' | 'warn' | 'debug'>;
 
 type TwitchAuthLike = {
   refreshTokens: () => Promise<boolean>;

@@ -96,7 +96,7 @@ describe("Platform Error Handler - User Experience Behavior", () => {
     expect(logger.entries[2]?.data).toBeUndefined();
     expect(logger.entries[3]).toMatchObject({ level: "warn", data: { error: "test cleanup", resource: "test-resource" } });
     expect(logger.entries[4]?.message).toBe("Cannot proceed - test-platform authentication not ready");
-    expect(logger.entries[5]).toMatchObject({ message: "Error logging test-events data: test disk failure", source: "test-platform-platform" });
+    expect(logger.entries[5]).toMatchObject({ message: "Error logging test-events data: test disk failure", source: "test-platform" });
   });
   let errorHandler: PlatformErrorHandler;
   let testPlatformName: string;

@@ -378,7 +378,7 @@ class VFXCommandService {
             const vfxConfig = this.commandParser.getVFXConfig(message, parserMessage);
             
             if (vfxConfig) {
-                logger.debug(`[VFXCommandService] Command found: ${vfxConfig.filename}`, 'vfx-service');
+                logger.debug(`Command found: ${vfxConfig.filename}`, 'vfx-service');
                 return vfxConfig;
             }
             
@@ -405,14 +405,14 @@ class VFXCommandService {
             const command = this._getCommand(commandKey);
             
             if (!command) {
-                logger.debug(`[VFXCommandService] No command configured for key: ${commandKey}`, 'vfx-service');
+                logger.debug(`No command configured for key: ${commandKey}`, 'vfx-service');
                 return null;
             }
 
             const selectableCommandSpec = this._resolveSelectableCommandSpec(commandKey, command);
             const selectedCommand = this._selectCommandVariant(selectableCommandSpec);
             if (!selectedCommand) {
-                logger.debug(`[VFXCommandService] No valid command variant for key: ${commandKey}`, 'vfx-service');
+                logger.debug(`No valid command variant for key: ${commandKey}`, 'vfx-service');
                 return null;
             }
 
@@ -568,7 +568,7 @@ class VFXCommandService {
                 return false;
             }
             
-            logger.info('[VFXCommandService] Configuration reloaded', 'vfx-service');
+            logger.info('Configuration reloaded', 'vfx-service');
             return true;
         } catch (error) {
             handleVFXCommandError(`[VFXCommandService] Error reloading config: ${getErrorMessage(error)}`, error, 'config-reload');

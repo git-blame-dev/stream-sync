@@ -3,8 +3,10 @@ import path from 'node:path';
 import { logger as defaultLogger } from '../core/logging';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { RawEventLogWriter } from './RawEventLogWriter';
+import { classifyLogWriteError } from '../core/logger/log-write-error';
+import type { AppLogger } from '../core/logger/types';
 
-type LoggerLike = typeof defaultLogger;
+type LoggerLike = AppLogger;
 
 type LoggingConfig = {
     dataLoggingPath?: string;
@@ -32,10 +34,7 @@ type LogStatisticsResult = {
 
 class RawPlatformDataLoggingService {
     logger: LoggerLike;
-    errorHandler: {
-        handleDataLoggingError?: (error: Error, dataType: string, message: string) => void;
-        logOperationalError?: (message: string, source: string, context?: unknown) => void;
-    };
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     config: LoggingConfig;
     dataLoggingPath?: string;
     rawEventLogWriter: Pick<RawEventLogWriter, 'writeRawEvent' | 'resolveLogFileName'>;
@@ -56,7 +55,7 @@ class RawPlatformDataLoggingService {
         }
 
         if (!this.dataLoggingPath) {
-            this._handleLoggingError('Data logging path is not configured', null);
+            this.errorHandler.handleRawCaptureError(platform, eventType, 'configuration');
             return;
         }
 
@@ -68,8 +67,9 @@ class RawPlatformDataLoggingService {
                 payload: data
             });
 
-        } catch {
-            this._handleLoggingError('Raw platform data capture failed', new Error('Raw platform data capture failed'));
+        } catch (error) {
+            const { failure, code } = classifyLogWriteError(error);
+            this.errorHandler.handleRawCaptureError(platform, eventType, failure, code);
         }
     }
 
@@ -99,28 +99,10 @@ class RawPlatformDataLoggingService {
         }
     }
 
-    _handleLoggingError(message: string, error: unknown, dataType = 'platform-data'): void {
-        if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleDataLoggingError?.(error, dataType, message);
-        } else {
-            this.errorHandler?.logOperationalError?.(message, 'RawPlatformDataLoggingService', {
-                dataType,
-                error: this.resolveErrorMessage(error)
-            });
-        }
-    }
-
     resolveLogFileName(platform: string, eventType: string): string {
         return this.rawEventLogWriter.resolveLogFileName(platform, eventType);
     }
 
-    resolveErrorMessage(error: unknown): string {
-        if (error instanceof Error) {
-            return error.message;
-        }
-
-        return String(error);
-    }
 }
 
 export { RawPlatformDataLoggingService };

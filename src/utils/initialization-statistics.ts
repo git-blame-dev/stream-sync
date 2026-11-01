@@ -1,11 +1,8 @@
+import type { AppLogger } from '../core/logger/types';
 import { randomUUID } from 'node:crypto';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type AttemptMetrics = {
     connectionTime?: number;

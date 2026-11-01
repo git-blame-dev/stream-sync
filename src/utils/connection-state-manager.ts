@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import {
@@ -5,9 +6,7 @@ import {
     validateConnectionStateManagerDependencies
 } from './dependency-validator';
 
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug'>;
 
 type ConnectionLike = {
     connect: () => unknown;

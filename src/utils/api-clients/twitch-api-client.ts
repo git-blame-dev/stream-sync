@@ -1,3 +1,4 @@
+import type { AppLogger } from '../../core/logger/types';
 import { getUnifiedLogger } from '../../core/logging';
 import { secrets } from '../../core/secrets';
 import { createEnhancedHttpClient } from '../enhanced-http-client';
@@ -6,12 +7,7 @@ import { createPlatformErrorHandler } from '../platform-error-handler';
 import { parseNotificationCount } from '../notification-count';
 import { withOperationDeadline } from '../timeout-wrapper';
 
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-    error: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type TwitchAuthLike = {
     refreshTokens: (signal?: AbortSignal) => Promise<boolean>;

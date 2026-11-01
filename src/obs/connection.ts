@@ -129,7 +129,7 @@ class OBSConnectionManager {
     
     setupEventHandlers() {
         const connectionOpenedHandler = () => {
-            this.logger.debug('[OBS Connection] Connection Opened', 'obs-connection');
+            this.logger.debug('Connection Opened', 'obs-connection');
         };
         this.eventHandlers.set('ConnectionOpened', connectionOpenedHandler);
         this.obs.on('ConnectionOpened', connectionOpenedHandler);
@@ -138,7 +138,7 @@ class OBSConnectionManager {
             // During acquisition the SDK's attempt promise owns close failures.
             // Retirement closes belong to the old transport, never a queued one.
             if (this.transportRetirement || this.isConnecting) return;
-            this.logger.debug('[OBS Connection] Connection closed', 'obs-connection', {
+            this.logger.debug('Connection closed', 'obs-connection', {
                 code: typeof data?.code === 'number' && Number.isFinite(data.code) ? data.code : undefined
             });
             this._isConnected = false;
@@ -163,14 +163,14 @@ class OBSConnectionManager {
         
         const identifiedHandler = () => {
             if (this.config.enabled === false) {
-                this.logger.debug('[OBS Connection] Ignoring Identified event while disabled', 'obs-connection');
+                this.logger.debug('Ignoring Identified event while disabled', 'obs-connection');
                 this._isConnected = false;
                 this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
                 this.connectionCompleteHandler = null;
                 return;
             }
             if (this.lifecycleState !== 'connecting' && this.lifecycleState !== 'connected') {
-                this.logger.debug('[OBS Connection] Ignoring late Identified event', 'obs-connection');
+                this.logger.debug('Ignoring late Identified event', 'obs-connection');
                 return;
             }
 
@@ -258,11 +258,11 @@ class OBSConnectionManager {
             return Promise.reject(this.createDisabledError());
         }
         if (this.isConnected()) {
-            this.logger.debug('[OBS Connection] Already connected', 'obs-connection');
+            this.logger.debug('Already connected', 'obs-connection');
             return Promise.resolve(true);
         }
         if (this.isConnecting && this.connectionPromise) {
-            this.logger.debug('[OBS Connection] Connection in progress, returning existing promise', 'obs-connection');
+            this.logger.debug('Connection in progress, returning existing promise', 'obs-connection');
             return this.connectionPromise;
         }
 
@@ -303,7 +303,7 @@ class OBSConnectionManager {
                 this._isConnected = true;
                 this.lifecycleState = 'connected';
                 this.clearReconnectTimer();
-                this.log.info('[OBS] Successfully connected and authenticated with OBS.');
+                this.log.info('Successfully connected and authenticated with OBS.', 'obs-connection');
                 resolve(true);
             };
             
@@ -489,7 +489,7 @@ class OBSConnectionManager {
     
     clearSceneItemCache() {
         this.sceneItemIdCache.clear();
-        this.logger.debug('[OBS Connection] Scene item cache cleared', 'obs-connection');
+        this.logger.debug('Scene item cache cleared', 'obs-connection');
         if (typeof this.sourcesCacheInvalidator === 'function') {
             this.sourcesCacheInvalidator();
         }
@@ -510,11 +510,11 @@ class OBSConnectionManager {
             return;
         }
         const delay = this.reconnectIntervalMs || 30000;
-        this.logger.debug(`[OBS Connection] Scheduling reconnect in ${delay}ms (reason: ${reason})`, 'obs-connection');
+        this.logger.debug(`Scheduling reconnect in ${delay}ms (reason: ${reason})`, 'obs-connection');
         this.reconnectTimer = safeSetTimeout(async () => {
             this.reconnectTimer = null;
             if (this.isConnecting || this.isConnected()) {
-                this.logger.debug('[OBS Connection] Reconnect skipped - already connecting/connected', 'obs-connection');
+                this.logger.debug('Reconnect skipped - already connecting/connected', 'obs-connection');
                 return;
             }
             try {
@@ -553,7 +553,7 @@ class OBSConnectionManager {
     
     cacheSceneItemId(key: string, id: unknown) {
         this.sceneItemIdCache.set(key, id);
-        this.logger.debug(`[OBS Connection] Cached scene item ID: ${key} -> ${id}`, 'obs-connection');
+        this.logger.debug(`Cached scene item ID: ${key} -> ${id}`, 'obs-connection');
     }
     
     getCachedSceneItemId(key: string) {
@@ -644,12 +644,12 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
 
                 } catch (glowError) {
                     const glowErrorMessage = glowError instanceof Error ? glowError.message : String(glowError);
-                    logger.debug(`[OBS] Handcam glow initialization failed: ${glowErrorMessage}`, 'OBS');
+                    logger.debug(`[OBS] Handcam glow initialization failed: ${glowErrorMessage}`, 'obs-connection');
                 }
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.debug(`[OBS] OBS connection failed: ${errorMessage}`, 'OBS');
+            logger.debug(`[OBS] OBS connection failed: ${errorMessage}`, 'obs-connection');
         }
     }
 

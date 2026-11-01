@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -6,10 +7,7 @@ import { getSystemTimestampISO } from './timestamp';
 
 const LOG_CONTEXT = 'token-store';
 
-type LoggerLike = {
-    info: (message: string, context?: string, payload?: unknown) => void;
-    warn: (message: string, context?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'info' | 'warn'>;
 
 type TwitchTokenPayload = {
     accessToken?: string | null;

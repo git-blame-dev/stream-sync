@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { validateTimeout } from '../utils/timeout-validator';
@@ -5,11 +6,7 @@ import { isYouTubeVideoId, YouTubeLiveStreamService } from './youtube-live-strea
 import type { DiscoveryObservationKind, DiscoveryQualityReason } from './youtube-live-stream-service';
 import type { InnertubeService } from './innertube-service';
 
-type LoggerLike = {
-    debug?: (message: string, scope?: string, payload?: unknown) => void;
-    warn?: (message: string, scope?: string, payload?: unknown) => void;
-    error: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'error'> & Partial<Pick<AppLogger<string>, 'debug' | 'warn'>>;
 
 type DetectionServiceOptions = {
     logger: LoggerLike;

@@ -588,12 +588,12 @@ async function main(overrides: MainOverrides = {}) {
     });
     const logger = getUnifiedLogger();
     if (!runtimeCliArgs.debug && config.general.debugEnabled) {
-        logger.info('Debug mode enabled via config.ini', 'system');
+        logger.info('Debug mode enabled via config.ini', 'main');
     } else if (runtimeCliArgs.debug) {
-        logger.info('Debug mode enabled via command line argument', 'system');
+        logger.info('Debug mode enabled via command line argument', 'main');
     }
     if (config.general.debugEnabled) {
-        logger.debug('Twitch config loaded', 'system', summarizeTwitchConfig(config.twitch));
+        logger.debug('Twitch config loaded', 'main', summarizeTwitchConfig(config.twitch));
     }
     const ensureSecretsFn = runtimeOverrides.ensureSecrets || ensureSecrets;
     const TwitchAuthCtor = runtimeOverrides.TwitchAuth || TwitchAuth;
@@ -635,7 +635,7 @@ async function main(overrides: MainOverrides = {}) {
         } catch (error) {
             logMainError('Secret setup failed - missing required secrets', error, null, {
                 eventType: 'configuration',
-                logContext: 'Main'
+                logContext: 'main'
             });
             throw error;
         }
@@ -671,7 +671,7 @@ async function main(overrides: MainOverrides = {}) {
                 authValid = false;
                 logMainError('Twitch authentication failed - continuing with limited functionality', error, null, {
                     eventType: 'authentication',
-                    logContext: 'Main'
+                    logContext: 'main'
                 });
             }
         }
@@ -732,9 +732,9 @@ async function main(overrides: MainOverrides = {}) {
 
         if (guiGiftAnimationState.giftAnimationsEnabled) {
             const giftAnimationDependencies = getGiftAnimationDependencyStatus();
-            logger.debug('[Gift Animation] Runtime dependency diagnostics', 'Main', giftAnimationDependencies);
+            logger.debug('Runtime dependency diagnostics', 'main', giftAnimationDependencies);
             if (!giftAnimationDependencies.extraction.available) {
-                logger.warn('[Gift Animation] Runtime dependency missing; gift animations may not play', 'Main', {
+                logger.warn('Runtime dependency missing; gift animations may not play', 'main', {
                     extractionAvailable: giftAnimationDependencies.extraction.available,
                     extractionCommand: giftAnimationDependencies.extraction.command
                 });
@@ -831,9 +831,9 @@ async function main(overrides: MainOverrides = {}) {
 
         if (config.twitch.enabled) {
             if (!authValid) {
-                logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
+                logger.warn('Authentication validation failed - continuing with limited functionality', 'main');
             } else {
-                logger.info('Authentication validation successful', 'Main');
+                logger.info('Authentication validation successful', 'main');
             }
         }
         
@@ -936,7 +936,7 @@ async function main(overrides: MainOverrides = {}) {
         await app.start();
 
         if (process.env.CHAT_BOT_STARTUP_ONLY === 'true') {
-            logger.info('Startup-only mode enabled; shutting down after initialization', 'Main');
+            logger.info('Startup-only mode enabled; shutting down after initialization', 'main');
             await app.shutdown();
             await releaseSingleInstanceGuard(singleInstanceGuard);
             singleInstanceGuard = null;
@@ -948,7 +948,7 @@ async function main(overrides: MainOverrides = {}) {
             };
         }
         
-        logger.info('Runtime main components are running. Holding process open.', 'system');
+        logger.info('Runtime main components are running. Holding process open.', 'main');
 
         if (!runtimeCliArgs.chat) {
 

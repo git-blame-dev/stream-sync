@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
@@ -54,12 +55,7 @@ type TwitchConfig = Record<string, unknown> & {
     dataLoggingEnabled?: boolean;
 };
 
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-    error: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type PlatformErrorHandlerLike = {
     handleDataLoggingError: (error: unknown, context: string) => void;

@@ -161,9 +161,9 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
     function handleInitError(error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.debug(`[Goals] Error initializing goal display system: ${errorMessage}`, 'goals');
+        logger.debug(`Error initializing goal display system: ${errorMessage}`, 'obs-goals');
         if (isOBSNotConnectedError(error)) {
-            logger.debug('[Goal Display] Goal display system initialized - waiting for OBS connection', 'goals');
+            logger.debug('Goal display system initialized - waiting for OBS connection', 'obs-goals');
             return;
         }
 
@@ -173,7 +173,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
     function handleAllDisplaysUpdateError(error: unknown) {
         if (isOBSNotConnectedError(error)) {
-            logger.debug('[Goal Display] Goal display updates skipped - OBS not connected', 'goals');
+            logger.debug('Goal display updates skipped - OBS not connected', 'obs-goals');
             return;
         }
 
@@ -183,7 +183,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
     function handleDisplayUpdateError(platform: string, error: unknown) {
         if (isOBSNotConnectedError(error)) {
-            logger.debug(`[Goal Display] ${platform} goal display update skipped - OBS not connected`, 'goals');
+            logger.debug(`${platform} goal display update skipped - OBS not connected`, 'obs-goals');
             return;
         }
 
@@ -192,7 +192,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
     async function updateDisplayAfterGoalMutation(platform: string, formattedText: string | undefined, eventType: 'donation' | 'paypiggy') {
         if (!isOBSConnected()) {
-            logger.debug(`[Goal Display] ${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'goals');
+            logger.debug(`${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'obs-goals');
             return;
         }
 
@@ -201,7 +201,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
         } catch (obsError) {
             if (isOBSNotConnectedError(obsError)) {
-                logger.debug(`[Goal Display] ${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'goals');
+                logger.debug(`${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'obs-goals');
                 return;
             }
 
@@ -213,11 +213,11 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     async function initializeGoalDisplay() {
         try {
             if (!config.goals.enabled) {
-                logger.debug('[Goals] Goal system disabled in configuration', 'goals');
+                logger.debug('Goal system disabled in configuration', 'obs-goals');
                 return;
             }
 
-            logger.debug('[Goals] Initializing goal system...', 'goals');
+            logger.debug('Initializing goal system...', 'obs-goals');
 
             await initializeGoalTracker();
 
@@ -225,7 +225,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 await updateAllGoalDisplays();
             }
 
-            logger.debug('[Goals] Goal system initialized', 'goals');
+            logger.debug('Goal system initialized', 'obs-goals');
         } catch (error) {
             handleInitError(error);
         }
@@ -234,11 +234,11 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     async function updateAllGoalDisplays() {
         try {
             if (!isOBSConnected()) {
-                logger.debug('[Goal Display] OBS not connected, skipping goal display updates', 'goals');
+                logger.debug('OBS not connected, skipping goal display updates', 'obs-goals');
                 return;
             }
 
-            logger.debug('[Goal Display] Updating all goal displays...', 'goals');
+            logger.debug('Updating all goal displays...', 'obs-goals');
 
             const allStates = getAllGoalStates();
             const promises: Array<Promise<void>> = [];
@@ -265,7 +265,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     async function updateGoalDisplay(platform: string, formattedText?: string) {
         try {
             if (!isOBSConnected()) {
-                logger.debug(`[Goal Display] OBS not connected, skipping ${platform} goal display update`, 'goals');
+                logger.debug(`OBS not connected, skipping ${platform} goal display update`, 'obs-goals');
                 return;
             }
 
@@ -279,7 +279,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
             const platformCapitalized = getPlatformDisplayName(platform);
 
             if (!isGoalEnabled(platform)) {
-                logger.debug(`[Goal Display] ${platformCapitalized} goal disabled, skipping goal display update`, 'goals');
+                logger.debug(`${platformCapitalized} goal disabled, skipping goal display update`, 'obs-goals');
                 return;
             }
 
@@ -311,7 +311,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
         try {
             if (!config.goals.enabled) {
-                logger.debug('[Goal Display] Goal system disabled, skipping donation processing', 'goals');
+                logger.debug('Goal system disabled, skipping donation processing', 'obs-goals');
                 return {
                     success: false,
                     error: 'Goal system is disabled in configuration'
@@ -319,14 +319,14 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
             }
 
             if (!isGoalEnabled(platform)) {
-                logger.debug(`[Goal Display] ${platform} goal disabled, skipping donation processing`, 'goals');
+                logger.debug(`${platform} goal disabled, skipping donation processing`, 'obs-goals');
                 return {
                     success: false,
                     error: `${platform} goal tracking is disabled in configuration`
                 };
             }
 
-            logger.debug(`[Goal Display] Processing ${amount} ${currency || platform} donation for ${platform} goal`, 'goals');
+            logger.debug(`Processing ${amount} ${currency || platform} donation for ${platform} goal`, 'obs-goals');
 
             const updatedState = await addDonationToGoal(platform, amount, currency);
             if (!updatedState.success) {
@@ -348,7 +348,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     async function processPaypiggyGoal(platform: string, count = 1) {
         try {
             if (!config.goals.enabled) {
-                logger.debug('[Goal Display] Goal system disabled, skipping paypiggy processing', 'goals');
+                logger.debug('Goal system disabled, skipping paypiggy processing', 'obs-goals');
                 return {
                     success: false,
                     error: 'Goal system is disabled in configuration'
@@ -356,14 +356,14 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
             }
 
             if (!isGoalEnabled(platform)) {
-                logger.debug(`[Goal Display] ${platform} goal disabled, skipping paypiggy processing`, 'goals');
+                logger.debug(`${platform} goal disabled, skipping paypiggy processing`, 'obs-goals');
                 return {
                     success: false,
                     error: `${platform} goal tracking is disabled in configuration`
                 };
             }
 
-            logger.debug(`[Goal Display] Processing ${platform} paypiggy for goal`, 'goals', { count });
+            logger.debug(`Processing ${platform} paypiggy for goal`, 'obs-goals', { count });
 
             const updatedState = await addPaypiggyToGoal(platform, count);
             if (!updatedState.success) {

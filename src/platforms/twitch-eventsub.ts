@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import * as axiosModule from 'axios';
 import type { AxiosResponse } from 'axios';
 import { EventEmitter } from 'node:events';
@@ -14,11 +15,7 @@ import { createTwitchEventSubSubscriptions } from './twitch/connections/eventsub
 import { createTwitchEventSubWsLifecycle } from './twitch/connections/ws-lifecycle';
 import { createTwitchEventSubEventRouter } from './twitch/events/event-router';
 
-type LoggerLike = {
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'info' | 'warn' | 'debug'>;
 
 type ErrorHandlerLike = {
     handleEventProcessingError?: (error: Error, eventType: string, payload?: unknown, message?: string) => void;

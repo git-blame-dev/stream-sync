@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
 import { safeSetInterval } from './timeout-validator';
 import { withTimeout } from './timeout-wrapper';
@@ -5,11 +6,7 @@ import { createPlatformErrorHandler } from './platform-error-handler';
 import { validateLoggerInterface } from './dependency-validator';
 import type { ViewerCountObservation, ViewerCountSnapshot } from '../contracts/viewer-count';
 
-type ViewerCountLogger = {
-    debug: (message: string, context?: string, payload?: unknown) => void;
-    info: (message: string, context?: string, payload?: unknown) => void;
-    warn: (message: string, context?: string, payload?: unknown) => void;
-};
+type ViewerCountLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type ViewerCountPlatform = {
     getViewerCount?: () => Promise<unknown> | unknown;

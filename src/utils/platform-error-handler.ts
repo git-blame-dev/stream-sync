@@ -194,7 +194,7 @@ class PlatformErrorHandler {
         } else if (context !== undefined) {
             this.logger.error(sanitizeDiagnosticText(message), sanitizeDiagnosticText(context));
         } else {
-            this.logger.error(sanitizeDiagnosticText(message));
+            this.logger.error(sanitizeDiagnosticText(message), 'platform-error-handler');
         }
     }
 
@@ -212,7 +212,16 @@ class PlatformErrorHandler {
 
     handleDataLoggingError(error: unknown, dataType: string, message: string | null = null): void {
         const logMessage = message || `Error logging ${dataType} data: ${resolveErrorMessage(error)}`;
-        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(`${this.platformName}-platform`));
+        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(this.platformName), {
+            ...buildErrorMetadata(error), dataType: sanitizeDiagnosticText(dataType)
+        });
+    }
+
+    handleRawCaptureError(platform: string, eventType: string, failure: string, code?: string): void {
+        this.logger.error('Raw platform data capture failed', 'raw-platform-data-logging', {
+            platform: sanitizeDiagnosticText(platform), eventType: sanitizeDiagnosticText(eventType), failure,
+            ...(code ? { code } : {})
+        });
     }
 }
 

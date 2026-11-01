@@ -159,7 +159,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
             error(message: unknown, context?: unknown, metadata?: unknown) {
               const details = metadata as { error?: string; eventType?: string } | undefined;
               if (message === "[EventHandler] Error executing VFX command"
-                && context === "AppRuntime" && details?.eventType === "event-handler") {
+                && context === "app-runtime" && details?.eventType === "event-handler") {
                 diagnostics.push(details.error || "");
                 if (details.error === "synthetic VFX execution failure") diagnosed.resolve();
               }

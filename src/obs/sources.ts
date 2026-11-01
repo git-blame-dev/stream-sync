@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { logger as coreLogger } from '../core/logging';
 import { safeOBSOperation } from './safe-operations';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -7,10 +8,7 @@ import {
     obsCall as defaultObsCall
 } from './connection';
 
-type SourcesLogger = {
-    debug: (message: unknown, source?: string, data?: unknown) => void;
-    warn: (message: unknown, source?: string, data?: unknown) => void;
-};
+type SourcesLogger = Pick<AppLogger, 'debug' | 'warn'>;
 
 type ObsCall = (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
 
@@ -128,7 +126,7 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     function clearSceneItemCache() {
         cacheEpoch += 1;
         sceneItemCache.clear();
-        logger.debug('[OBS Cache] Scene item cache cleared', 'obs-sources');
+        logger.debug('Scene item cache cleared', 'obs-sources');
     }
 
     const activeConnectionManager = getOBSConnectionManager();
@@ -358,14 +356,14 @@ function getDefaultSourcesManager(dependencies: DefaultSourcesManagerDependencie
             obsManager = getOBSConnectionManager();
         } catch (error) {
             isDegraded = true;
-            logger.warn('[OBS Sources] OBS connection manager unavailable; using degraded sources manager', 'obs-sources', {
+            logger.warn('OBS connection manager unavailable; using degraded sources manager', 'obs-sources', {
                 error: getErrorMessage(error)
             });
             obsManager = null;
         }
         if (!obsManager) {
             if (!isDegraded) {
-                logger.warn('[OBS Sources] OBS connection manager missing; using degraded sources manager', 'obs-sources');
+                logger.warn('OBS connection manager missing; using degraded sources manager', 'obs-sources');
             }
             isDegraded = true;
             obsManager = {

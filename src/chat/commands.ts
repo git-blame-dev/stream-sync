@@ -157,7 +157,7 @@ class CommandParser {
         }
 
         if (hasFarewellConfigText && parsed.triggers.size === 0 && parsed.keywords.size === 0) {
-            logger.warn('[CommandParser] Farewell configuration contains no usable triggers or keywords', 'command-parser');
+            logger.warn('Farewell configuration contains no usable triggers or keywords', 'command-parser');
         }
 
         return parsed;
@@ -338,7 +338,7 @@ async function runCommand(commandData: RunCommandData, vfxFilePath: string, effe
 
         await effectsManager.playMediaInOBS(commandConfig, waitForCompletion);
     } catch (error) {
-        logger.debug(`[runCommand] Failed to execute VFX for ${vfxData.filename || vfxData.mediaSource}. Error: ${getErrorMessage(error)}`, 'command-parser');
+        logger.debug(`Failed to execute VFX for ${vfxData.filename || vfxData.mediaSource}. Error: ${getErrorMessage(error)}`, 'command-parser');
         throw error;
     }
 }

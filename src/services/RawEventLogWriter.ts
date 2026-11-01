@@ -5,19 +5,13 @@ import { types } from 'node:util';
 
 import { LineFileAppender } from '../utils/line-file-appender';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import { LOG_TEXT_SPAN_SOURCE, WEB_URL_SPAN_SOURCE } from '../core/logger/web-url-pattern';
+import { mapQuotedLogText, replaceWebUrls } from '../core/logger/web-url-pattern';
+import { isCredentialKey as isSecretKey, redactCredentialText } from '../core/logger/credential-policy';
+import { classifyLogWriteError, LogWriteError } from '../core/logger/log-write-error';
 
 const RAW_PLATFORMS = new Set(['youtube', 'twitch', 'tiktok', 'streamelements']);
 const REDACTED = '[REDACTED]';
 const LIMITED = '[Capture limit]';
-const BEARER_TOKEN = /\bBearer\s+[^\s,;]+/gi;
-const WEB_URL_SPAN = new RegExp(WEB_URL_SPAN_SOURCE, 'gi');
-const RAW_TEXT_SPAN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
-const SECRET_KEY = /^(?:authorization|proxyauthorization|accessToken|refreshToken|idToken|authToken|jwtToken|sessionToken|token|clientSecret|secret|password|passwd|cookie|setCookie|sessionId|apiKey|xApiKey|accessKeyId|awsAccessKeyId|privateKey|signingKey|signature|sig|credential|credentials|keyPairId|policy|xAmz.*|xGoog.*)$/i;
-
-function isSecretKey(key: string): boolean {
-    return SECRET_KEY.test(key.replace(/[^a-z0-9]/gi, ''));
-}
 
 // RAW capture deliberately retains chat/provider content and non-secret URL parameters.
 // Oversized strings are omitted whole, rather than exposing a credential cut at a boundary.
@@ -73,90 +67,24 @@ function rawText(value: string, depth = 0): string {
         }
         return quote + rawText(candidate.slice(1, -1), depth + 1) + quote;
     };
-    // Recognize assignment boundaries once, using the same key policy for quoted
-    // and bare values. Non-secret enclosing values cannot hide inner assignments.
-    const redactAssignments = (text: string, depth = 0, standaloneOnly = false): string => {
-        const labels = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b[a-z][a-z0-9_-]*)(\s*[:=]\s*)/gi;
-        const urlSpans = [...text.matchAll(new RegExp(WEB_URL_SPAN_SOURCE, 'gi'))];
-        let result = '';
-        let cursor = 0;
-        let match: RegExpExecArray | null;
-        while ((match = labels.exec(text))) {
-            // A whole URL owns its query keys; independently introduced diagnostic
-            // assignments still need filtering before URL serialization escapes spaces.
-            if (standaloneOnly && (match.index === 0 || !/\s/.test(text[match.index - 1]!))) continue;
-            const label = match[1]!;
-            if (!label.startsWith('"') && !label.startsWith("'")
-                && !/\s/.test(text[match.index - 1] ?? '')
-                && urlSpans.some(span => span.index !== undefined
-                    && match!.index >= span.index && match!.index < span.index + span[0].length)) continue;
-            let key: string;
-            // Decode only a bounded primitive label, never provider objects.
-            try { key = label.startsWith('"') ? JSON.parse(label) as string : label.startsWith("'") ? label.slice(1, -1) : label; }
-            catch { continue; }
-            const start = labels.lastIndex;
-            const quote = text[start] === '"' || text[start] === "'" ? text[start] : '';
-            // Bare non-secret values need no transformation. Keep scanning the
-            // original remainder so they cannot split a following quoted secret.
-            if (!quote && !isSecretKey(key)) {
-                result += text.slice(cursor, start);
-                cursor = start;
-                continue;
-            }
-            let end = start;
-            let closed = false;
-            if (quote) {
-                end++;
-                while (end < text.length) {
-                    if (text[end] === '\\') { end = Math.min(end + 2, text.length); continue; }
-                    if (text[end++] === quote) { closed = true; break; }
-                }
-            } else {
-                const header = /^(?:authorization|proxyAuthorization|cookie|setCookie)$/i.test(key.replace(/[^a-z0-9]/gi, ''));
-                let innerQuote = '';
-                while (end < text.length) {
-                    const character = text[end]!;
-                    if (innerQuote) {
-                        if (character === '\\') { end = Math.min(end + 2, text.length); continue; }
-                        if (character === innerQuote) innerQuote = '';
-                    } else {
-                        if ((header ? /[\r\n]/ : /\s/).test(character)) break;
-                        if (character === '"' || character === "'") innerQuote = character;
-                    }
-                    end++;
-                }
-            }
-            if (!isSecretKey(key) && quote && closed) {
-                result += text.slice(cursor, start) + redactQuoted(text.slice(start, end));
-                cursor = end;
-                labels.lastIndex = end;
-                continue;
-            }
-            const content = isSecretKey(key) ? REDACTED : depth >= 12 ? LIMITED
-                : redactAssignments(text.slice(start + (quote ? 1 : 0), end - (closed ? 1 : 0)), depth + 1);
-            result += text.slice(cursor, start) + quote + content + (closed ? quote : '');
-            cursor = end;
-            labels.lastIndex = end;
-        }
-        return result + text.slice(cursor);
-    };
     if (wholeWebUrl) {
-        const independent = redactAssignments(value, 0, true).replace(BEARER_TOKEN, `Bearer ${REDACTED}`);
+        const independent = redactCredentialText(value, redactQuoted, true);
         // A parser-valid URL can also contain another URL in diagnostic text.
         // Inspect those spans before whole-value serialization hides their boundary.
-        const embedded = independent.replace(WEB_URL_SPAN, candidate => redactUrl(candidate));
+        const embedded = replaceWebUrls(independent, (candidate, closed) => closed ? redactUrl(candidate) : '[Invalid URL omitted]');
         return redactUrl(embedded, value);
     }
-    const assignments = redactAssignments(value);
+    const assignments = redactCredentialText(value, redactQuoted);
     // Respect complete quoted strings so URL omission cannot erase the label or
     // opening quote of an adjacent field. Bare URL candidates remain conservative.
-    return assignments.replace(RAW_TEXT_SPAN, candidate => {
+    return mapQuotedLogText(assignments, (candidate, closed) => {
+        if (!closed) return LIMITED;
         const quote = candidate[0];
         if (quote === '"' || quote === "'") {
             return redactQuoted(candidate);
         }
-        return redactUrl(candidate);
-    }).replace(BEARER_TOKEN, `Bearer ${REDACTED}`);
+        return candidate;
+    }, plain => replaceWebUrls(plain, (candidate, closed) => closed ? redactUrl(candidate) : '[Invalid URL omitted]'));
 }
 
 function captureRaw(value: unknown): unknown {
@@ -270,7 +198,7 @@ class RawEventLogWriter {
 
     private recover(configuredRoot: string): Promise<LineFileAppender> {
         // Only one caller can probe a broken root; other events fail promptly rather than queueing payloads.
-        if (this.recovering.has(configuredRoot)) return Promise.reject(new Error('Raw capture recovery in progress'));
+        if (this.recovering.has(configuredRoot)) return Promise.reject(new LogWriteError('unavailable'));
         const pending = recoverDirectory(configuredRoot).then(root => {
             if (this.closed) throw new Error('Raw capture is closed');
             const writer = this.owner(root);
@@ -293,9 +221,9 @@ class RawEventLogWriter {
         try {
             const configuredRoot = path.resolve(options.dataLoggingPath);
             let writer = this.writers.get(configuredRoot);
-            if (this.closed || writer === undefined) throw new Error('Raw capture destination is not active');
+            if (this.closed || writer === undefined) throw new LogWriteError('configuration');
             writer ??= await this.recover(configuredRoot);
-            if (this.closed) throw new Error('Raw capture is closed');
+            if (this.closed) throw new LogWriteError('configuration');
             const logEntry = {
                 ingestTimestamp: getSystemTimestampISO(),
                 platform: options.platform,
@@ -306,9 +234,10 @@ class RawEventLogWriter {
             // Include wrapper, escaped text and newline in the hard per-entry byte ceiling.
             if (Buffer.byteLength(serialized) >= 65_536) serialized = JSON.stringify({ ...logEntry, payload: LIMITED });
             await writer.writeConfirmed(fileName, serialized);
-        } catch {
+        } catch (error) {
             // Direct callers must not accidentally forward filesystem/provider details.
-            throw new Error('Raw event capture write failed');
+            const { failure, code } = classifyLogWriteError(error);
+            throw new LogWriteError(failure, code, 'Raw event capture write failed');
         }
         return { filePath, fileName };
     }

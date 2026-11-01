@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 type SceneEventBus = {
@@ -8,9 +9,7 @@ type SceneObsConnection = {
     call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
 };
 
-type SceneLogger = {
-    warn?: (message: string, context?: string, payload?: unknown) => void;
-};
+type SceneLogger = Partial<Pick<AppLogger<string>, 'warn'>>;
 
 class SceneManagementService {
     eventBus: SceneEventBus;

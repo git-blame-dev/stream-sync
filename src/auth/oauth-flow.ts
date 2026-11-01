@@ -570,7 +570,9 @@ function displayOAuthInstructions(authUrl: string, logger: unknown, { scopes = T
     logConsole(resolvedLogger, '\nATTEMPTING AUTOMATIC BROWSER OPENING...');
     logConsole(resolvedLogger, 'Your browser should open automatically to complete authentication.');
     logConsole(resolvedLogger, 'If it doesn\'t open automatically, please copy and paste this URL:');
-    logConsole(resolvedLogger, `\n${authUrl}\n`);
+    // This generated authorization link is local interactive output, never a log
+    // record: diagnostic URL sanitization removes the query required for OAuth.
+    process.stdout.write(`${authUrl}\n`);
 
     logConsole(resolvedLogger, 'WHAT WILL HAPPEN:');
     logConsole(resolvedLogger, '1. Browser opens to Twitch OAuth page');

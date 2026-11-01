@@ -1,3 +1,4 @@
+import type { AppLogger } from '../../../core/logger/types';
 import { extractTwitchMessageData } from '../../../utils/message-normalization';
 import { validateLoggerInterface } from '../../../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
@@ -17,11 +18,7 @@ type EventRouterOptions = {
     logError?: (message: string, error?: unknown, failureStage?: string) => void;
 };
 
-type RouterLogger = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-};
+type RouterLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type TwitchEventPayload = Record<string, unknown>;
 

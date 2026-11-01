@@ -1,11 +1,8 @@
+import type { AppLogger } from '../core/logger/types';
 import { safeSetInterval as defaultSafeSetInterval, validateInterval } from './timeout-validator';
 import { getSystemTimestampISO } from './timestamp';
 
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type IntervalCallback = () => void;
 type IntervalType = 'generic' | 'monitoring' | 'polling' | 'keepalive' | string;

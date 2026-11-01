@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import fs from 'node:fs';
 import { getYouTubeCapabilityErrors } from '../core/config-schema';
 import { randomUUID } from 'node:crypto';
@@ -8,12 +9,7 @@ import { initializeStaticSecrets } from '../core/secrets';
 import { encodeEnvValue, parseEnvContent } from './env-file-parser';
 import { resolveLogger } from './logger-resolver';
 
-type LoggerLike = {
-    debug?: (message: string, context?: string, payload?: unknown) => void;
-    info?: (message: string, context?: string, payload?: unknown) => void;
-    warn?: (message: string, context?: string, payload?: unknown) => void;
-    error?: (message: string, context?: string, payload?: unknown) => void;
-};
+type LoggerLike = Partial<Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>>;
 
 type SecretsConfig = Record<string, Record<string, unknown>>;
 

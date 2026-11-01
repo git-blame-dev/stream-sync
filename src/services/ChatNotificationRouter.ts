@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { NotificationBuilder } from '../utils/notification-builder';
 import { validateNormalizedMessage } from '../utils/message-normalization';
 import { checkGlobalCommandCooldown, updateGlobalCommandCooldown } from '../utils/global-command-cooldown';
@@ -15,12 +16,7 @@ import type { MemberProfile } from '../core/types/config-types';
 const LOG_TRUNCATION_LENGTH = 200;
 type RouterRecord = Record<string, unknown>;
 
-type LoggerLike = {
-    debug: (message: unknown, source?: string, data?: unknown) => void;
-    warn: (message: unknown, source?: string, data?: unknown) => void;
-    error?: (message: unknown, source?: string, data?: unknown) => void;
-    console?: (message: unknown, source?: string, data?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger, 'debug' | 'warn'> & Partial<Pick<AppLogger, 'error' | 'console'>>;
 
 type RouterConfig = {
     general: {

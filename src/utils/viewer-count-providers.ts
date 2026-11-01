@@ -1,15 +1,11 @@
+import type { AppLogger } from '../core/logger/types';
 import { getUnifiedLogger } from '../core/logging';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { parseNotificationCount } from './notification-count';
 import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 
-type ProviderLogger = {
-    debug: (message: string, context?: string, payload?: unknown) => void;
-    info: (message: string, context?: string, payload?: unknown) => void;
-    warn: (message: string, context?: string, payload?: unknown) => void;
-    error: (message: string, context?: string, payload?: unknown) => void;
-};
+type ProviderLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type ProviderErrorStats = {
     totalErrors: number;

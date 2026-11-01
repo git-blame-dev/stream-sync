@@ -1,9 +1,8 @@
+import type { AppLogger } from '../core/logger/types';
 import { logger as coreLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
-type CooldownLogger = {
-    debug: (message: string, source?: string) => void;
-};
+type CooldownLogger = Pick<AppLogger<string>, 'debug'>;
 
 class GlobalCommandCooldownManager {
     logger: CooldownLogger;

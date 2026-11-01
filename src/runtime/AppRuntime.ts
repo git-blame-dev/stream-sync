@@ -256,7 +256,7 @@ type SystemReadyPayload = RuntimeRecord & {
     cooldowns?: unknown;
 };
 
-const createAppRuntimeErrorHandler = (logger: AppLogger) => createPlatformErrorHandler(logger, 'AppRuntime');
+const createAppRuntimeErrorHandler = (logger: AppLogger) => createPlatformErrorHandler(logger, 'app-runtime');
 
 const notificationInputValidator = new NotificationInputValidator();
 
@@ -596,7 +596,7 @@ class AppRuntime {
                 }
 
                 if (source === 'eventbus' || source === 'vfx-service') {
-                    this.logger.debug('[EventHandler] Ignoring VFX command already processed by EventBus handler', 'AppRuntime');
+                    this.logger.debug('Ignoring VFX command already processed by EventBus handler', 'app-runtime');
                     return;
                 }
 
@@ -644,20 +644,20 @@ class AppRuntime {
                 }
 
                 if (command && typeof this.vfxCommandService.executeCommand === 'function') {
-                    this.logger.debug(`[EventHandler] Executing VFX command string: ${command}`, 'AppRuntime');
+                    this.logger.debug(`Executing VFX command string: ${command}`, 'app-runtime');
                     await this.vfxCommandService.executeCommand(command, executionContext);
                 } else if (commandKey && typeof this.vfxCommandService.executeCommandForKey === 'function') {
-                    this.logger.debug(`[EventHandler] Executing VFX command key: ${commandKey}`, 'AppRuntime');
+                    this.logger.debug(`Executing VFX command key: ${commandKey}`, 'app-runtime');
                     await this.vfxCommandService.executeCommandForKey(commandKey, executionContext);
                 } else {
-                    this.logger.warn('[EventHandler] No command or commandKey provided for VFX command event', 'AppRuntime', { event });
+                    this.logger.warn('No command or commandKey provided for VFX command event', 'app-runtime', { event });
                 }
             } catch (error) {
                 this._handleAppRuntimeError(
                     '[EventHandler] Error executing VFX command',
                     error,
                     { event },
-                    { eventType: 'event-handler', logContext: 'AppRuntime' }
+                    { eventType: 'event-handler', logContext: 'app-runtime' }
                 );
             }
         });
@@ -683,15 +683,15 @@ class AppRuntime {
             return;
         }
 
-        this.logger.info(`[EventHandler] Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'AppRuntime');
+        this.logger.info(`Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'app-runtime');
 
         if (platform === 'youtube' && this.youtube && typeof this.youtube.initialize === 'function') {
-            this.logger.debug(`Requesting YouTube reconnection for ${newStreamIds.length} discovered stream(s)`, 'AppRuntime');
+            this.logger.debug(`Requesting YouTube reconnection for ${newStreamIds.length} discovered stream(s)`, 'app-runtime');
             try {
                 await this.youtube.initialize({}, true);
             } catch (reconnectError) {
                 this._handleAppRuntimeError('YouTube reconnection request failed', reconnectError, null, {
-                    eventType: 'stream-detected', logContext: 'AppRuntime'
+                    eventType: 'stream-detected', logContext: 'app-runtime'
                 });
             }
         }
@@ -742,7 +742,7 @@ class AppRuntime {
     }
 
     async updateViewerCount(platform: string, count: number) {
-        this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'system');
+        this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'app-runtime');
         return this.viewerCountSystem.updateViewerCount(platform, count);
     }
 
@@ -755,7 +755,7 @@ class AppRuntime {
                 reject = rejectPromise;
             });
             try {
-                this.logger.info('Shutting down application...', 'system');
+                this.logger.info('Shutting down application...', 'app-runtime');
             } catch {
                 // Entry diagnostics must not prevent retiring this runtime lifetime.
             }
@@ -838,7 +838,7 @@ class AppRuntime {
                     : `Error attempting to ${stepName}: ${getErrorMessage(error)}`;
                 this._handleAppRuntimeError(message, error, null, {
                     eventType: mode,
-                    logContext: mode === 'startup-rollback' ? 'AppRuntime' : 'system'
+                    logContext: 'app-runtime'
                 });
             } catch {
                 // Diagnostic formatting and logging must not interrupt resource teardown.
@@ -856,7 +856,7 @@ class AppRuntime {
             });
         }
         try {
-            this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
+            this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'app-runtime');
 
         } catch {
             // Completion diagnostics must not prevent scheduling process termination.
@@ -909,7 +909,7 @@ class AppRuntime {
                     `GUI transport initialization failed: ${getErrorMessage(error)}`,
                     error,
                     null,
-                    { eventType: 'startup', logContext: 'AppRuntime' }
+                    { eventType: 'startup', logContext: 'app-runtime' }
                 );
                 throw error;
             }
@@ -924,9 +924,9 @@ class AppRuntime {
                         `Neural TTS initialization failed: ${getErrorMessage(neuralTtsError)}`,
                         neuralTtsError,
                         null,
-                        { eventType: 'startup', logContext: 'AppRuntime' }
+                        { eventType: 'startup', logContext: 'app-runtime' }
                     );
-                    this.logger.warn('Neural TTS unavailable; continuing in degraded mode', 'AppRuntime');
+                    this.logger.warn('Neural TTS unavailable; continuing in degraded mode', 'app-runtime');
                 }
             }
             this.assertActiveLifetime();
@@ -936,16 +936,16 @@ class AppRuntime {
                 this.assertActiveLifetime();
                 const degradedPlatforms = this._getDegradedPlatformInitializations();
                 if (degradedPlatforms.length === 0) {
-                    this.logger.info('Platform connections initialized', 'AppRuntime');
+                    this.logger.info('Platform connections initialized', 'app-runtime');
                 } else {
-                    this.logger.warn(`Platform initialization completed in degraded state: ${degradedPlatforms.join(', ')}`, 'AppRuntime');
+                    this.logger.warn(`Platform initialization completed in degraded state: ${degradedPlatforms.join(', ')}`, 'app-runtime');
                 }
             } catch (error) {
                 this._handleAppRuntimeError(
                     'Platform initialization failed',
                     error,
                     null,
-                    { eventType: 'startup', logContext: 'AppRuntime' }
+                    { eventType: 'startup', logContext: 'app-runtime' }
                 );
                 throw error;
             }
@@ -961,18 +961,18 @@ class AppRuntime {
                     ...obsConnectionDependencies
                 });
                 if (outcome === 'disabled') {
-                    this.logger.info('OBS integration disabled', 'AppRuntime');
+                    this.logger.info('OBS integration disabled', 'app-runtime');
                 } else if (outcome !== 'connected') {
-                    this.logger.warn('OBS unavailable; continuing in degraded mode', 'AppRuntime');
+                    this.logger.warn('OBS unavailable; continuing in degraded mode', 'app-runtime');
                 }
             } catch (obsError) {
                 this._handleAppRuntimeError(
                     `OBS initialization failed: ${getErrorMessage(obsError)}`,
                     obsError,
                     null,
-                    { eventType: 'startup', logContext: 'AppRuntime' }
+                    { eventType: 'startup', logContext: 'app-runtime' }
                 );
-                this.logger.info('Continuing without OBS connection; VFX system remains available.', 'AppRuntime');
+                this.logger.info('Continuing without OBS connection; VFX system remains available.', 'app-runtime');
             }
 
             this.assertActiveLifetime();
@@ -1005,7 +1005,7 @@ class AppRuntime {
                 throw new Error('GracefulExitService dependency required');
             }
             if (this.gracefulExitService.isEnabled()) {
-                this.logger.info(`Graceful exit enabled: will exit after ${this.gracefulExitService.getTargetMessageCount()} messages`, 'AppRuntime');
+                this.logger.info(`Graceful exit enabled: will exit after ${this.gracefulExitService.getTargetMessageCount()} messages`, 'app-runtime');
             }
 
             this.isStarted = true;
@@ -1066,7 +1066,7 @@ class AppRuntime {
                 null,
                 {
                     eventType: 'viewer-count-init',
-                    logContext: 'AppRuntime'
+                    logContext: 'app-runtime'
                 }
             );
         }

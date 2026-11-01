@@ -1,45 +1,13 @@
-import { LOG_TEXT_SPAN_SOURCE } from './web-url-pattern';
+import { replaceWebUrls, mapQuotedLogText } from './web-url-pattern';
+import { isCredentialKey, redactCredentialText } from './credential-policy';
 
-const SENSITIVE_LOG_KEYS = new Set([
-    'accesstoken',
-    'refreshtoken',
-    'clientsecret',
-    'authorization',
-    'cookie',
-    'password',
-    'secret',
-    'token',
-    'sessionid',
-    'apikey',
-    'xapikey',
-    'jwttoken',
-]);
 const RAW_PROVIDER_PAYLOAD_KEY_PATTERN = /^(?:payload|rawPayload|rawData|originalData|eventData|providerPayload)$/i;
 const SENSITIVE_URL_KEY_PATTERN = /(?:url|uri|endpoint|reconnect)/i;
-const URL_TEXT_PATTERN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
-const JSON_STRING_ASSIGNMENT_PATTERN = /("([a-z_-]+)"\s*:\s*")(?:[^"\\]*\\[\s\S])*[^"\\]*"/gi;
-// Quote-started values consume escaped quotes; bare values retain embedded quotes.
-const SECRET_TEXT_VALUE_PATTERN = String.raw`(?:"(?:[^"\\]*\\[\s\S])*[^"\\]*"|'(?:[^'\\]*\\[\s\S])*[^'\\]*'|[^\s,;&"'][^\s,;&]*)`;
-const FREE_TEXT_SECRET_PATTERNS: readonly RegExp[] = [
-    new RegExp(String.raw`\b(authorization\s*[:=]\s*(?:bearer|basic)\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    new RegExp(String.raw`\b(bearer\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    new RegExp(String.raw`\b((?:access|refresh|jwt|id|auth)[_-]?token\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    new RegExp(String.raw`\b((?:api[_-]?key|x-api-key|client[_-]?secret|password|secret)\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    /\b((?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,
-];
 const MAX_ENTRIES = 100;
 const MAX_STRING_LENGTH = 4096;
 const MAX_TOTAL_NODES = 1000;
 const MAX_TOTAL_STRING_CHARS = 100_000;
 const TRUNCATION_MARKER = '...';
-
-function normalizeLogKey(key: string): string {
-    return key.replace(/[_-]/g, '').toLowerCase();
-}
-
-function isSensitiveLogKey(key: string): boolean {
-    return SENSITIVE_LOG_KEYS.has(normalizeLogKey(key));
-}
 
 function stripUrlSecrets(value: string, webOnly = false): string | null {
     try {
@@ -56,7 +24,8 @@ function stripUrlSecrets(value: string, webOnly = false): string | null {
 }
 
 function sanitizeUrlText(value: string, depth = 0): string {
-    return value.replace(URL_TEXT_PATTERN, candidate => {
+    return mapQuotedLogText(value, (candidate, closed) => {
+        if (!closed) return `${candidate[0]}[Unterminated quoted text omitted]${candidate[0]}`;
         const quote = candidate[0];
         if (quote === '"' || quote === "'") {
             if (depth >= 12) return `${quote}[URL omitted]${quote}`;
@@ -73,26 +42,18 @@ function sanitizeUrlText(value: string, depth = 0): string {
             const safe = stripUrlSecrets(content, true) ?? sanitizeUrlText(content, depth + 1);
             return quote + safe + quote;
         }
-        // A malformed complete span must not expose credentials from its suffix.
-        return stripUrlSecrets(candidate, true) ?? '[Invalid URL omitted]';
-    });
+        return candidate;
+    }, plain => replaceWebUrls(plain, (candidate, closed) => closed ? stripUrlSecrets(candidate, true) ?? '[Invalid URL omitted]' : '[Invalid URL omitted]'));
 }
 
 function sanitizeLogText(value: string): string {
-    const withoutJsonSecrets = value.replace(JSON_STRING_ASSIGNMENT_PATTERN, (assignment, prefix: string, key: string) =>
-        isSensitiveLogKey(key) ? `${prefix}[REDACTED]"` : assignment,
-    );
-    const withoutUrlSecrets = sanitizeUrlText(withoutJsonSecrets);
-    return FREE_TEXT_SECRET_PATTERNS.reduce(
-        (sanitized, pattern) => sanitized.replace(pattern, '$1[REDACTED]'),
-        withoutUrlSecrets,
-    );
+    return sanitizeUrlText(redactCredentialText(value));
 }
 
 type SanitizationBudget = { nodes: number; stringChars: number };
 function sanitizeLogValue(value: unknown, key = '', depth = 0, ancestors: WeakSet<object> = new WeakSet(), maxDepth = 3, budget?: SanitizationBudget): unknown {
     if (budget && budget.nodes-- <= 0) return '[Traversal budget exceeded]';
-    if (isSensitiveLogKey(key)) {
+    if (isCredentialKey(key)) {
         return '[REDACTED]';
     }
     if (RAW_PROVIDER_PAYLOAD_KEY_PATTERN.test(key)) {

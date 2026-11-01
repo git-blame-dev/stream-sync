@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { YOUTUBE } from '../core/endpoints';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { withTimeout } from '../utils/timeout-wrapper';
@@ -6,9 +7,7 @@ import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 const DEFAULT_TIMEOUT_MS = 2000;
 const MAX_HANDLE_LENGTH = 128;
 
-type ResolverLogger = {
-    error: (message: string, scope?: string, payload?: unknown) => void;
-};
+type ResolverLogger = Pick<AppLogger<string>, 'error'>;
 
 type ResolverClient = {
     resolveURL?: (url: string) => Promise<{

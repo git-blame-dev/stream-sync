@@ -163,14 +163,14 @@ export class NeuralTtsProcessManager {
 
         if (initialProbe.reachable) {
             this.spawnedByUs = false;
-            this.logger.info('Neural TTS service already running; attaching shared lease', 'NeuralTtsProcessManager');
+            this.logger.info('Neural TTS service already running; attaching shared lease', 'neural-tts-process-manager');
             await this.acquireLease(root);
             if (!initialProbe.ready) {
                 const ready = await this.waitForReady(root);
                 if (!ready) {
                     this.logger.warn(
                         `Neural TTS warmup timed out after ${this.warmupTimeoutMs}ms; continuing in degraded mode`,
-                        'NeuralTtsProcessManager'
+                        'neural-tts-process-manager'
                     );
                 }
             }
@@ -185,12 +185,12 @@ export class NeuralTtsProcessManager {
             this.spawnedByUs = false;
             this.logger.warn(
                 'Neural TTS service is not reachable and no neuralTtsCommand is configured; continuing in degraded mode',
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return;
         }
 
-        this.logger.info('Spawning Neural TTS service...', 'NeuralTtsProcessManager');
+        this.logger.info('Spawning Neural TTS service...', 'neural-tts-process-manager');
         try {
             this.childProcess = this.spawn(command, {
                 shell: true,
@@ -203,7 +203,7 @@ export class NeuralTtsProcessManager {
             this.childProcess = null;
             this.logger.warn(
                 `Failed to spawn Neural TTS command: ${getErrorMessage(error)}; continuing in degraded mode`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return;
         }
@@ -212,14 +212,14 @@ export class NeuralTtsProcessManager {
         if (!ready) {
             this.logger.warn(
                 `Neural TTS warmup timed out or failed after ${this.warmupTimeoutMs}ms; continuing in degraded mode`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return;
         }
 
         await this.acquireLease(root);
         if (this.hasAcquiredLease) {
-            this.logger.info('Neural TTS service ready and lease acquired', 'NeuralTtsProcessManager');
+            this.logger.info('Neural TTS service ready and lease acquired', 'neural-tts-process-manager');
         }
     }
 
@@ -238,7 +238,7 @@ export class NeuralTtsProcessManager {
         } catch (error) {
             this.logger.warn(
                 `Skipping Neural TTS stop due to invalid endpoint: ${getErrorMessage(error)}; keeping process alive`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return;
         }
@@ -246,7 +246,7 @@ export class NeuralTtsProcessManager {
         if (!this.hasAcquiredLease) {
             this.logger.warn(
                 'Neural TTS lease ownership was not established; keeping service alive without shutdown',
-                'NeuralTtsProcessManager',
+                'neural-tts-process-manager',
                 {
                     spawnedByUs: this.spawnedByUs
                 }
@@ -266,7 +266,7 @@ export class NeuralTtsProcessManager {
         ) {
             this.logger.info(
                 'Keeping Neural TTS service alive for external session or other active consumers',
-                'NeuralTtsProcessManager',
+                'neural-tts-process-manager',
                 {
                     spawnedByUs: this.spawnedByUs,
                     activeClients: releaseInfo?.active_clients ?? null,
@@ -277,7 +277,7 @@ export class NeuralTtsProcessManager {
             return;
         }
 
-        this.logger.info('Shutting down Neural TTS service (no other active consumers)...', 'NeuralTtsProcessManager');
+        this.logger.info('Shutting down Neural TTS service (no other active consumers)...', 'neural-tts-process-manager');
         const shutdownAccepted = await this.requestShutdown(root);
         if (shutdownAccepted === true) {
             this.terminateChildProcess();
@@ -293,7 +293,7 @@ export class NeuralTtsProcessManager {
         } catch (error) {
             this.logger.debug(
                 `Ignored error killing Neural TTS child process: ${getErrorMessage(error)}`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
         } finally {
             this.childProcess = null;
@@ -344,7 +344,7 @@ export class NeuralTtsProcessManager {
             if (!response.ok) {
                 this.logger.warn(
                     `Neural TTS lease acquire returned HTTP ${response.status}`,
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return;
             }
@@ -352,7 +352,7 @@ export class NeuralTtsProcessManager {
             if (!isValidLeaseAcquirePayload(body)) {
                 this.logger.warn(
                     'Neural TTS lease acquire returned an invalid payload',
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return;
             }
@@ -360,7 +360,7 @@ export class NeuralTtsProcessManager {
         } catch (error) {
             this.logger.warn(
                 `Failed to acquire Neural TTS lease: ${getErrorMessage(error)}`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
         }
     }
@@ -377,7 +377,7 @@ export class NeuralTtsProcessManager {
             if (!response.ok) {
                 this.logger.warn(
                     `Neural TTS lease release returned HTTP ${response.status}`,
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return null;
             }
@@ -385,7 +385,7 @@ export class NeuralTtsProcessManager {
             if (!isValidLeaseReleasePayload(body)) {
                 this.logger.warn(
                     'Neural TTS lease release returned an invalid payload',
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return null;
             }
@@ -397,7 +397,7 @@ export class NeuralTtsProcessManager {
         } catch (error) {
             this.logger.warn(
                 `Failed to release Neural TTS lease: ${getErrorMessage(error)}`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return null;
         }
@@ -413,14 +413,14 @@ export class NeuralTtsProcessManager {
             if (response.status === 409) {
                 this.logger.info(
                     'Neural TTS shutdown rejected (HTTP 409 Conflict: another client or job became active); keeping process alive',
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return false;
             }
             if (!response.ok) {
                 this.logger.warn(
                     `Neural TTS shutdown failed with HTTP ${response.status}; keeping process alive`,
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return false;
             }
@@ -432,7 +432,7 @@ export class NeuralTtsProcessManager {
             ) {
                 this.logger.warn(
                     'Neural TTS shutdown returned an invalid payload; keeping process alive',
-                    'NeuralTtsProcessManager'
+                    'neural-tts-process-manager'
                 );
                 return false;
             }
@@ -440,7 +440,7 @@ export class NeuralTtsProcessManager {
         } catch (error) {
             this.logger.warn(
                 `Failed to request Neural TTS shutdown: ${getErrorMessage(error)}; keeping process alive`,
-                'NeuralTtsProcessManager'
+                'neural-tts-process-manager'
             );
             return false;
         }

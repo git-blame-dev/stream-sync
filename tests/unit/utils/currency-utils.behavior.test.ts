@@ -16,7 +16,7 @@ describe("currency-utils behavior", () => {
   });
   it("records sanitized unknown-input warnings without control characters", () => {
     const records: string[] = [];
-    const logger = { warn: (message: string, context: string) => { records.push(`${context}: ${message}`); } };
+    const logger = { warn: (message: string, context?: string) => { records.push(`${context}: ${message}`); } };
     expect(normalizeCurrency('access_token=synthetic-currency-token; scope missing\n\r\t', { logger })).toBe('XXX');
     expect(records).toHaveLength(1);
     expect(records[0]).not.toContain('synthetic-currency-token');

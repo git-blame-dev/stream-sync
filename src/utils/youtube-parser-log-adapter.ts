@@ -1,15 +1,11 @@
+import type { AppLogger } from '../core/logger/types';
 import { types } from 'node:util';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { asRecord } from './record-contracts';
 
-type LoggerLike = {
-    debug?: (message: unknown, source?: string, data?: unknown) => void;
-    info?: (message: unknown, source?: string, data?: unknown) => void;
-    warn?: (message: unknown, source?: string, data?: unknown) => void;
-    error?: (message: unknown, source?: string, data?: unknown) => void;
-};
+type LoggerLike = Partial<Pick<AppLogger, 'debug' | 'info' | 'warn' | 'error'>>;
 
 type ParserWarningContext = {
     error_type?: unknown;

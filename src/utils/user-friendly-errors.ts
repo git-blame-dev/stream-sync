@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
@@ -405,11 +406,7 @@ const TECHNICAL_ERROR_PATTERNS = [
 
 type FriendlySeverity = 'error' | 'warning' | 'info';
 
-type LoggerLike = {
-    console?: (message: string, context?: string) => void;
-    warn?: (message: string, context?: string, payload?: unknown) => void;
-    error?: (message: string, context?: string, payload?: unknown) => void;
-};
+type LoggerLike = Partial<Pick<AppLogger<string>, 'console' | 'warn' | 'error'>>;
 
 type ErrorContext = {
     includeTechnical?: boolean;
@@ -538,11 +535,6 @@ function showUserFriendlyError(technicalError: unknown, context: ErrorContext = 
     } else {
         const output = consoleMessage.endsWith('\n') ? consoleMessage : `${consoleMessage}\n`;
         process.stderr.write(output);
-    }
-    
-    if (context.logger) {
-        const logMessage = formatErrorForLog(friendlyError);
-        logUserFriendlyError(context, friendlyError, logMessage, technicalError);
     }
 }
 

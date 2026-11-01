@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { EventEmitter } from 'node:events';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
@@ -5,10 +6,7 @@ import { createStandardDependencies as createStandardValidatorDependencies, vali
 import { normalizeLoggerMethods } from './logger-resolver';
 import { secrets } from '../core/secrets';
 
-type FactoryLogger = {
-    debug: (message: string, source?: string) => void;
-    warn: (message: string, source?: string) => void;
-};
+type FactoryLogger = Pick<AppLogger<string>, 'debug' | 'warn'>;
 
 type PlatformDependencies = {
     logger?: unknown;

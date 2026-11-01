@@ -1,10 +1,9 @@
+import type { AppLogger } from '../../core/logger/types';
 import crypto from 'node:crypto';
 
 import { DEFAULT_HTTP_USER_AGENTS } from '../../core/http-config';
 
-type UserAgentLogger = {
-    debug: (message: string, source?: string, data?: unknown) => void;
-};
+type UserAgentLogger = Pick<AppLogger<string>, 'debug'>;
 
 type UserAgentManagerOptions = {
     userAgents?: string[];

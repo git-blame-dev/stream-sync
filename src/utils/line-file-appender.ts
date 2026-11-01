@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { archiveIdentity, pruneLogArchives, type LogRetention } from './log-retention';
 import { FILE_LOG_LIMITS, OPERATIONAL_RETENTION } from '../core/logger/file-policy';
 import { getSystemTimestampISO } from './timestamp';
+import { classifyLogWriteError, LogWriteError } from '../core/logger/log-write-error';
 
 export type LineFileAppenderConfig = {
     logDir?: string;
@@ -77,7 +78,7 @@ export class LineFileAppender {
 
     writeConfirmed(filename: string, content: string): Promise<void> {
         const batch = this.enqueue(filename, content);
-        if (!batch) return Promise.reject(new Error('Log entry not admitted'));
+        if (!batch) return Promise.reject(new LogWriteError('capacity', undefined, 'Log entry not admitted'));
         if (!batch.completion) {
             let resolve!: () => void;
             let reject!: (error: Error) => void;
@@ -131,8 +132,9 @@ export class LineFileAppender {
                 await this.append(batch);
                 this.writeFailureReported = false;
                 batch.completion?.resolve();
-            } catch {
-                batch.completion?.reject(new Error('Log append failed'));
+            } catch (error) {
+                const { failure, code } = classifyLogWriteError(error);
+                batch.completion?.reject(new LogWriteError(failure, code, 'Log append failed'));
                 this.current = null;
                 if (!this.writeFailureReported) {
                     report('[LineFileAppender] File write failed; entries in this batch were not confirmed written\n');

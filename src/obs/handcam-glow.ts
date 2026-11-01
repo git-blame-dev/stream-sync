@@ -1,12 +1,11 @@
+import type { AppLogger } from '../core/logger/types';
 import { logger as defaultLogger } from '../core/logging';
 import { DEFAULTS } from '../core/config-schema';
 import { ConfigValidator } from '../utils/config-validator';
 import { safeDelay as defaultDelay, validateTimeout } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
-type GlowLogger = {
-    debug: (message: string, context?: string, payload?: unknown) => void;
-};
+type GlowLogger = Pick<AppLogger<string>, 'debug'>;
 
 type EnsureConnected = () => Promise<void>;
 type GlowDelay = (ms: number, minMs: number, context: string) => Promise<void>;
@@ -194,7 +193,7 @@ async function setHandcamGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseS
         });
 
     } catch (error) {
-        logger.debug(`[Handcam] Error setting glow size to ${size}`, 'handcam-glow', getErrorMessage(error));
+        logger.debug(`Error setting glow size to ${size}`, 'handcam-glow', getErrorMessage(error));
         throw error;
     }
 }
@@ -212,7 +211,7 @@ async function executeAnimationPhase(
 ) {
     const { logger } = moduleDeps;
     try {
-        logger.debug(`[Handcam] Phase ${phaseNumber}: ${phaseName} - ${config.totalSteps} steps, ${stepDelay.toFixed(1)}ms per step`, 'handcam-glow');
+        logger.debug(`Phase ${phaseNumber}: ${phaseName} - ${config.totalSteps} steps, ${stepDelay.toFixed(1)}ms per step`, 'handcam-glow');
 
         for (let step = 0; step <= config.totalSteps; step++) {
             assertActiveRun(runId, signal);
@@ -225,10 +224,10 @@ async function executeAnimationPhase(
             }
         }
 
-        logger.debug(`[Handcam] Phase ${phaseNumber} completed: ${phaseName}`, 'handcam-glow');
+        logger.debug(`Phase ${phaseNumber} completed: ${phaseName}`, 'handcam-glow');
 
     } catch (error) {
-        logger.debug(`[Handcam] Error in phase ${phaseNumber} (${phaseName})`, 'handcam-glow', getErrorMessage(error));
+        logger.debug(`Error in phase ${phaseNumber} (${phaseName})`, 'handcam-glow', getErrorMessage(error));
         throw error;
     }
 }
@@ -236,7 +235,7 @@ async function executeAnimationPhase(
 async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings, runId: number, signal?: AbortSignal) {
     const { logger } = moduleDeps;
     try {
-        logger.debug(`[Handcam] Starting enhanced glow animation with easing: ${config.easingEnabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
+        logger.debug(`Starting enhanced glow animation with easing: ${config.easingEnabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
 
         await executeAnimationPhase(
             obs,
@@ -254,7 +253,7 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
             signal
         );
 
-        logger.debug(`[Handcam] Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
+        logger.debug(`Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
         if (config.holdDuration > 0) {
             const holdDelay = validateTimeout(config.holdDuration * 1000, config.holdDuration);
             await glowDelay(holdDelay, 1000, 'Handcam glow hold duration', signal);
@@ -277,10 +276,10 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
             signal
         );
 
-        logger.debug(`[Handcam] Enhanced glow animation completed successfully`, 'handcam-glow');
+        logger.debug(`Enhanced glow animation completed successfully`, 'handcam-glow');
 
     } catch (error) {
-        logger.debug(`[Handcam] Error during enhanced glow animation`, 'handcam-glow', getErrorMessage(error));
+        logger.debug(`Error during enhanced glow animation`, 'handcam-glow', getErrorMessage(error));
         throw error;
     }
 }
@@ -291,12 +290,12 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
     const runId = ++handcamGlowRunId;
 
     if (!config.enabled) {
-        logger.debug('[Handcam] Glow filter disabled in config', 'handcam-glow');
+        logger.debug('Glow filter disabled in config', 'handcam-glow');
         return;
     }
 
     try {
-        logger.debug(`[Handcam] Starting glow animation: 0→${config.maxSize}→0 over ${config.totalDuration}s (${config.rampUpDuration}s up + ${config.holdDuration}s hold + ${config.rampDownDuration}s down)`, 'handcam-glow');
+        logger.debug(`Starting glow animation: 0→${config.maxSize}→0 over ${config.totalDuration}s (${config.rampUpDuration}s up + ${config.holdDuration}s hold + ${config.rampDownDuration}s down)`, 'handcam-glow');
 
         assertActiveRun(runId, signal);
         await ensureGlowConnected(obs);
@@ -308,16 +307,16 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
         }) as { filterSettings?: FilterSettings };
 
         const baseSettings = filterInfo.filterSettings ?? {};
-        logger.debug(`[Handcam] Retrieved filter settings for ${config.sourceName}:${config.filterName}`, 'handcam-glow');
+        logger.debug(`Retrieved filter settings for ${config.sourceName}:${config.filterName}`, 'handcam-glow');
 
         await setHandcamGlowSize(obs, config, baseSettings, 0, runId, signal);
         await animateGlowSize(obs, config, baseSettings, runId, signal);
 
-        logger.debug('[Handcam] Glow animation completed', 'handcam-glow');
+        logger.debug('Glow animation completed', 'handcam-glow');
 
     } catch (error) {
         if (signal?.aborted || error instanceof HandcamGlowSupersededError) {
-            logger.debug('[Handcam] Glow animation superseded by a newer request', 'handcam-glow');
+            logger.debug('Glow animation superseded by a newer request', 'handcam-glow');
             return;
         }
         handleHandcamGlowError('[Handcam] Error in glow animation', error, { config });
@@ -331,9 +330,9 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
                 filterName: config.filterName
             }) as { filterSettings?: FilterSettings };
             await setHandcamGlowSize(obs, config, filterInfo.filterSettings ?? {}, 0, runId, signal);
-            logger.debug('[Handcam] Reset glow properties after error', 'handcam-glow');
+            logger.debug('Reset glow properties after error', 'handcam-glow');
         } catch (resetError) {
-            logger.debug('[Handcam] Failed to reset glow properties', 'handcam-glow', getErrorMessage(resetError));
+            logger.debug('Failed to reset glow properties', 'handcam-glow', getErrorMessage(resetError));
         }
     }
 }
@@ -343,7 +342,7 @@ async function initializeHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigI
     const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
-        logger.debug('[Handcam] Glow initialization skipped - disabled in config', 'handcam-glow');
+        logger.debug('Glow initialization skipped - disabled in config', 'handcam-glow');
         return;
     }
 
@@ -358,10 +357,10 @@ async function initializeHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigI
         const baseSettings = filterInfo.filterSettings ?? {};
 
         await setHandcamGlowSize(obs, config, baseSettings, 0);
-        logger.debug('[Handcam] Glow filter initialized to 0', 'handcam-glow');
+        logger.debug('Glow filter initialized to 0', 'handcam-glow');
 
     } catch (error) {
-        logger.debug('[Handcam] Error initializing glow filter', 'handcam-glow', getErrorMessage(error));
+        logger.debug('Error initializing glow filter', 'handcam-glow', getErrorMessage(error));
     }
 }
 
@@ -370,14 +369,14 @@ function triggerHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInput, sig
     const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
-        logger.debug('[Handcam] Glow trigger ignored - disabled in config', 'handcam-glow');
+        logger.debug('Glow trigger ignored - disabled in config', 'handcam-glow');
         return;
     }
 
-    logger.debug('[Handcam] Triggering joinable glow animation', 'handcam-glow');
+    logger.debug('Triggering joinable glow animation', 'handcam-glow');
 
     return activateHandcamGlow(obs, handcamConfig, signal).catch(error => {
-        logger.debug('[Handcam] Glow animation error', 'handcam-glow', getErrorMessage(error));
+        logger.debug('Glow animation error', 'handcam-glow', getErrorMessage(error));
     });
 }
 

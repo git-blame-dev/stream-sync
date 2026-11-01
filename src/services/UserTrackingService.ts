@@ -106,7 +106,7 @@ class UserTrackingService {
 
 hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}): boolean {
         if (!userId) {
-            logger.warn('[UserTrackingService] No userId provided for seen-user check', 'user-tracking');
+            logger.warn('No userId provided for seen-user check', 'user-tracking');
             return true;
         }
 
@@ -123,7 +123,7 @@ hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}): b
 
 markMessageSeen(userId: string | null | undefined, context: TrackingContext = {}): boolean {
         if (!userId) {
-            logger.warn('[UserTrackingService] No userId provided for message tracking', 'user-tracking');
+            logger.warn('No userId provided for message tracking', 'user-tracking');
             return false;
         }
 

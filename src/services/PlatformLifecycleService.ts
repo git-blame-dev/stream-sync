@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { logger } from '../core/logging';
 import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -30,11 +31,7 @@ function getErrorMessage(error: unknown): string {
 
 type LifecycleRecord = Record<string, unknown>;
 
-type PlatformLifecycleLogger = {
-    debug: (message: string, scope: string, data?: unknown) => void;
-    info: (message: string, scope: string, data?: unknown) => void;
-    warn: (message: string, scope: string, data?: unknown) => void;
-};
+type PlatformLifecycleLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type PlatformEventBus = {
     emit: (eventName: string, payload: unknown) => void;
@@ -134,7 +131,7 @@ class PlatformLifecycleService {
         this.eventBus = options.eventBus || null;
         this.dependencyFactory = options.dependencyFactory ?? null;
         this.logger = options.logger || logger;
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'PlatformLifecycleService');
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'platform-lifecycle-service');
         this.sharedDependencies = options.sharedDependencies || {};
         this.handlerFactory = options.handlerFactory || null;
 
@@ -248,7 +245,7 @@ class PlatformLifecycleService {
             onChat: (data) => this.emitPlatformEvent(platformName, PlatformEvents.CHAT_MESSAGE, data),
             onViewerCount: (data) => {
                 if (typeof data === 'number') {
-                    this.logger.warn(`Viewer count missing timestamp for ${platformName}`, 'PlatformLifecycleService', {
+                    this.logger.warn(`Viewer count missing timestamp for ${platformName}`, 'platform-lifecycle-service', {
                         count: data
                     });
                     return;
@@ -276,7 +273,7 @@ class PlatformLifecycleService {
         }
 
         if (!data || typeof data !== 'object') {
-            this.logger.warn('Platform connection event missing payload object', 'PlatformLifecycleService', {
+            this.logger.warn('Platform connection event missing payload object', 'platform-lifecycle-service', {
                 platform: platformName
             });
             return;
@@ -326,7 +323,7 @@ class PlatformLifecycleService {
             return;
         }
 
-        this.logger.warn('Unsupported platform connection status', 'PlatformLifecycleService', {
+        this.logger.warn('Unsupported platform connection status', 'platform-lifecycle-service', {
             platform: eventPlatform,
             status
         });
@@ -367,7 +364,7 @@ class PlatformLifecycleService {
 
     emitPlatformEvent(platformName: string, type: string, data: unknown) {
         if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
-            this.logger.debug(`EventBus unavailable for platform event ${type}`, 'PlatformLifecycleService');
+            this.logger.debug(`EventBus unavailable for platform event ${type}`, 'platform-lifecycle-service');
             return;
         }
 
@@ -391,7 +388,7 @@ class PlatformLifecycleService {
                 ? (sanitizedData as LifecycleRecord)
                 : null;
             if (!sanitizedRecord || !sanitizedRecord.timestamp) {
-                this.logger.warn(`Platform event missing timestamp: ${type}`, 'PlatformLifecycleService', {
+                this.logger.warn(`Platform event missing timestamp: ${type}`, 'platform-lifecycle-service', {
                     platform: eventPlatform
                 });
                 return;
@@ -446,7 +443,7 @@ class PlatformLifecycleService {
         let localYoutubeDetection: unknown;
         try {
             if (!this.dependencyFactory) {
-                this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
+                this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'platform-lifecycle-service');
                 instance = new PlatformClass(config);
             } else {
                 const factoryMethod = this.getDependencyFactoryMethod(platformName);
@@ -730,7 +727,7 @@ class PlatformLifecycleService {
         if (outcome.state === 'recovering') {
             this.logger.warn(
                 `${platformName} initialized in recovering state`,
-                'PlatformLifecycleService',
+                'platform-lifecycle-service',
                 outcome.error
             );
         }
@@ -875,7 +872,7 @@ class PlatformLifecycleService {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
-            this.errorHandler?.logOperationalError(message, 'PlatformLifecycleService', error);
+            this.errorHandler?.logOperationalError(message, 'platform-lifecycle-service', error);
         }
     }
 }

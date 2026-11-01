@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { EventEmitter } from 'node:events';
 import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 import type { InnertubeService } from '../services/innertube-service';
@@ -122,12 +123,7 @@ type YouTubeProviderExtractionServiceLike = YouTubeExtractionServiceLike & {
   }>;
 };
 
-type ProviderLoggerLike = {
-  debug: (message: string, context?: string, payload?: unknown) => void;
-  info: (message: string, context?: string, payload?: unknown) => void;
-  warn: (message: string, context?: string, payload?: unknown) => void;
-  error: (message: string, context?: string, payload?: unknown) => void;
-};
+type ProviderLoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type YouTubeConnectionLike = {
   on: (event: string, handler: (payload?: unknown) => void) => void;

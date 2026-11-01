@@ -1,14 +1,11 @@
+import type { AppLogger } from '../../core/logger/types';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../../utils/timestamp';
 import { withOperationDeadline } from '../../utils/timeout-wrapper';
 
 const RETIREMENT_TIMEOUT_MS = 5000;
 
-type ConnectionLogger = {
-    debug: (message: string, source?: string) => void;
-    info: (message: string, source?: string) => void;
-    warn: (message: string, source?: string) => void;
-};
+type ConnectionLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type ConnectionState = 'connecting' | 'connected' | 'ready' | 'disconnecting' | 'disconnected' | 'error';
 

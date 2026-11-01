@@ -1,3 +1,4 @@
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { withOperationDeadline } from '../utils/timeout-wrapper';
@@ -26,10 +27,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
     });
 }
 
-type LoggerLike = {
-    error: (message: string, scope?: string, payload?: unknown) => void;
-    debug?: (message: string, scope?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'error'> & Partial<Pick<AppLogger<string>, 'debug'>>;
 
 type InnertubeInfoClient = {
     getInfo: (videoId: string, options?: Record<string, unknown>) => Promise<unknown>;

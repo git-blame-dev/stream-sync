@@ -1,9 +1,5 @@
-type LoggerLike = {
-    debug: (message: string, scope?: string, payload?: unknown) => void;
-    info: (message: string, scope?: string, payload?: unknown) => void;
-    error: (message: string, scope?: string, payload?: unknown) => void;
-    warn: (message: string, scope?: string, payload?: unknown) => void;
-};
+import type { AppLogger } from '../core/logger/types';
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'error' | 'warn'>;
 
 type NotificationManagerLike = {
     emit: (eventName: string, payload?: unknown) => unknown;

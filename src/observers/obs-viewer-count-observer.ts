@@ -1,15 +1,11 @@
+import type { AppLogger } from '../core/logger/types';
 import { ViewerCountObserver } from './viewer-count-observer';
 import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
 import { createTextProcessingManager } from '../utils/text-processing';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import type { ViewerCountSnapshot } from '../contracts/viewer-count';
 
-type LoggerLike = {
-    debug: (message: string, context?: string, payload?: unknown) => void;
-    info: (message: string, context?: string, payload?: unknown) => void;
-    warn: (message: string, context?: string, payload?: unknown) => void;
-    error: (message: string, context?: string, payload?: unknown) => void;
-};
+type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type ObsManagerLike = {
     isConnected: () => boolean;
