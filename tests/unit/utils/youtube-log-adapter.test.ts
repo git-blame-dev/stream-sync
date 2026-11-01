@@ -1,7 +1,9 @@
 import { vi, type Mock, describe, it, beforeEach, afterEach, expect } from 'bun:test';
 
 
-import { installYouTubeTextLogAdapter } from "../../../src/utils/youtube-text-log-adapter.ts";
+import { createLogger } from "../../../src/core/logging";
+import { captureStdout } from "../../helpers/output-capture";
+import { installYouTubeLogAdapter } from "../../../src/utils/youtube-log-adapter.ts";
 
 type LoggerFixture = {
   debug: Mock<(...args: [unknown, string?, unknown?]) => void>;
@@ -10,7 +12,7 @@ type LoggerFixture = {
   error: Mock<(...args: [unknown, string?, unknown?]) => void>;
 };
 type ConsoleWarnMock = Mock<(...args: Parameters<typeof console.warn>) => void>;
-type InstallResult = ReturnType<typeof installYouTubeTextLogAdapter>;
+type InstallResult = ReturnType<typeof installYouTubeLogAdapter>;
 type WarningMetadata = Record<string, unknown>;
 
 const createLoggerFixture = (): LoggerFixture => ({
@@ -61,13 +63,15 @@ function createPayload() {
   };
 }
 
-describe("youtube text log adapter", () => {
+describe("youtube SDK log adapter", () => {
+  let originalConsole: Console;
   let originalConsoleWarn: typeof console.warn;
   let passthroughWarn: ConsoleWarnMock;
   let logger: LoggerFixture;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalConsole = { ...console };
     originalConsoleWarn = console.warn;
     passthroughWarn = vi.fn<(...args: Parameters<typeof console.warn>) => void>();
     console.warn = passthroughWarn;
@@ -75,12 +79,13 @@ describe("youtube text log adapter", () => {
   });
 
   afterEach(() => {
+    Object.assign(console, originalConsole);
     console.warn = originalConsoleWarn;
   });
 
   it("installs once and collapses style command and attachment mismatch warnings to one line", () => {
-    const firstInstall = installYouTubeTextLogAdapter({ logger });
-    const secondInstall = installYouTubeTextLogAdapter({ logger });
+    const firstInstall = installYouTubeLogAdapter({ logger });
+    const secondInstall = installYouTubeLogAdapter({ logger });
 
     expect(firstInstall.installed).toBe(true);
     expect(secondInstall.installed).toBe(false);
@@ -129,22 +134,23 @@ describe("youtube text log adapter", () => {
     expect(secondWarningMetadata.commandRunCount).toBe(2);
   });
 
-  it("passes through non-matching console warnings unchanged", () => {
-    installYouTubeTextLogAdapter({ logger });
+  it("routes other YouTube diagnostics without forwarding provider objects", () => {
+    installYouTubeLogAdapter({ logger });
 
     console.warn("[YOUTUBEJS][Parser]:", "ParsingError: Type mismatch", {
       value: 1,
     });
 
-    expect(logger.warn).toHaveBeenCalledTimes(0);
-    expect(passthroughWarn).toHaveBeenCalledTimes(1);
-    const args = getMockCall(passthroughWarn.mock.calls, 0);
-    expect(args[0]).toBe("[YOUTUBEJS][Parser]:");
-    expect(args[1]).toContain("ParsingError");
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(passthroughWarn).toHaveBeenCalledTimes(0);
+    const args = getMockCall(logger.warn.mock.calls, 0);
+    expect(args[0]).toContain("ParsingError");
+    expect(args[1]).toBe("youtube-sdk");
+    expect(JSON.stringify(args)).not.toContain('"value"');
   });
 
-  it("passes through unknown youtube text warning variants unchanged", () => {
-    installYouTubeTextLogAdapter({ logger });
+  it("summarizes unknown YouTube text variants without retaining their payload", () => {
+    installYouTubeLogAdapter({ logger });
 
     console.warn(
       "[YOUTUBEJS][Text]:",
@@ -152,18 +158,18 @@ describe("youtube text log adapter", () => {
       createPayload(),
     );
 
-    expect(logger.warn).toHaveBeenCalledTimes(0);
-    expect(passthroughWarn).toHaveBeenCalledTimes(1);
-    const args = getMockCall(passthroughWarn.mock.calls, 0);
-    expect(args[0]).toBe("[YOUTUBEJS][Text]:");
-    expect(args[1]).toContain("emoji run");
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(passthroughWarn).toHaveBeenCalledTimes(0);
+    const args = getMockCall(logger.warn.mock.calls, 0);
+    expect(args[0]).toContain("emoji run");
+    expect(JSON.stringify(args)).not.toContain('test-deep-pocket-monster');
   });
 
-  it("falls back to passthrough output when normalization logging fails", () => {
+  it("reports normalization failure without forwarding the original payload", () => {
     logger.warn.mockImplementation(() => {
       throw new Error("warn failed");
     });
-    installYouTubeTextLogAdapter({ logger });
+    installYouTubeLogAdapter({ logger });
 
     console.warn(
       "[YOUTUBEJS][Text]:",
@@ -172,14 +178,60 @@ describe("youtube text log adapter", () => {
     );
 
     expect(logger.error).toHaveBeenCalledTimes(1);
-    expect(passthroughWarn).toHaveBeenCalledTimes(1);
+    expect(passthroughWarn).toHaveBeenCalledTimes(0);
     const [message, context] = getMockCall(logger.error.mock.calls, 0);
-    expect(message).toContain("Failed to normalize YouTube Text warning");
-    expect(context).toBe("youtube-text-log-adapter");
+    expect(message).toContain("Failed to normalize YouTube SDK diagnostic");
+    expect(context).toBe("youtube-log-adapter");
+  });
+
+  it("preserves unrelated console warnings", () => {
+    installYouTubeLogAdapter({ logger });
+    const payload = { synthetic: true };
+    console.warn('synthetic unrelated warning', payload);
+    expect(passthroughWarn).toHaveBeenCalledWith('synthetic unrelated warning', payload);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("redacts and bounds SDK diagnostic strings before forwarding to an injected logger", () => {
+    installYouTubeLogAdapter({ logger });
+    console.warn('[YOUTUBEJS][Session]:', 'token=synthetic-secret ' + 'x'.repeat(10_000), { private: 'synthetic-private' });
+    const [message, source, metadata] = getMockCall(logger.warn.mock.calls, 0);
+    expect(String(message).length).toBeLessThanOrEqual(4096);
+    expect(source).toBe('youtube-sdk');
+    expect(metadata).toMatchObject({ component: 'Session', argumentCount: 2 });
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('synthetic-');
+  });
+
+  it("routes every SDK severity through real logging thresholds and operator capture", async () => {
+    const { Log } = await import('youtubei.js');
+    const logger = createLogger({ console: { enabled: true, level: 'debug' } }, { operatorCaptureEnabled: true });
+    const output = captureStdout();
+    try {
+      installYouTubeLogAdapter({ logger });
+      Log.setLevel(Log.Level.DEBUG, Log.Level.INFO, Log.Level.WARNING, Log.Level.ERROR);
+      Log.debug('Session', 'synthetic debug');
+      Log.info('Session', 'synthetic info');
+      Log.warn('Session', 'synthetic warning');
+      Log.error('Session', 'synthetic error', { private: 'synthetic-private-body' });
+      expect(logger.getOperatorLogSource()!.history().entries.map(entry => entry.level)).toEqual(['debug', 'info', 'warn', 'error']);
+      expect(JSON.stringify(logger.getOperatorLogSource()!.history())).not.toContain('synthetic-private-body');
+      logger.reconfigure({ console: { enabled: false } });
+      Log.debug('Session', 'synthetic hidden debug');
+      expect(logger.getOperatorLogSource()!.history().entries).toHaveLength(4);
+    } finally { Log.setLevel(Log.Level.WARNING); output.restore(); }
+  });
+
+  it("does not leak provider arguments when both injected diagnostic methods fail", () => {
+    logger.warn.mockImplementation(() => { throw new Error('synthetic logging failure'); });
+    logger.error.mockImplementation(() => { throw new Error('synthetic logging failure'); });
+    installYouTubeLogAdapter({ logger });
+    expect(() => console.warn('[YOUTUBEJS][Session]:', 'synthetic-private-message', { private: 'synthetic-private-body' })).not.toThrow();
+    expect(passthroughWarn).toHaveBeenCalledWith('[YouTube] Diagnostic output failed');
+    expect(JSON.stringify(passthroughWarn.mock.calls)).not.toContain('synthetic-private');
   });
 
   it("does not install when logger interface is missing and preserves passthrough warnings", () => {
-    const installResult = installYouTubeTextLogAdapter({ logger: {} });
+    const installResult = installYouTubeLogAdapter({ logger: {} });
     expect(installResult.installed).toBe(false);
     expect(installResult.reason).toBe("logger-unavailable");
 
@@ -217,7 +269,7 @@ describe("youtube text log adapter", () => {
     let installResult: InstallResult;
     try {
       globalThis.console = fakeConsole as Console;
-      installResult = installYouTubeTextLogAdapter({
+      installResult = installYouTubeLogAdapter({
         logger: loggerWithErrors,
       });
     } finally {
@@ -228,7 +280,7 @@ describe("youtube text log adapter", () => {
     expect(installResult.reason).toBe("install-failed");
     expect(loggerWithErrors.error).toHaveBeenCalledTimes(1);
     const [message, context] = getMockCall(loggerWithErrors.error.mock.calls, 0);
-    expect(message).toContain("Failed to install YouTube Text warning adapter");
-    expect(context).toBe("youtube-text-log-adapter");
+    expect(message).toContain("Failed to install YouTube SDK log adapter");
+    expect(context).toBe("youtube-log-adapter");
   });
 });

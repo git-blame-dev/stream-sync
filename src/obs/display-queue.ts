@@ -234,7 +234,7 @@ class DisplayQueue {
     getTypePriority(type: string) {
         const priorityLevels = this.constants.PRIORITY_LEVELS;
         if (!priorityLevels) {
-            logger.warn('[Display Queue] PRIORITY_LEVELS not available, using default priority');
+            logger.warn('PRIORITY_LEVELS not available, using default priority', 'display-queue');
             return PRIORITY_LEVELS.CHAT;
         }
         return resolvePriorityForType(type, priorityLevels) ?? priorityLevels.CHAT;
@@ -249,7 +249,7 @@ class DisplayQueue {
         }
         const { insertIndex } = this.state.addItem(item, this.records.size - this.state.getQueueLength());
         this.registerRecord(item);
-        logger.debug(`[Display Queue] Added ${item.type} at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
+        logger.debug(`Added ${item.type} at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
         return [item];
     }
@@ -271,7 +271,7 @@ class DisplayQueue {
             reservedRows: this.records.size - this.state.getQueueLength()
         });
         admitted.forEach((item) => this.registerRecord(item));
-        logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
+        logger.debug(`Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
         return admitted;
     }
@@ -577,7 +577,7 @@ class DisplayQueue {
         void Promise.allSettled([...cleanups, this.runner, this.rowRunner]).then((results) => {
             for (const item of this.records.keys()) this.retire(item);
             for (const result of results) if (result.status === 'rejected') throw result.reason;
-            logger.info('[Display Queue] Processing stopped and queue cleared.');
+            logger.info('Processing stopped and queue cleared.', 'display-queue');
         }).then(resolve, reject);
         return this.stopPromise;
     }

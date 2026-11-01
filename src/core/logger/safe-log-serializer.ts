@@ -1,30 +1,15 @@
 import { LOG_TEXT_SPAN_SOURCE } from './web-url-pattern';
+import { isCredentialLogKey } from './credential-policy';
 
-const SENSITIVE_LOG_KEYS = new Set([
-    'accesstoken',
-    'refreshtoken',
-    'clientsecret',
-    'authorization',
-    'cookie',
-    'password',
-    'secret',
-    'token',
-    'sessionid',
-    'apikey',
-    'xapikey',
-    'jwttoken',
-]);
 const RAW_PROVIDER_PAYLOAD_KEY_PATTERN = /^(?:payload|rawPayload|rawData|originalData|eventData|providerPayload)$/i;
 const SENSITIVE_URL_KEY_PATTERN = /(?:url|uri|endpoint|reconnect)/i;
 const URL_TEXT_PATTERN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
 const JSON_STRING_ASSIGNMENT_PATTERN = /("([a-z_-]+)"\s*:\s*")(?:[^"\\]*\\[\s\S])*[^"\\]*"/gi;
 // Quote-started values consume escaped quotes; bare values retain embedded quotes.
-const SECRET_TEXT_VALUE_PATTERN = String.raw`(?:"(?:[^"\\]*\\[\s\S])*[^"\\]*"|'(?:[^'\\]*\\[\s\S])*[^'\\]*'|[^\s,;&"'][^\s,;&]*)`;
+const SECRET_TEXT_VALUE_PATTERN = String.raw`(?:"(?:[^"\\]*\\[\s\S])*[^"\\]*(?:"|\\?$)|'(?:[^'\\]*\\[\s\S])*[^'\\]*(?:'|\\?$)|[^\s,;&"'][^\s,;&]*)`;
 const FREE_TEXT_SECRET_PATTERNS: readonly RegExp[] = [
-    new RegExp(String.raw`\b(authorization\s*[:=]\s*(?:bearer|basic)\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
+    new RegExp(String.raw`\b(authorization\s*[:=]\s*(?:bearer|basic|oauth)\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
     new RegExp(String.raw`\b(bearer\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    new RegExp(String.raw`\b((?:access|refresh|jwt|id|auth)[_-]?token\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
-    new RegExp(String.raw`\b((?:api[_-]?key|x-api-key|client[_-]?secret|password|secret)\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
     /\b((?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,
 ];
 const MAX_ENTRIES = 100;
@@ -32,14 +17,6 @@ const MAX_STRING_LENGTH = 4096;
 const MAX_TOTAL_NODES = 1000;
 const MAX_TOTAL_STRING_CHARS = 100_000;
 const TRUNCATION_MARKER = '...';
-
-function normalizeLogKey(key: string): string {
-    return key.replace(/[_-]/g, '').toLowerCase();
-}
-
-function isSensitiveLogKey(key: string): boolean {
-    return SENSITIVE_LOG_KEYS.has(normalizeLogKey(key));
-}
 
 function stripUrlSecrets(value: string, webOnly = false): string | null {
     try {
@@ -78,21 +55,49 @@ function sanitizeUrlText(value: string, depth = 0): string {
     });
 }
 
+const CREDENTIAL_ASSIGNMENT_LABEL_PATTERN = /(?<![a-z0-9_-])(?:"([a-z][a-z0-9_-]*)"|'([a-z][a-z0-9_-]*)'|([a-z][a-z0-9_-]*))(\s*[:=]\s*)/gi;
+const CREDENTIAL_VALUE_PATTERN = new RegExp(String.raw`((?:(?:bearer|basic|oauth)\s+)?)${SECRET_TEXT_VALUE_PATTERN}`, 'iy');
+
+function redactCredentialAssignments(value: string): string {
+    if (!value.includes(':') && !value.includes('=')) return value;
+    // A label is scanned once. The boundary prevents restarting inside long
+    // hyphenated labels such as malformed signed-URL header names.
+    const labels = CREDENTIAL_ASSIGNMENT_LABEL_PATTERN;
+    const credentialValue = CREDENTIAL_VALUE_PATTERN;
+    labels.lastIndex = 0;
+    let result = '';
+    let cursor = 0;
+    let label: RegExpExecArray | null;
+    while ((label = labels.exec(value))) {
+        if (!isCredentialLogKey(label[1] ?? label[2] ?? label[3]!)) continue;
+        credentialValue.lastIndex = labels.lastIndex;
+        const secret = credentialValue.exec(value);
+        if (!secret) continue;
+        const quote = value[labels.lastIndex + secret[1]!.length];
+        const preserveQuotes = (label[1] !== undefined || label[2] !== undefined) && (quote === '"' || quote === "'");
+        const marker = preserveQuotes ? quote + '[REDACTED]' + quote : '[REDACTED]';
+        result += value.slice(cursor, labels.lastIndex) + secret[1] + marker;
+        cursor = credentialValue.lastIndex;
+        labels.lastIndex = cursor;
+    }
+    return result + value.slice(cursor);
+}
+
 function sanitizeLogText(value: string): string {
     const withoutJsonSecrets = value.replace(JSON_STRING_ASSIGNMENT_PATTERN, (assignment, prefix: string, key: string) =>
-        isSensitiveLogKey(key) ? `${prefix}[REDACTED]"` : assignment,
+        isCredentialLogKey(key) ? `${prefix}[REDACTED]"` : assignment,
     );
     const withoutUrlSecrets = sanitizeUrlText(withoutJsonSecrets);
-    return FREE_TEXT_SECRET_PATTERNS.reduce(
+    return redactCredentialAssignments(FREE_TEXT_SECRET_PATTERNS.reduce(
         (sanitized, pattern) => sanitized.replace(pattern, '$1[REDACTED]'),
         withoutUrlSecrets,
-    );
+    ));
 }
 
 type SanitizationBudget = { nodes: number; stringChars: number };
 function sanitizeLogValue(value: unknown, key = '', depth = 0, ancestors: WeakSet<object> = new WeakSet(), maxDepth = 3, budget?: SanitizationBudget): unknown {
     if (budget && budget.nodes-- <= 0) return '[Traversal budget exceeded]';
-    if (isSensitiveLogKey(key)) {
+    if (isCredentialLogKey(key)) {
         return '[REDACTED]';
     }
     if (RAW_PROVIDER_PAYLOAD_KEY_PATTERN.test(key)) {

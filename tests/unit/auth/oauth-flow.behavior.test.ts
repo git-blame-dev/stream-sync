@@ -13,6 +13,8 @@ import { installTimerTracking, restoreTimerTracking } from "../../helpers/bun-ti
 
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createRecordingLogger } from "../../helpers/recording-logger";
+import { createLogger } from "../../../src/core/logging";
+import { captureStdout } from "../../helpers/output-capture";
 import {
   initializeStaticSecrets,
   secrets,
@@ -709,6 +711,47 @@ it("exposes oauth-flow helper functions", () => {
       args: ["https://example.test"],
       isWsl: false,
     });
+  });
+
+  it("presents a usable manual authorization URL without retaining its parameters in diagnostic sinks", async () => {
+    const logger = createLogger({ console: { enabled: true }, file: { enabled: true, directory: tempDir } }, { operatorCaptureEnabled: true });
+    const capture = captureStdout();
+    let generatedUrl = '';
+    try {
+      const result = await runOAuthFlow({ clientId: 'synthetic-client-id', tokenStorePath, logger, persistTokens: false, skipBrowserOpen: true }, {
+        startCallbackServer: async () => createCallbackServerStub(),
+        openBrowser: (url) => { generatedUrl = url; },
+        exchangeCodeForTokens: async () => ({ accessToken: 'synthetic-access-token', expiresIn: 3600 }),
+      });
+      await logger.flush();
+      expect(result?.accessToken).toBe('synthetic-access-token');
+      expect(capture.output.join('')).toContain(generatedUrl);
+      const state = new URL(generatedUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+      const history = JSON.stringify(logger.getOperatorLogSource()?.history());
+      const file = await fs.promises.readFile(path.join(tempDir, 'runtime.log'), 'utf8');
+      for (const diagnostic of [history, file]) {
+        expect(diagnostic).not.toContain(state!);
+        expect(diagnostic).not.toContain('client_id=');
+        expect(diagnostic).not.toContain('synthetic-access-token');
+      }
+    } finally { await logger.flush(); capture.restore(); }
+  });
+
+  it("continues automatic authorization when the terminal output fails", async () => {
+    const logger = createLogger({}, { operatorCaptureEnabled: true });
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => { throw new Error('synthetic terminal failure'); });
+    let opened = false;
+    try {
+      const result = await runOAuthFlow({ clientId: 'synthetic-client', tokenStorePath, logger, persistTokens: false }, {
+        startCallbackServer: async () => createCallbackServerStub(),
+        openBrowser: () => { opened = true; },
+        exchangeCodeForTokens: async () => ({ accessToken: 'synthetic-token', expiresIn: 3600 }),
+      });
+      expect(opened).toBe(true);
+      expect(result?.accessToken).toBe('synthetic-token');
+      expect(logger.getOperatorLogSource()?.history().entries.some(entry => entry.message === 'Unable to display authorization link in the terminal')).toBe(true);
+    } finally { stdout.mockRestore(); }
   });
 
   it("runOAuthFlow persists tokens and returns camelCase values", async () => {

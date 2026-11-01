@@ -563,14 +563,18 @@ async function exchangeCodeForTokens(
 function displayOAuthInstructions(authUrl: string, logger: unknown, { scopes = TWITCH_OAUTH_SCOPES, tokenStorePath = null }: { scopes?: readonly string[]; tokenStorePath?: string | null } = {}) {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
 
+    resolvedLogger.info('Twitch authorization required; follow the instructions in the terminal', 'oauth-flow');
     logConsole(resolvedLogger, '\n' + '='.repeat(80));
     logConsole(resolvedLogger, 'TWITCH AUTHENTICATION REQUIRED');
     logConsole(resolvedLogger, '='.repeat(80));
 
     logConsole(resolvedLogger, '\nATTEMPTING AUTOMATIC BROWSER OPENING...');
     logConsole(resolvedLogger, 'Your browser should open automatically to complete authentication.');
-    logConsole(resolvedLogger, 'If it doesn\'t open automatically, please copy and paste this URL:');
-    logConsole(resolvedLogger, `\n${authUrl}\n`);
+    logConsole(resolvedLogger, 'If it doesn\'t open automatically, please copy and paste the URL shown in the terminal:');
+    // This generated authorization link is an interactive action, not a diagnostic.
+    // Keep state and request parameters out of file/operator history.
+    try { process.stdout.write(`\n${authUrl}\n\n`); }
+    catch { resolvedLogger.warn('Unable to display authorization link in the terminal', 'oauth-flow'); }
 
     logConsole(resolvedLogger, 'WHAT WILL HAPPEN:');
     logConsole(resolvedLogger, '1. Browser opens to Twitch OAuth page');
@@ -632,7 +636,7 @@ function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false
         try {
             if (error) {
                 if (!isWsl || getErrorCode(error) !== 1) {
-                    resolvedLogger.warn('Failed to open browser automatically; use the authorization URL above.', 'oauth-flow');
+                    resolvedLogger.warn('Failed to open browser automatically; use the authorization URL in the terminal.', 'oauth-flow');
                 } else {
                     resolvedLogger.debug('WSL browser command completed with exit code 1', 'oauth-flow');
                 }

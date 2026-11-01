@@ -157,3 +157,22 @@ it('isolates synchronous file output failure when its stderr diagnostic also fai
         expect(await readdir(root)).toEqual([]);
     } finally { stdout.restore(); stderr.mockRestore(); }
 });
+
+it('redacts the shared credential variants across console, file and operator sinks', async () => {
+    const root = await directory();
+    const output = captureStdout();
+    const logger = createLogger({ console: { enabled: true }, file: { enabled: true, directory: root } }, { operatorCaptureEnabled: true });
+    try {
+        logger.info('synthetic token=synthetic-text-secret', 'fixture', {
+            id_token: 'synthetic-id-secret', authToken: 'synthetic-auth-secret',
+            'set-cookie': 'synthetic-cookie-secret', privateKey: 'synthetic-key-secret',
+            diagnostic: 'synthetic visible diagnostic',
+        });
+        await logger.flush();
+        for (const sink of [output.output.join(''), await readFile(path.join(root, 'runtime.log'), 'utf8'), JSON.stringify(logger.getOperatorLogSource()?.history())]) {
+            expect(sink).toContain('[REDACTED]');
+            expect(sink).toContain('synthetic visible diagnostic');
+            for (const secret of ['synthetic-text-secret', 'synthetic-id-secret', 'synthetic-auth-secret', 'synthetic-cookie-secret', 'synthetic-key-secret']) expect(sink).not.toContain(secret);
+        }
+    } finally { await logger.flush(); output.restore(); }
+});

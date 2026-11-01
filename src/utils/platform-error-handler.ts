@@ -210,9 +210,17 @@ class PlatformErrorHandler {
         });
     }
 
-    handleDataLoggingError(error: unknown, dataType: string, message: string | null = null): void {
+    handleDataLoggingError(error: unknown, dataType: string, message: string | null = null, context?: { platform: string; eventType: string }): void {
         const logMessage = message || `Error logging ${dataType} data: ${resolveErrorMessage(error)}`;
-        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(`${this.platformName}-platform`));
+        const source = sanitizeDiagnosticText(`${this.platformName}-platform`);
+        const safeMessage = sanitizeDiagnosticText(logMessage);
+        if (context) {
+            this.logger.error(safeMessage, source, {
+                platform: sanitizeDiagnosticText(context.platform), eventType: sanitizeDiagnosticText(context.eventType),
+            });
+        } else {
+            this.logger.error(safeMessage, source);
+        }
     }
 }
 

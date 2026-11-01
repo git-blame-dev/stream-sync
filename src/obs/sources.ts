@@ -358,14 +358,14 @@ function getDefaultSourcesManager(dependencies: DefaultSourcesManagerDependencie
             obsManager = getOBSConnectionManager();
         } catch (error) {
             isDegraded = true;
-            logger.warn('[OBS Sources] OBS connection manager unavailable; using degraded sources manager', 'obs-sources', {
+            logger.warn('OBS connection manager unavailable; using degraded sources manager', 'obs-sources', {
                 error: getErrorMessage(error)
             });
             obsManager = null;
         }
         if (!obsManager) {
             if (!isDegraded) {
-                logger.warn('[OBS Sources] OBS connection manager missing; using degraded sources manager', 'obs-sources');
+                logger.warn('OBS connection manager missing; using degraded sources manager', 'obs-sources');
             }
             isDegraded = true;
             obsManager = {

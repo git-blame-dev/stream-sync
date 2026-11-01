@@ -161,7 +161,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
     function handleInitError(error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.debug(`[Goals] Error initializing goal display system: ${errorMessage}`, 'goals');
+        logger.debug(`Error initializing goal display system: ${errorMessage}`, 'goals');
         if (isOBSNotConnectedError(error)) {
             logger.debug('[Goal Display] Goal display system initialized - waiting for OBS connection', 'goals');
             return;
@@ -213,11 +213,11 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     async function initializeGoalDisplay() {
         try {
             if (!config.goals.enabled) {
-                logger.debug('[Goals] Goal system disabled in configuration', 'goals');
+                logger.debug('Goal system disabled in configuration', 'goals');
                 return;
             }
 
-            logger.debug('[Goals] Initializing goal system...', 'goals');
+            logger.debug('Initializing goal system...', 'goals');
 
             await initializeGoalTracker();
 
@@ -225,7 +225,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 await updateAllGoalDisplays();
             }
 
-            logger.debug('[Goals] Goal system initialized', 'goals');
+            logger.debug('Goal system initialized', 'goals');
         } catch (error) {
             handleInitError(error);
         }

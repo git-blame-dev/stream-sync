@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { realpathSync, promises as fs } from 'node:fs';
+import { isCredentialLogKey } from '../core/logger/credential-policy';
 import { RAW_RETENTION } from '../core/logger/file-policy';
 import { types } from 'node:util';
 
@@ -13,12 +14,6 @@ const LIMITED = '[Capture limit]';
 const BEARER_TOKEN = /\bBearer\s+[^\s,;]+/gi;
 const WEB_URL_SPAN = new RegExp(WEB_URL_SPAN_SOURCE, 'gi');
 const RAW_TEXT_SPAN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
-const SECRET_KEY = /^(?:authorization|proxyauthorization|accessToken|refreshToken|idToken|authToken|jwtToken|sessionToken|token|clientSecret|secret|password|passwd|cookie|setCookie|sessionId|apiKey|xApiKey|accessKeyId|awsAccessKeyId|privateKey|signingKey|signature|sig|credential|credentials|keyPairId|policy|xAmz.*|xGoog.*)$/i;
-
-function isSecretKey(key: string): boolean {
-    return SECRET_KEY.test(key.replace(/[^a-z0-9]/gi, ''));
-}
-
 // RAW capture deliberately retains chat/provider content and non-secret URL parameters.
 // Oversized strings are omitted whole, rather than exposing a credential cut at a boundary.
 function rawText(value: string, depth = 0): string {
@@ -39,9 +34,9 @@ function rawText(value: string, depth = 0): string {
     const redactUrl = (candidate: string, original = candidate): string => {
         try {
             const url = new URL(candidate);
-            const secretKeys = [...url.searchParams.keys()].filter(isSecretKey);
+            const secretKeys = [...url.searchParams.keys()].filter(isCredentialLogKey);
             const fragment = new URLSearchParams(url.hash.slice(1));
-            const fragmentSecretKeys = [...fragment.keys()].filter(isSecretKey);
+            const fragmentSecretKeys = [...fragment.keys()].filter(isCredentialLogKey);
             if (!url.username && !url.password && secretKeys.length === 0 && fragmentSecretKeys.length === 0) return candidate;
             // Punctuation may belong to the URL or enclosing diagnostic syntax.
             // For credential-bearing candidates, omit the entire ambiguous span.
@@ -98,7 +93,7 @@ function rawText(value: string, depth = 0): string {
             const quote = text[start] === '"' || text[start] === "'" ? text[start] : '';
             // Bare non-secret values need no transformation. Keep scanning the
             // original remainder so they cannot split a following quoted secret.
-            if (!quote && !isSecretKey(key)) {
+            if (!quote && !isCredentialLogKey(key)) {
                 result += text.slice(cursor, start);
                 cursor = start;
                 continue;
@@ -126,13 +121,13 @@ function rawText(value: string, depth = 0): string {
                     end++;
                 }
             }
-            if (!isSecretKey(key) && quote && closed) {
+            if (!isCredentialLogKey(key) && quote && closed) {
                 result += text.slice(cursor, start) + redactQuoted(text.slice(start, end));
                 cursor = end;
                 labels.lastIndex = end;
                 continue;
             }
-            const content = isSecretKey(key) ? REDACTED : depth >= 12 ? LIMITED
+            const content = isCredentialLogKey(key) ? REDACTED : depth >= 12 ? LIMITED
                 : redactAssignments(text.slice(start + (quote ? 1 : 0), end - (closed ? 1 : 0)), depth + 1);
             result += text.slice(cursor, start) + quote + content + (closed ? quote : '');
             cursor = end;
@@ -194,7 +189,7 @@ function captureRaw(value: unknown): unknown {
                 }
                 const safeKey = text(key);
                 bytes -= 8;
-                const captured = key.length > 4096 ? LIMITED : isSecretKey(key) ? REDACTED
+                const captured = key.length > 4096 ? LIMITED : isCredentialLogKey(key) ? REDACTED
                     : !('value' in descriptor) ? '[Accessor omitted]'
                         : visit(descriptor.value, depth + 1);
                 if (array) array.push(captured);

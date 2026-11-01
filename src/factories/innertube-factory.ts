@@ -1,7 +1,7 @@
 import { getUnifiedLogger } from '../core/logging';
 import { withTimeout } from '../utils/timeout-wrapper';
 import { installYouTubeParserLogAdapter } from '../utils/youtube-parser-log-adapter';
-import { installYouTubeTextLogAdapter } from '../utils/youtube-text-log-adapter';
+import { installYouTubeLogAdapter } from '../utils/youtube-log-adapter';
 
 type InnertubeClassLike = {
     create: (config?: Record<string, unknown>) => Promise<unknown>;
@@ -44,7 +44,7 @@ class InnertubeFactory {
 
         const youtubei = await this._importPromise;
         const logger = getUnifiedLogger();
-        installYouTubeTextLogAdapter({ logger });
+        installYouTubeLogAdapter({ logger });
         installYouTubeParserLogAdapter({
             logger,
             youtubeModule: youtubei

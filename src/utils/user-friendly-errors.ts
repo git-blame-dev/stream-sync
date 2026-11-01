@@ -539,11 +539,6 @@ function showUserFriendlyError(technicalError: unknown, context: ErrorContext = 
         const output = consoleMessage.endsWith('\n') ? consoleMessage : `${consoleMessage}\n`;
         process.stderr.write(output);
     }
-    
-    if (context.logger) {
-        const logMessage = formatErrorForLog(friendlyError);
-        logUserFriendlyError(context, friendlyError, logMessage, technicalError);
-    }
 }
 
 function handleUserFacingError(error: unknown, context: ErrorContext = {}, options: HandleUserFacingErrorOptions = {}) {

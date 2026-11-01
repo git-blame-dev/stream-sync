@@ -1,10 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { AppLogger } from '../core/logger/types';
 import { logger as defaultLogger } from '../core/logging';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { RawEventLogWriter } from './RawEventLogWriter';
 
-type LoggerLike = typeof defaultLogger;
+type LoggerLike = AppLogger;
 
 type LoggingConfig = {
     dataLoggingPath?: string;
@@ -33,7 +34,7 @@ type LogStatisticsResult = {
 class RawPlatformDataLoggingService {
     logger: LoggerLike;
     errorHandler: {
-        handleDataLoggingError?: (error: Error, dataType: string, message: string) => void;
+        handleDataLoggingError?: (error: Error, dataType: string, message: string, context?: { platform: string; eventType: string }) => void;
         logOperationalError?: (message: string, source: string, context?: unknown) => void;
     };
     config: LoggingConfig;
@@ -56,7 +57,7 @@ class RawPlatformDataLoggingService {
         }
 
         if (!this.dataLoggingPath) {
-            this._handleLoggingError('Data logging path is not configured', null);
+            this._handleLoggingError('Data logging path is not configured', new Error('Data logging path is not configured'), 'platform-data', { platform, eventType });
             return;
         }
 
@@ -69,7 +70,7 @@ class RawPlatformDataLoggingService {
             });
 
         } catch {
-            this._handleLoggingError('Raw platform data capture failed', new Error('Raw platform data capture failed'));
+            this._handleLoggingError('Raw platform data capture failed', new Error('Raw platform data capture failed'), 'platform-data', { platform, eventType });
         }
     }
 
@@ -99,11 +100,14 @@ class RawPlatformDataLoggingService {
         }
     }
 
-    _handleLoggingError(message: string, error: unknown, dataType = 'platform-data'): void {
+    _handleLoggingError(message: string, error: unknown, dataType = 'platform-data', context?: { platform: string; eventType: string }): void {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleDataLoggingError?.(error, dataType, message);
+            this.errorHandler.handleDataLoggingError?.(error, dataType, message, context ? {
+                platform: /^(?:twitch|youtube|tiktok|streamelements)$/.test(context.platform) ? context.platform : 'unknown',
+                eventType: /^[a-z][a-z0-9:_-]{0,63}$/i.test(context.eventType) ? context.eventType : 'unknown',
+            } : undefined);
         } else {
-            this.errorHandler?.logOperationalError?.(message, 'RawPlatformDataLoggingService', {
+            this.errorHandler?.logOperationalError?.(message, 'raw-platform-data-logging', {
                 dataType,
                 error: this.resolveErrorMessage(error)
             });

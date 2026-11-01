@@ -134,7 +134,7 @@ class PlatformLifecycleService {
         this.eventBus = options.eventBus || null;
         this.dependencyFactory = options.dependencyFactory ?? null;
         this.logger = options.logger || logger;
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'PlatformLifecycleService');
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'platform-lifecycle');
         this.sharedDependencies = options.sharedDependencies || {};
         this.handlerFactory = options.handlerFactory || null;
 
@@ -248,7 +248,7 @@ class PlatformLifecycleService {
             onChat: (data) => this.emitPlatformEvent(platformName, PlatformEvents.CHAT_MESSAGE, data),
             onViewerCount: (data) => {
                 if (typeof data === 'number') {
-                    this.logger.warn(`Viewer count missing timestamp for ${platformName}`, 'PlatformLifecycleService', {
+                    this.logger.warn(`Viewer count missing timestamp for ${platformName}`, 'platform-lifecycle', {
                         count: data
                     });
                     return;
@@ -276,7 +276,7 @@ class PlatformLifecycleService {
         }
 
         if (!data || typeof data !== 'object') {
-            this.logger.warn('Platform connection event missing payload object', 'PlatformLifecycleService', {
+            this.logger.warn('Platform connection event missing payload object', 'platform-lifecycle', {
                 platform: platformName
             });
             return;
@@ -326,7 +326,7 @@ class PlatformLifecycleService {
             return;
         }
 
-        this.logger.warn('Unsupported platform connection status', 'PlatformLifecycleService', {
+        this.logger.warn('Unsupported platform connection status', 'platform-lifecycle', {
             platform: eventPlatform,
             status
         });
@@ -367,7 +367,7 @@ class PlatformLifecycleService {
 
     emitPlatformEvent(platformName: string, type: string, data: unknown) {
         if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
-            this.logger.debug(`EventBus unavailable for platform event ${type}`, 'PlatformLifecycleService');
+            this.logger.debug(`EventBus unavailable for platform event ${type}`, 'platform-lifecycle');
             return;
         }
 
@@ -391,7 +391,7 @@ class PlatformLifecycleService {
                 ? (sanitizedData as LifecycleRecord)
                 : null;
             if (!sanitizedRecord || !sanitizedRecord.timestamp) {
-                this.logger.warn(`Platform event missing timestamp: ${type}`, 'PlatformLifecycleService', {
+                this.logger.warn(`Platform event missing timestamp: ${type}`, 'platform-lifecycle', {
                     platform: eventPlatform
                 });
                 return;
@@ -446,7 +446,7 @@ class PlatformLifecycleService {
         let localYoutubeDetection: unknown;
         try {
             if (!this.dependencyFactory) {
-                this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
+                this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'platform-lifecycle');
                 instance = new PlatformClass(config);
             } else {
                 const factoryMethod = this.getDependencyFactoryMethod(platformName);
@@ -730,7 +730,7 @@ class PlatformLifecycleService {
         if (outcome.state === 'recovering') {
             this.logger.warn(
                 `${platformName} initialized in recovering state`,
-                'PlatformLifecycleService',
+                'platform-lifecycle',
                 outcome.error
             );
         }
@@ -875,7 +875,7 @@ class PlatformLifecycleService {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
-            this.errorHandler?.logOperationalError(message, 'PlatformLifecycleService', error);
+            this.errorHandler?.logOperationalError(message, 'platform-lifecycle', error);
         }
     }
 }

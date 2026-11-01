@@ -501,7 +501,7 @@ class DisplayQueueEffects {
     async handleNotificationEffects(item: QueueItem) {
         try {
             const username = this.extractUsername(item?.data);
-            logger.debug(`[Display Queue] Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
+            logger.debug(`Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
 
             const ttsStages = MessageTTSHandler.createTTSStages(item.data);
 
@@ -550,7 +550,7 @@ class DisplayQueueEffects {
         }
 
         if (item.data.goalProcessed || this.goalAttempts.has(item)) {
-            logger.debug(`[Display Queue] Goal already processed for ${item.data.username}, skipping`, 'display-queue');
+            logger.debug(`Goal already processed for ${item.data.username}, skipping`, 'display-queue');
             return;
         }
 
@@ -573,7 +573,7 @@ class DisplayQueueEffects {
             const applied = !!result && typeof result === 'object' && 'success' in result && result.success === true;
             item.data.goalOutcome = applied ? 'applied' : 'not-applied';
             if (applied) item.data.goalProcessed = true;
-            logger.debug(`[Display Queue] Native goal outcome: ${item.data.goalOutcome}`, 'display-queue', { type: item.type, platform: item.platform });
+            logger.debug(`Native goal outcome: ${item.data.goalOutcome}`, 'display-queue', { type: item.type, platform: item.platform });
         } catch (error) {
             item.data.goalOutcome = 'failed';
             this.handleDisplayQueueError(`[Display Queue] Goal tracking failed for ${item.platform}`, error, { platform: item.platform, type: item.type });
@@ -601,19 +601,19 @@ class DisplayQueueEffects {
         const result = await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue, currencyValue);
         if (!result || typeof result !== 'object' || !('success' in result) || result.success !== true) return result;
         if (currencyValue === 'bits') {
-            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
+            logger.debug(`Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
         } else if (currencyValue === 'coins') {
             const perGift = giftCount > 0 ? (totalGiftValue / giftCount) : totalGiftValue;
-            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} \u00d7 ${giftCount})`, 'display-queue');
+            logger.debug(`Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} \u00d7 ${giftCount})`, 'display-queue');
         } else {
-            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
+            logger.debug(`Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
         }
         return result;
     }
 
     async handleGiftEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
-        logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
+        logger.debug(`Gift notification - concurrent execution for ${username}`, 'display-queue');
         if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepared && !this.notificationPrepareFailed) {
             await this.prepareNotificationTTS(ttsStages);
         }
@@ -666,7 +666,7 @@ class DisplayQueueEffects {
 
     async handleSequentialEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
-        logger.debug(`[Display Queue] Sequential notification - VFX-first execution for ${username}`, 'display-queue');
+        logger.debug(`Sequential notification - VFX-first execution for ${username}`, 'display-queue');
 
         if (this.isNotificationTTSEnabled() && ttsStages.length > 0 && !this.notificationPrepared && !this.notificationPrepareFailed) {
             await this.prepareNotificationTTS(ttsStages);
@@ -682,7 +682,7 @@ class DisplayQueueEffects {
                 match = this.buildVfxMatch(vfxConfig);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                logger.warn(`[Display Queue] VFX match build failed: ${errorMessage}`, 'display-queue');
+                logger.warn(`VFX match build failed: ${errorMessage}`, 'display-queue');
                 match = null;
             }
             if (match) {
@@ -703,7 +703,7 @@ class DisplayQueueEffects {
                 secondaryMatch = this.buildVfxMatch(secondaryVfxConfig);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                logger.warn(`[Display Queue] Secondary greeting VFX match build failed: ${errorMessage}`, 'display-queue');
+                logger.warn(`Secondary greeting VFX match build failed: ${errorMessage}`, 'display-queue');
                 secondaryMatch = null;
             }
 
@@ -832,7 +832,7 @@ class DisplayQueueEffects {
     ): VfxCompletionWaiter {
         const noEventBus = !this.eventBus || (!this.eventBus.subscribe && !this.eventBus.on);
         if (noEventBus) {
-            logger.debug('[DisplayQueue] EventBus not available for VFX completion wait', 'display-queue', { match });
+            logger.debug('EventBus not available for VFX completion wait', 'display-queue', { match });
             return {
                 promise: Promise.resolve({ reason: 'no-eventbus' }),
                 cancel: () => {}
@@ -875,7 +875,7 @@ class DisplayQueueEffects {
                     try {
                         unsub();
                     } catch (err) {
-                        logger.debug('[DisplayQueue] Error cleaning up VFX completion subscription', 'display-queue', err);
+                        logger.debug('Error cleaning up VFX completion subscription', 'display-queue', err);
                     }
                 });
             };

@@ -635,7 +635,7 @@ async function main(overrides: MainOverrides = {}) {
         } catch (error) {
             logMainError('Secret setup failed - missing required secrets', error, null, {
                 eventType: 'configuration',
-                logContext: 'Main'
+                logContext: 'main'
             });
             throw error;
         }
@@ -671,7 +671,7 @@ async function main(overrides: MainOverrides = {}) {
                 authValid = false;
                 logMainError('Twitch authentication failed - continuing with limited functionality', error, null, {
                     eventType: 'authentication',
-                    logContext: 'Main'
+                    logContext: 'main'
                 });
             }
         }
@@ -732,9 +732,9 @@ async function main(overrides: MainOverrides = {}) {
 
         if (guiGiftAnimationState.giftAnimationsEnabled) {
             const giftAnimationDependencies = getGiftAnimationDependencyStatus();
-            logger.debug('[Gift Animation] Runtime dependency diagnostics', 'Main', giftAnimationDependencies);
+            logger.debug('[Gift Animation] Runtime dependency diagnostics', 'main', giftAnimationDependencies);
             if (!giftAnimationDependencies.extraction.available) {
-                logger.warn('[Gift Animation] Runtime dependency missing; gift animations may not play', 'Main', {
+                logger.warn('[Gift Animation] Runtime dependency missing; gift animations may not play', 'main', {
                     extractionAvailable: giftAnimationDependencies.extraction.available,
                     extractionCommand: giftAnimationDependencies.extraction.command
                 });
@@ -831,9 +831,9 @@ async function main(overrides: MainOverrides = {}) {
 
         if (config.twitch.enabled) {
             if (!authValid) {
-                logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
+                logger.warn('Authentication validation failed - continuing with limited functionality', 'main');
             } else {
-                logger.info('Authentication validation successful', 'Main');
+                logger.info('Authentication validation successful', 'main');
             }
         }
         
@@ -936,7 +936,7 @@ async function main(overrides: MainOverrides = {}) {
         await app.start();
 
         if (process.env.CHAT_BOT_STARTUP_ONLY === 'true') {
-            logger.info('Startup-only mode enabled; shutting down after initialization', 'Main');
+            logger.info('Startup-only mode enabled; shutting down after initialization', 'main');
             await app.shutdown();
             await releaseSingleInstanceGuard(singleInstanceGuard);
             singleInstanceGuard = null;

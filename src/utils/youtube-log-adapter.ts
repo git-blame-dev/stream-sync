@@ -1,13 +1,12 @@
+import type { AppLogger } from '../core/logger/types';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
 const YOUTUBE_TEXT_TAG = '[YOUTUBEJS][Text]:';
 const MISMATCH_WARNING_PATTERN = /^Unable to find matching run for (style|command|attachment) run\. Skipping\.\.\.$/;
-const ADAPTER_MARKER = Symbol.for('stream-sync.youtube-text-log-adapter');
+const ADAPTER_MARKER = Symbol.for('stream-sync.youtube-log-adapter');
 
-type AdapterLogger = {
-    warn: (message: string, source?: string, data?: unknown) => void;
-    error: (message: string, source?: string, data?: unknown) => void;
-};
+type AdapterLogger = Pick<AppLogger, 'warn' | 'error'> & Partial<Pick<AppLogger, 'debug' | 'info'>>;
 
 type MismatchWarningType = 'style' | 'command' | 'attachment';
 
@@ -101,18 +100,18 @@ function handleAdapterError(
     if (error instanceof Error) {
         errorHandler.handleEventProcessingError(
             error,
-            'youtube-text-log-adapter',
+            'youtube-log-adapter',
             payload,
             message,
-            'youtube-text-log-adapter'
+            'youtube-log-adapter'
         );
         return;
     }
 
-    errorHandler.logOperationalError(message, 'youtube-text-log-adapter', payload);
+    errorHandler.logOperationalError(message, 'youtube-log-adapter', payload);
 }
 
-function installYouTubeTextLogAdapter(options: { logger?: unknown } = {}): AdapterInstallResult {
+function installYouTubeLogAdapter(options: { logger?: unknown } = {}): AdapterInstallResult {
     const logger = options.logger;
     if (!hasValidLoggerInterface(logger)) {
         return {
@@ -121,7 +120,7 @@ function installYouTubeTextLogAdapter(options: { logger?: unknown } = {}): Adapt
         };
     }
 
-    const errorHandler = createPlatformErrorHandler(logger, 'youtube-text-log-adapter');
+    const errorHandler = createPlatformErrorHandler(logger, 'youtube-log-adapter');
     const runtimeConsole = globalThis.console;
 
     if (!runtimeConsole || typeof runtimeConsole.warn !== 'function') {
@@ -138,48 +137,52 @@ function installYouTubeTextLogAdapter(options: { logger?: unknown } = {}): Adapt
         };
     }
 
-    const passthroughWarn = runtimeConsole.warn;
-    const wrappedWarn = (...args: unknown[]) => {
-        try {
-            const warningType = getMismatchWarningType(args);
-            if (!warningType) {
-                return passthroughWarn.apply(runtimeConsole, args);
-            }
-
-            const metadata = buildWarningMetadata(warningType, args[2]);
-            logger.warn(buildWarningMessage(metadata), 'youtube-text', metadata);
-            return undefined;
-        } catch (error) {
-            handleAdapterError(
-                errorHandler,
-                'Failed to normalize YouTube Text warning',
-                error,
-                { argCount: args.length }
-            );
-            return passthroughWarn.apply(runtimeConsole, args);
-        }
-    };
-
-    // youtubei.js Text mismatch warnings include large payload objects; collapse only known variants to one line.
+    const methods = ['warn', 'error', 'info', 'debug'] as const;
+    const originals = new Map<typeof methods[number], typeof runtimeConsole.warn>();
     try {
-        Object.defineProperty(wrappedWarn, ADAPTER_MARKER, {
-            value: true,
-            enumerable: false,
-            configurable: false,
-            writable: false
-        });
-        runtimeConsole.warn = wrappedWarn;
+        for (const method of methods) {
+            const passthrough = runtimeConsole[method];
+            if (typeof passthrough !== 'function') continue;
+            const wrapped = (...args: unknown[]) => {
+                const tag = args[0];
+                if (typeof tag !== 'string' || !tag.startsWith('[YOUTUBEJS]')) {
+                    return passthrough.apply(runtimeConsole, args);
+                }
+                try {
+                    const warningType = method === 'warn' ? getMismatchWarningType(args) : null;
+                    if (warningType) {
+                        const metadata = buildWarningMetadata(warningType, args[2]);
+                        logger.warn(buildWarningMessage(metadata), 'youtube-text', metadata);
+                    } else {
+                        const component = /^\[YOUTUBEJS\]\[([a-z0-9_-]{1,64})\]:$/i.exec(tag)?.[1] ?? 'unknown';
+                        // SDK objects can contain complete provider responses. Retain only
+                        // its primary diagnostic string, never arbitrary argument objects.
+                        const diagnostic = typeof args[1] === 'string' ? args[1] : 'YouTube SDK diagnostic';
+                        const message = toOneLine(sanitizeLogText(diagnostic)).slice(0, 4096);
+                        if (method === 'error') {
+                            errorHandler.logOperationalError(message, 'youtube-sdk', { errorType: component, fieldCount: args.length - 1 });
+                        } else {
+                            const emit = logger[method] ?? logger.warn;
+                            emit.call(logger, message, 'youtube-sdk', { component, argumentCount: args.length - 1 });
+                        }
+                    }
+                } catch {
+                    // Never restore the raw provider payload on the error path.
+                    try { errorHandler.logOperationalError('Failed to normalize YouTube SDK diagnostic', 'youtube-log-adapter'); }
+                    catch { passthrough.call(runtimeConsole, '[YouTube] Diagnostic output failed'); }
+                }
+                return undefined;
+            };
+            Object.defineProperty(wrapped, ADAPTER_MARKER, { value: true });
+            originals.set(method, passthrough);
+            runtimeConsole[method] = wrapped;
+        }
     } catch (error) {
-        handleAdapterError(
-            errorHandler,
-            'Failed to install YouTube Text warning adapter',
-            error,
-            null
-        );
-        return {
-            installed: false,
-            reason: 'install-failed'
-        };
+        for (const [method, original] of originals) {
+            try { runtimeConsole[method] = original; } catch { /* A locked console method was not replaced. */ }
+        }
+        handleAdapterError(errorHandler, 'Failed to install YouTube SDK log adapter', error, null);
+        return { installed: false, reason: 'install-failed' };
     }
 
     return {
@@ -188,4 +191,4 @@ function installYouTubeTextLogAdapter(options: { logger?: unknown } = {}): Adapt
     };
 }
 
-export { installYouTubeTextLogAdapter };
+export { installYouTubeLogAdapter };

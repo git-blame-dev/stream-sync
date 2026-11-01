@@ -36,7 +36,7 @@ async function safeOBSOperation(obsManager: { isReady: () => Promise<boolean> },
     }
 
     if (!isReady) {
-        logger.debug(`[OBS Safety] Skipping ${context} - OBS not ready`, 'obs-safety');
+        logger.debug(`Skipping ${context} - OBS not ready`, 'obs-safety');
         return null;
     }
     

@@ -291,7 +291,7 @@ class NotificationManager extends EventEmitter {
     async prepareNotificationInternal(notificationType: string, platform: unknown, data: unknown, skipSpamDetection: boolean, preparationOnly = false): Promise<NotificationPreparationResult> {
         const platformValidation = this.inputValidator.validatePlatform(platform);
         if (!platformValidation.success) {
-            this.logger.warn(`[NotificationManager] Invalid platform: ${String(platform)}`, 'notification-manager', { notificationType, platform });
+            this.logger.warn(`Invalid platform: ${String(platform)}`, 'notification-manager', { notificationType, platform });
             return { success: false, error: platformValidation.error, notificationType, platform };
         }
         const platformName = platformValidation.canonicalPlatform;
@@ -475,7 +475,7 @@ class NotificationManager extends EventEmitter {
             const resolvedVfxConfig = await this._getVFXConfigFromService(config.commandKey, vfxMessage);
             vfxConfig = isRecord(resolvedVfxConfig) ? resolvedVfxConfig : null;
         } catch {
-            this.logger.warn('[NotificationManager] Preparing notification without VFX after config lookup failure', 'notification-manager', {
+            this.logger.warn('Preparing notification without VFX after config lookup failure', 'notification-manager', {
                 notificationType, platform: platformName
             });
         }
@@ -677,7 +677,7 @@ class NotificationManager extends EventEmitter {
                     : '';
 
                 if (!username || !platform || !userId) {
-                    this.logger.warn('[NotificationManager] Skipping VFX execution due to incomplete context', 'notification-manager', {
+                    this.logger.warn('Skipping VFX execution due to incomplete context', 'notification-manager', {
                         hasUsername: !!username,
                         hasPlatform: !!platform,
                         hasUserId: !!userId,
@@ -706,7 +706,7 @@ class NotificationManager extends EventEmitter {
                     throw vfxError;
                 }
             } else if (vfxNotification.vfxCommand) {
-                this.logger.warn('[NotificationManager] No VFXCommandService available - VFX execution disabled');
+                this.logger.warn('No VFXCommandService available - VFX execution disabled', 'notification-manager');
             }
         } catch (error) {
             this._handleNotificationError(
@@ -744,7 +744,7 @@ class NotificationManager extends EventEmitter {
                 }
                 await this.handleNotification(notificationType, platform, notification.data);
             } catch (handleError) {
-                this.logger.warn(`[NotificationManager] handleNotification failed: ${getErrorMessage(handleError)}`);
+                this.logger.warn(`handleNotification failed: ${getErrorMessage(handleError)}`, 'notification-manager');
             }
         } catch (error) {
             this._handleNotificationError(

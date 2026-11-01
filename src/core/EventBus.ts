@@ -119,7 +119,7 @@ class EventBus extends EventEmitter {
             }
         }
 
-        logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${formatEventName(eventName)}'`, 'event-bus');
+        logger?.warn?.(`Handler not found for unsubscription from '${formatEventName(eventName)}'`, 'event-bus');
         return false;
     }
 

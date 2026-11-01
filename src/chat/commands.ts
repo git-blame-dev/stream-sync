@@ -157,7 +157,7 @@ class CommandParser {
         }
 
         if (hasFarewellConfigText && parsed.triggers.size === 0 && parsed.keywords.size === 0) {
-            logger.warn('[CommandParser] Farewell configuration contains no usable triggers or keywords', 'command-parser');
+            logger.warn('Farewell configuration contains no usable triggers or keywords', 'command-parser');
         }
 
         return parsed;

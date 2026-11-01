@@ -121,7 +121,7 @@ class CommandCooldownService {
         if (this.userHeavyLimit.get(userId)) {
             const remainingTime = heavyCooldownMs - (now - lastCommandTime);
             if (remainingTime > 0) {
-                this.logger.debug('Command rejected by heavy cooldown', 'CommandCooldownService');
+                this.logger.debug('Command rejected by heavy cooldown', 'command-cooldown');
 
                 if (this.eventBus?.emit) {
                     this.eventBus.emit('cooldown:blocked', {
@@ -136,12 +136,12 @@ class CommandCooldownService {
             }
 
             this.userHeavyLimit.set(userId, false);
-            this.logger.debug('Heavy command cooldown expired', 'CommandCooldownService');
+            this.logger.debug('Heavy command cooldown expired', 'command-cooldown');
         }
 
         const remainingCooldown = platformCooldownMs - (now - lastCommandTime);
         if (remainingCooldown > 0) {
-            this.logger.debug('Command rejected by per-user cooldown', 'CommandCooldownService');
+            this.logger.debug('Command rejected by per-user cooldown', 'command-cooldown');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:blocked', {
@@ -164,7 +164,7 @@ class CommandCooldownService {
         const remainingTime = globalCooldownMs - (now - lastExecutionTime);
 
         if (remainingTime > 0) {
-            this.logger.debug('Command rejected by global cooldown', 'CommandCooldownService');
+            this.logger.debug('Command rejected by global cooldown', 'command-cooldown');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:global-blocked', {
@@ -204,7 +204,7 @@ class CommandCooldownService {
         const now = Date.now();
         this.globalCommandCooldowns.set(commandName, now);
 
-        this.logger.debug(`Global cooldown started for command ${commandName}`, 'CommandCooldownService');
+        this.logger.debug(`Global cooldown started for command ${commandName}`, 'command-cooldown');
     }
 
     updateCommandTimestamps(userId: string): void {
@@ -223,7 +223,7 @@ class CommandCooldownService {
 
         if (filteredTimestamps.length >= this.cooldownConfig.heavyCommandThreshold) {
             this.userHeavyLimit.set(userId, true);
-            this.logger.debug('Heavy command cooldown activated', 'CommandCooldownService');
+            this.logger.debug('Heavy command cooldown activated', 'command-cooldown');
 
             if (this.eventBus?.emit) {
                 this.eventBus.emit('cooldown:heavy-detected', {
@@ -250,7 +250,7 @@ class CommandCooldownService {
                 cleanedCount++;
             });
 
-            this.logger.debug(`Cleaned up ${cleanedCount} old cooldown entries`, 'CommandCooldownService');
+            this.logger.debug(`Cleaned up ${cleanedCount} old cooldown entries`, 'command-cooldown');
         }
     }
 
@@ -274,7 +274,7 @@ class CommandCooldownService {
         this.userHeavyLimit.delete(userId);
         this.userCommandTimestamps.delete(userId);
 
-        this.logger.debug('User cooldowns reset', 'CommandCooldownService');
+        this.logger.debug('User cooldowns reset', 'command-cooldown');
 
         if (this.eventBus?.emit) {
             this.eventBus.emit('cooldown:reset', {
