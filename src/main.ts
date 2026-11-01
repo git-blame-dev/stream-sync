@@ -948,7 +948,7 @@ async function main(overrides: MainOverrides = {}) {
             };
         }
         
-        logger.info('Runtime main components are running. Holding process open.', 'main');
+        logger.info('Runtime ready', 'main');
 
         if (!runtimeCliArgs.chat) {
 

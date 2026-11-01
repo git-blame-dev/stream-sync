@@ -99,7 +99,7 @@ const startMonitoring = async (): Promise<void> => {
             'streamPollingInterval'
         );
 
-        platform.logger.info(`Starting multi-stream monitoring (interval: ${pollInterval}ms)`, 'youtube');
+        platform.logger.debug(`Starting multi-stream monitoring (interval: ${pollInterval}ms)`, 'youtube');
 
         platform.monitoringInterval = safeSetInterval(() => {
             platform.checkMultiStream();

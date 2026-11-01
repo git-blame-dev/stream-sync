@@ -2,7 +2,7 @@ import * as axiosModule from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 import { TWITCH } from '../core/endpoints';
 import { secrets } from '../core/secrets';
-import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createPlatformErrorHandler, summarizeOperationalPayload } from '../utils/platform-error-handler';
 import { resolveLogger } from '../utils/logger-resolver';
 import { loadTokens, saveTokens } from '../utils/token-store';
 import { TOKEN_REFRESH_CONFIG, AuthConstants } from '../utils/auth-constants';
@@ -769,7 +769,7 @@ class TwitchAuth {
                 }
             }
             handler.logOperationalError('Token refresh failed', 'twitch-auth', {
-                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
+                statusCode: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
             });
             return { refreshed: false, error };
         }
@@ -839,14 +839,19 @@ class TwitchAuth {
             };
         } catch (error) {
             const httpError = asHttpError(error);
+            const statusCode = typeof httpError.response?.status === 'number' ? httpError.response.status : null;
             if (!signal) {
-                handler.logOperationalError('Token validation failed', 'twitch-auth', {
-                    status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
-                });
+                if (statusCode === 401) {
+                    this.#logger.debug('Token validation failed', 'twitch-auth', {
+                        payloadSummary: summarizeOperationalPayload({ statusCode })
+                    });
+                } else {
+                    handler.logOperationalError('Token validation failed', 'twitch-auth', { statusCode });
+                }
             }
             return {
                 error,
-                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null
+                status: statusCode
             };
         }
     }

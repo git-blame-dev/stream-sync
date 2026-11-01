@@ -218,7 +218,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         try {
             await connection.applyFilter(filterName);
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
-            platform.logger.info(`Applied YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
+            platform.logger.debug(`Applied YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
         } catch (error: unknown) {
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
             const errorMessage = error instanceof Error ? error.message : String(error);

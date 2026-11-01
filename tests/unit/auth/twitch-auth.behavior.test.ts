@@ -28,6 +28,7 @@ type CreateAuthOptions = {
   httpClient?: unknown;
   oauthFlow?: unknown;
   retryExecutor?: unknown;
+  logger?: unknown;
 };
 
 const buildValidationResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -76,12 +77,13 @@ describe("TwitchAuth behavior", () => {
     httpClient,
     oauthFlow,
     retryExecutor,
+    logger = noOpLogger,
   }: CreateAuthOptions = {}) => {
     const authOptions: ConstructorParameters<typeof TwitchAuth>[0] = {
       tokenStorePath: tokenStorePathOverride,
       clientId,
       expectedUsername,
-      logger: noOpLogger,
+      logger,
     };
     if (httpClient !== undefined) {
       authOptions.httpClient = httpClient as NonNullable<
@@ -100,6 +102,12 @@ describe("TwitchAuth behavior", () => {
     }
     return new TwitchAuth(authOptions);
   };
+
+  const createDiagnosticLogger = () => ({
+    ...noOpLogger,
+    debug: vi.fn<(...args: unknown[]) => void>(),
+    error: vi.fn<(...args: unknown[]) => void>(),
+  });
 
   const createValidationRetryExecutor = (delay: unknown) =>
     new HttpRetryExecutor({
@@ -318,7 +326,11 @@ describe("TwitchAuth behavior", () => {
         refreshToken: "test-original-refresh-token",
       },
     });
-    const exhaustedError = { response: { status: 503 } };
+    const logger = createDiagnosticLogger();
+    const exhaustedError = {
+      message: "Bearer test-original-access-token",
+      response: { status: 503, data: { message: "test-private-provider-body" } },
+    };
     const httpClient = {
       get: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(exhaustedError),
       post: vi.fn<(...args: unknown[]) => unknown>(),
@@ -328,6 +340,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
+      logger,
       retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
@@ -338,6 +351,11 @@ describe("TwitchAuth behavior", () => {
     expect(oauthFlow.mock.calls.length).toBe(0);
     expect(secrets.twitch.accessToken).toBeNull();
     expect(secrets.twitch.refreshToken).toBeNull();
+    expect(auth.isReady()).toBe(false);
+    expect(logger.debug.mock.calls).toEqual([]);
+    expect(logger.error.mock.calls).toEqual([
+      ["Token validation failed", "twitch-auth", { payloadSummary: { statusCode: 503 } }],
+    ]);
   });
 
   it("does not retry malformed successful validation data or trigger recovery", async () => {
@@ -391,8 +409,13 @@ describe("TwitchAuth behavior", () => {
         refreshToken: "test-refresh-token",
       },
     });
+    const logger = createDiagnosticLogger();
     const get = vi.fn<(...args: []) => Promise<{ data?: unknown }>>()
-      .mockRejectedValueOnce({ response: { status: 401 } })
+      .mockRejectedValueOnce({
+        message: "Bearer test-expired-access-token",
+        config: { headers: { Authorization: "Bearer test-expired-access-token" } },
+        response: { status: 401, data: { message: "test-private-validation-body" } },
+      })
       .mockResolvedValueOnce(buildValidationResponse());
     const httpClient = {
       get,
@@ -409,6 +432,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
+      logger,
       retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
@@ -417,6 +441,16 @@ describe("TwitchAuth behavior", () => {
     expect(httpClient.post.mock.calls.length).toBe(1);
     expect(retryDelay.mock.calls.length).toBe(0);
     expect(oauthFlow.mock.calls.length).toBe(0);
+    expect(auth.isReady()).toBe(true);
+    expect(secrets.twitch.accessToken).toBe("test-refreshed-access-token");
+    expect(logger.error.mock.calls).toEqual([]);
+    expect(logger.debug.mock.calls).toEqual([
+      ["Token validation failed", "twitch-auth", { payloadSummary: { statusCode: 401 } }],
+    ]);
+    const diagnostics = JSON.stringify([logger.debug.mock.calls, logger.error.mock.calls]);
+    for (const privateValue of ["test-expired-access-token", "test-refreshed-access-token", "test-refresh-token", "test-private-validation-body"]) {
+      expect(diagnostics).not.toContain(privateValue);
+    }
   });
 
   it("does not run OAuth when validation becomes transient after refresh", async () => {
@@ -461,17 +495,46 @@ describe("TwitchAuth behavior", () => {
         refreshToken: "test-refresh-token",
       },
     });
+    const logger = createDiagnosticLogger();
     const refreshError = { response: { status: 503 } };
     const httpClient = {
       get: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue({ response: { status: 401 } }),
       post: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(refreshError),
     };
     const oauthFlow = vi.fn<(...args: unknown[]) => unknown>();
-    const auth = createAuth({ httpClient, oauthFlow });
+    const auth = createAuth({ httpClient, oauthFlow, logger });
 
     await expect(auth.initialize()).rejects.toBe(refreshError);
     expect(httpClient.post.mock.calls.length).toBe(1);
     expect(oauthFlow.mock.calls.length).toBe(0);
+    expect(auth.isReady()).toBe(false);
+    expect(logger.error.mock.calls).toEqual([
+      ["Token refresh failed", "twitch-auth", { payloadSummary: { statusCode: 503 } }],
+    ]);
+  });
+
+  it("keeps terminal OAuth recovery failure visible and propagates it to the startup owner", async () => {
+    await writeTokenStore({ twitch: { accessToken: "test-expired", refreshToken: "test-revoked" } });
+    const logger = createDiagnosticLogger();
+    const terminalError = new Error("test-only OAuth recovery rejected");
+    const oauthFlow = vi.fn<() => Promise<never>>().mockRejectedValue(terminalError);
+    const auth = createAuth({
+      logger,
+      oauthFlow,
+      httpClient: {
+        get: vi.fn<() => Promise<never>>().mockRejectedValue({ response: { status: 401 } }),
+        post: vi.fn<() => Promise<never>>().mockRejectedValue({
+          response: { status: 400, data: { error: "invalid_grant", message: "test-private-refresh-body" } },
+        }),
+      },
+    });
+
+    await expect(auth.initialize()).rejects.toBe(terminalError);
+    expect(auth.isReady()).toBe(false);
+    expect(oauthFlow.mock.calls.length).toBe(1);
+    expect(logger.error.mock.calls).toEqual([
+      ["OAuth flow failed after terminal refresh error", "twitch-auth"],
+    ]);
   });
 
   it("does not publish refreshed credentials when persistence fails", async () => {

@@ -683,7 +683,7 @@ class AppRuntime {
             return;
         }
 
-        this.logger.info(`Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'app-runtime');
+        this.logger.debug(`Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'app-runtime');
 
         if (platform === 'youtube' && this.youtube && typeof this.youtube.initialize === 'function') {
             this.logger.debug(`Requesting YouTube reconnection for ${newStreamIds.length} discovered stream(s)`, 'app-runtime');
