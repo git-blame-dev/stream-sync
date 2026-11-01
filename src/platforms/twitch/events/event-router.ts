@@ -117,7 +117,7 @@ const logRawIfEnabled = (
 
         try {
             if (!getString(event, 'timestamp')) {
-                safeLogger.warn('[Twitch EventSub] Skipping chat message without timestamp after fallback resolution', 'twitch-eventsub');
+                safeLogger.warn('Skipping chat message without timestamp after fallback resolution', 'twitch-eventsub');
                 errorHandler.handleEventProcessingError(
                     new Error('Chat message requires timestamp'),
                     'chat',

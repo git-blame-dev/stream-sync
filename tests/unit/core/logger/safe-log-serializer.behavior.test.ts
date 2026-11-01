@@ -6,6 +6,47 @@ import path from "node:path";
 import { RawEventLogWriter } from "../../../../src/services/RawEventLogWriter";
 
 describe("safe log serializer behavior", () => {
+    test("redacts incomplete quoted credentials rather than retaining partial secrets", () => {
+        for (const value of ['"synthetic-unclosed', "'synthetic-unclosed", '"synthetic-dangling' + String.fromCharCode(92), "'synthetic-dangling" + String.fromCharCode(92)]) {
+            for (const prefix of ['token=', 'authToken=', 'password=', 'Authorization: Basic ', 'Bearer ', '{"token":']) {
+                const output = sanitizeLogText(`synthetic diagnostic; ${prefix}${value}`);
+                expect(output).toContain('synthetic diagnostic');
+                expect(output).toContain('[REDACTED]');
+                expect(output).not.toContain('synthetic-unclosed');
+                expect(output).not.toContain('synthetic-dangling');
+            }
+        }
+    });
+
+    test("bounds processing time for long malformed credential labels in a native process", () => {
+        const modulePath = import.meta.resolve('../../../../src/core/logger/safe-log-serializer.ts');
+        const script = `
+            import { sanitizeLogText } from ${JSON.stringify(modulePath)};
+            for (const prefix of ['xamz-', 'xgoog-']) {
+                const label = prefix.repeat(40_000);
+                if (sanitizeLogText(label) !== label) throw new Error('Synthetic non-assignment changed');
+                const secret = sanitizeLogText(label + '=synthetic-secret; diagnostic');
+                if (secret.includes('synthetic-secret') || !secret.endsWith('[REDACTED]; diagnostic')) throw new Error('Synthetic long credential not redacted');
+            }
+            process.stdout.write('synthetic-ok');
+        `;
+        const child = Bun.spawnSync([process.execPath, '--no-env-file', '--eval', script], {
+            env: { NODE_ENV: 'test' }, stdout: 'pipe', stderr: 'pipe', timeout: 5000,
+        });
+        expect(child.exitCode).toBe(0);
+        expect(child.stderr.toString()).toBe('');
+        expect(child.stdout.toString()).toBe('synthetic-ok');
+    });
+
+    test("uses the same credential names in metadata and diagnostic assignments", () => {
+        for (const key of ['id_token', 'authToken', 'session-token', 'set-cookie', 'proxy_authorization', 'passwd', 'privateKey', 'token', 'sessionId']) {
+            expect(sanitizeLogData({ [key]: 'synthetic-private-value' })).toEqual({ [key]: '[REDACTED]' });
+            for (const text of [`${key}=synthetic-private-value`, `${key}="synthetic private value"`, JSON.stringify({ [key]: 'synthetic-private-value' })]) {
+                expect(sanitizeLogText(text)).not.toContain('synthetic');
+            }
+        }
+    });
+
     test("handles large malformed protocols and URL control runs before applying the output budget", () => {
         const controls = "\t".repeat(200_000);
         for (const protocol of ['http', 'https', 'ws', 'wss']) {

@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "path";
+import { createLogger } from "../../../src/core/logging";
 import { RawPlatformDataLoggingService } from "../../../src/services/RawPlatformDataLoggingService.ts";
 
 const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
@@ -173,6 +174,23 @@ describe("RawPlatformDataLoggingService behavior", () => {
         path: expectedLogPath,
       });
     });
+  });
+
+  it("attributes capture failures without exposing filesystem paths or event payloads", async () => {
+    const logger = createLogger({}, { operatorCaptureEnabled: true });
+    const blocked = path.join(logDir, 'synthetic-private-path');
+    await fs.writeFile(blocked, 'synthetic obstruction');
+    const captureService = new RawPlatformDataLoggingService({ logger, config: { dataLoggingPath: blocked } });
+    for (const [platform, eventType] of [['twitch', 'chat'], ['youtube', 'gift']] as const) {
+      await captureService.logRawPlatformData(platform, eventType, { message: 'synthetic-private-message' }, { dataLoggingEnabled: true });
+    }
+    const entries = logger.getOperatorLogSource()!.history().entries;
+    expect(entries.map(entry => entry.data)).toMatchObject([
+      { platform: 'twitch', eventType: 'chat', failure: 'filesystem' }, { platform: 'youtube', eventType: 'gift', failure: 'filesystem' },
+    ]);
+    const output = JSON.stringify(entries);
+    expect(output).not.toContain('synthetic-private');
+    expect(entries.every(entry => entry.message === 'Raw platform data capture failed')).toBe(true);
   });
 
   describe("Error recovery", () => {

@@ -1,3 +1,5 @@
+import { captureStdout } from "../../helpers/output-capture";
+import { createLogger } from "../../../src/core/logging";
 import { vi, type Mock, describe, it, beforeEach, afterEach, expect } from 'bun:test';
 
 
@@ -76,6 +78,25 @@ describe("youtube text log adapter", () => {
 
   afterEach(() => {
     Object.assign(console, originalConsole);
+  });
+
+  it("routes every SDK severity through real logging thresholds and operator capture", async () => {
+    const { Log } = await import('youtubei.js');
+    const logger = createLogger({ console: { enabled: true, level: 'debug' } }, { operatorCaptureEnabled: true });
+    const output = captureStdout();
+    try {
+      installYouTubeLogAdapter({ logger });
+      Log.setLevel(Log.Level.DEBUG, Log.Level.INFO, Log.Level.WARNING, Log.Level.ERROR);
+      Log.debug('Session', 'synthetic debug');
+      Log.info('Session', 'synthetic info');
+      Log.warn('Session', 'synthetic warning');
+      Log.error('Session', 'synthetic error', { private: 'synthetic-private-body' });
+      expect(logger.getOperatorLogSource()!.history().entries.map(entry => entry.level)).toEqual(['debug', 'info', 'warn', 'error']);
+      expect(JSON.stringify(logger.getOperatorLogSource()!.history())).not.toContain('synthetic-private-body');
+      logger.reconfigure({ console: { enabled: false } });
+      Log.debug('Session', 'synthetic hidden debug');
+      expect(logger.getOperatorLogSource()!.history().entries).toHaveLength(4);
+    } finally { Log.setLevel(Log.Level.WARNING); output.restore(); }
   });
 
   it("installs once and collapses style command and attachment mismatch warnings to one line", () => {

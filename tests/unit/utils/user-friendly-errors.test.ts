@@ -10,6 +10,7 @@ import {
   expectContentReadabilityForAudience,
 } from "../../helpers/assertion-helpers";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 
 type TestLogger = typeof noOpLogger & {
   console: (message: string, context?: string) => void;
@@ -30,6 +31,17 @@ describe(
             consoleOutput.push(message);
           },
         };
+      });
+
+      it.each([
+        [true, true, ["console", "error"]],
+        [true, false, ["console"]],
+        [false, true, ["error"]],
+        [false, false, []],
+      ] as const)("honors display=%s and diagnostics=%s exactly once", (showInConsole, logTechnical, expected) => {
+        const logger = createRecordingLogger();
+        handleUserFacingError(new Error("Synthetic unexpected failure"), { logger }, { showInConsole, logTechnical });
+        expect(logger.entries.map(entry => entry.level)).toEqual([...expected]);
       });
 
       describe("when showing user-facing errors", () => {

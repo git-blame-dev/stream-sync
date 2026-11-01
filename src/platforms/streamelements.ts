@@ -387,7 +387,7 @@ class StreamElementsPlatform extends EventEmitter {
         const usernameValue = identity.displayName || identity.username || '';
         const username = typeof usernameValue === 'string' ? usernameValue.trim() : '';
         if (!username) {
-            this.logger.warn('[StreamElements] Subscriber event missing username; skipping', 'streamelements', {
+            this.logger.warn('Subscriber event missing username; skipping', 'streamelements', {
                 hasDisplayName: typeof identity.displayName === 'string',
                 hasUserId: typeof identity.providerId === 'string' || typeof identity.userId === 'string'
             });
@@ -438,7 +438,7 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     handleConnectionClose(code: number, reason: unknown): void {
-        this.logger.info('[StreamElements] Connection closed', 'streamelements', {
+        this.logger.info('Connection closed', 'streamelements', {
             code,
             hasReason: reason !== null && reason !== undefined && String(reason).length > 0
         });
@@ -479,7 +479,7 @@ class StreamElementsPlatform extends EventEmitter {
         
         const delay = this.incrementRetryCount('StreamElements');
         
-        this.logger.debug(`[StreamElements] Scheduling reconnection in ${delay}ms`, 'streamelements');
+        this.logger.debug(`Scheduling reconnection in ${delay}ms`, 'streamelements');
         
         this.reconnectTimeout = safeSetTimeout(() => {
             this.reconnectTimeout = null;
@@ -521,7 +521,7 @@ class StreamElementsPlatform extends EventEmitter {
             try {
                 connection.removeAllListeners();
             } catch (cleanupError) {
-                this.logger.debug('[StreamElements] Error removing listeners during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
+                this.logger.debug('Error removing listeners during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
             }
             this.connection = null;
             try {
@@ -532,7 +532,7 @@ class StreamElementsPlatform extends EventEmitter {
                 if (connection.readyState !== 0 && connection.terminate) connection.terminate();
                 else connection.close();
             } catch (cleanupError) {
-                this.logger.debug('[StreamElements] Error closing connection during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
+                this.logger.debug('Error closing connection during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
             }
         }
         this.connectionTime = null;
