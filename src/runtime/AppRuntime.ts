@@ -931,6 +931,9 @@ class AppRuntime {
             }
             this.assertActiveLifetime();
 
+            await this.startViewerCountSystemEarly();
+            this.assertActiveLifetime();
+
             try {
                 await this.initializePlatforms();
                 this.assertActiveLifetime();
@@ -989,11 +992,7 @@ class AppRuntime {
             const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config,
                 getViewerCountSnapshot: platform => this.viewerCountSystem.getViewerCountSnapshot(platform) });
             this.viewerCountSystem.addObserver(obsObserver);
-
-            await this.viewerCountSystem.initialize();
-            this.assertActiveLifetime();
-
-            await this.viewerCountSystem.startPolling();
+            await this.viewerCountSystem.initializeObservers();
             this.assertActiveLifetime();
 
             if (this.dependencies.gracefulExitService) {

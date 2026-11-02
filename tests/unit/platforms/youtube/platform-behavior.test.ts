@@ -34,7 +34,6 @@ type TestPlatformOverrideKey =
   | "monitoringInterval"
   | "userAgentManager"
   | "handlers"
-  | "streamViewerCounts"
   | "eventRouter"
   | "errorHandler";
 type TestYouTubePlatform = Omit<YouTubePlatform, TestPlatformOverrideKey> & {
@@ -48,7 +47,6 @@ type TestYouTubePlatform = Omit<YouTubePlatform, TestPlatformOverrideKey> & {
   eventRouter?: unknown;
   errorHandler?: unknown;
   handlers: Record<string, (payload: UnknownRecord) => unknown>;
-  streamViewerCounts: Map<string, number> | null | undefined;
   startMultiStreamMonitoring: () => Promise<void>;
 };
 
@@ -62,7 +60,6 @@ const asTestPlatform = (platform: YouTubePlatform): TestYouTubePlatform => {
     monitoringInterval: platform.monitoringInterval,
     userAgentManager: platform.userAgentManager,
     handlers: platform.handlers,
-    streamViewerCounts: platform.streamViewerCounts,
     eventRouter: platform.eventRouter,
     errorHandler: platform.errorHandler,
   });
@@ -226,26 +223,6 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 describe("YouTubePlatform modern architecture", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("emits aggregated viewer counts as platform events after stream updates", () => {
-    const { platform } = createPlatform();
-    const received: UnknownRecord[] = [];
-    platform.on("platform:event", (payload: PlatformEvent) => {
-      if (payload.type === "platform:viewer-count") {
-        received.push(getEventData(payload));
-      }
-    });
-
-    platform.updateViewerCountForStream("stream-1", 5);
-    platform.updateViewerCountForStream("stream-2", 7);
-
-    expect(received).not.toHaveLength(0);
-    const latest = first(received.slice(-1));
-    expect(latest.count).toBe(12);
-    expect(latest.streamId).toBe("stream-2");
-    expect(latest.platform).toBe("youtube");
-    expect(latest.timestamp).toEqual(expect.any(String));
   });
 
   it("emits platform:event error with context and metadata", () => {
@@ -870,35 +847,6 @@ describe("YouTubePlatform modern architecture", () => {
     expect(count).toBeNull();
   });
 
-  it("getViewerCountForVideo returns unavailable when provider is not available", async () => {
-    const { platform } = createPlatform();
-    platform.viewerCountProvider = null;
-
-    const count = await platform.getViewerCountForVideo("vid-123");
-
-    expect(count).toBeNull();
-  });
-
-  it("getViewerCountForVideo returns unavailable when provider lacks single-video method", async () => {
-    const { platform } = createPlatform();
-    platform.viewerCountProvider = {};
-
-    const count = await platform.getViewerCountForVideo("vid-123");
-
-    expect(count).toBeNull();
-  });
-
-  it("getViewerCountForVideo returns unavailable on provider error", async () => {
-    const { platform } = createPlatform();
-    platform.viewerCountProvider = {
-      getViewerCountForVideo: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("provider error")),
-    };
-
-    const count = await platform.getViewerCountForVideo("vid-123");
-
-    expect(count).toBeNull();
-  });
-
   it("isActive returns false when isConnected throws", () => {
     const { platform } = createPlatform();
     platform.isConnected = () => {
@@ -988,7 +936,7 @@ describe("YouTubePlatform modern architecture", () => {
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
-    expect(platform.getViewerMembershipSnapshot()).toEqual({ generation: 0, videoIds: [], availability: "unknown" });
+    expect(platform.getViewerMembershipSnapshot()).toEqual({ generation: 0, videoIds: [], availability: "unknown", discoveryComplete: false });
 
     expect(events).toEqual([]);
   });
@@ -1193,27 +1141,6 @@ describe("YouTubePlatform modern architecture", () => {
 
     expect(status.platform).toBe("youtube");
     expect(status.status).toBe("connected");
-  });
-
-  it("getTotalViewerCount sums all stream viewer counts", () => {
-    const { platform } = createPlatform();
-    platform.streamViewerCounts = new Map([
-      ["v1", 10],
-      ["v2", 20],
-    ]);
-
-    const total = platform.getTotalViewerCount();
-
-    expect(total).toBe(30);
-  });
-
-  it("getTotalViewerCount returns 0 when no counts tracked", () => {
-    const { platform } = createPlatform();
-    platform.streamViewerCounts = null;
-
-    const total = platform.getTotalViewerCount();
-
-    expect(total).toBe(0);
   });
 
   it("_clearMonitoringInterval clears and nullifies interval", () => {

@@ -2,7 +2,6 @@ import { vi, describe, it, expect } from 'bun:test';
 
 import {
   TwitchViewerCountProvider,
-  TikTokViewerCountProvider,
   ViewerCountProvider,
 } from "../../../src/utils/viewer-count-providers";
 describe("ViewerCountProvider error handler integration", () => {
@@ -39,11 +38,7 @@ describe("ViewerCountProvider error handler integration", () => {
       getStreamInfo: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(new Error("test network timeout")),
     };
     const provider = new TwitchViewerCountProvider(
-      apiClient,
-      {},
-      { channel: "test-channel" },
-      null,
-      mockLogger,
+      apiClient, { channel: "test-channel" }, mockLogger
     );
 
     const result = await provider.getViewerCount();
@@ -60,15 +55,12 @@ describe("ViewerCountProvider error handler integration", () => {
 
   it("logs errors at error level across consecutive failures", async () => {
     const mockLogger = createMockLogger();
-    const platform = {
-      connection: { isConnected: true },
-      getViewerCount: vi.fn<(...args: unknown[]) => Promise<unknown>>()
+    const apiClient = {
+      getStreamInfo: vi.fn<(...args: [string]) => Promise<{ isLive: boolean; viewerCount: number }>>()
         .mockRejectedValueOnce(new Error("network fail"))
         .mockRejectedValueOnce(new Error("timeout")),
     };
-    const provider = new TikTokViewerCountProvider(platform, {
-      logger: mockLogger,
-    });
+    const provider = new TwitchViewerCountProvider(apiClient, { channel: "synthetic-channel" }, mockLogger);
 
     await provider.getViewerCount();
     await provider.getViewerCount();

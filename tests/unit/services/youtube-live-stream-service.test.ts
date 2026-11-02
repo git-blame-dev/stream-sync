@@ -43,6 +43,7 @@ const streamAt = (streams: LiveStream[], index: number): LiveStream =>
 
 const lockupView = (options: {
   contentId: string;
+  channelId?: string;
   title: string;
   badge?: { text: string; iconName: string; badgeStyle: string };
   duration?: string;
@@ -65,6 +66,7 @@ const lockupView = (options: {
     type: "LockupView" as const,
     content_type: "VIDEO" as const,
     content_id: options.contentId,
+    ...(options.channelId ? { author: { id: options.channelId } } : {}),
     metadata: {
       title: { text: options.title },
       metadata: {
@@ -131,7 +133,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     const channelId = "UC" + "c".repeat(22);
     const failed = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => { throw new Error("YOUTUBEJS Parser synthetic failure"); } }, channelId, { logger: noOpLogger });
     expect(failed).toMatchObject({ success: false, observationKind: "unavailable", qualityReason: "parser_error", parserError: true, streams: [] });
-    const partial = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => ({ videos: [{ id: "synthetic-live", is_live: true }], getLiveStreams: async () => { throw new Error("Parser synthetic failure"); } }) }, channelId, { logger: noOpLogger });
+    const partial = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => ({ videos: [{ id: "synthetic-live", is_live: true, author: { id: channelId } }], getLiveStreams: async () => { throw new Error("Parser synthetic failure"); } }) }, channelId, { logger: noOpLogger });
     expect(partial).toMatchObject({ success: true, observationKind: "partial", qualityReason: "parser_error", parserError: true, videoIds: ["synthetic-live"] });
     const ordinary = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => { throw new Error("synthetic network failure"); } }, channelId, { logger: noOpLogger });
     expect(ordinary.qualityReason).toBe("acquisition_failed");
@@ -144,7 +146,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     const cases = [
       { channel: { getLiveStreams: parserFailure }, qualityReason: "malformed_collection", observationKind: "unavailable", success: false, videoIds: [] },
       { channel: { videos: [] }, qualityReason: "missing_capability", observationKind: "partial", success: false, videoIds: [] },
-      { channel: { videos: [null, { id: "synthetic-retained-live", is_live: true }], getLiveStreams: parserFailure }, qualityReason: "malformed_collection", observationKind: "partial", success: true, videoIds: ["synthetic-retained-live"] },
+      { channel: { videos: [null, { id: "synthetic-retained-live", is_live: true, author: { id: channelId } }], getLiveStreams: parserFailure }, qualityReason: "malformed_collection", observationKind: "partial", success: true, videoIds: ["synthetic-retained-live"] },
     ];
     for (const [index, fixture] of cases.entries()) it(`retains secondary parser classification for mixed-quality case ${index}`, async () => {
       const warnings: unknown[][] = [];
@@ -177,6 +179,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const channelId = "UClockup1234567890123456";
       const horizontal = lockupView({
         contentId: "lockup-horizontal-live",
+        channelId,
         title: "Horizontal Live Newsroom",
         badge: {
           text: "LIVE",
@@ -186,6 +189,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       });
       const vertical = lockupView({
         contentId: "lockup-vertical-live",
+        channelId,
         title: "Vertical Live Studio",
         badge: {
           text: "LIVE",
@@ -219,6 +223,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const channelId = "UC" + "a".repeat(22);
       const archived = lockupView({
         contentId: "lockup-archived-video",
+        channelId,
         title: "Yesterday's Archived Broadcast",
         duration: "42:18",
         history: "2 days ago",
@@ -307,6 +312,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const channelId = "UC" + "d".repeat(22);
       const repeatedLive = lockupView({
         contentId: "repeated-lockup-live",
+        channelId,
         title: "Repeated Live Session",
         badge: {
           text: "LIVE",
@@ -336,14 +342,14 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
               id: "live123",
               title: { text: "Amazing Gaming Stream" },
               is_live: true,
-              author: { name: "Popular Gamer" },
+              author: { id: channelId, name: "Popular Gamer" },
               published: new Date(testClock.now()).toISOString(),
             },
             {
               id: "live456",
               title: { text: "Music Live Performance" },
               is_live: true,
-              author: { name: "Music Artist" },
+              author: { id: channelId, name: "Music Artist" },
               published: new Date(testClock.now()).toISOString(),
             },
           ],
@@ -390,7 +396,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
               id: "video789",
               title: { text: "Live Coding Marathon" },
               is_live: true,
-              author: { name: "DevCreator" },
+              author: { id: channelId, name: "DevCreator" },
             },
           ],
         header: { title: "DevCreator" },

@@ -152,6 +152,7 @@ describe("YouTubeStreamDetectionService", () => {
     it("should preserve feed live streams when the direct API never settles", async () => {
       const feedStream = {
         id: "feed-live-id",
+        author: { id: "UC" + "f".repeat(22) },
         title: { text: "Feed Live Stream" },
         is_live: true,
       };

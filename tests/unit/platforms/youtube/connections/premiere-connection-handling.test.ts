@@ -93,9 +93,9 @@ function fixture() {
 import { YouTubeConnectionManager } from '../../../../../src/platforms/youtube/youtube-connection-manager';
 
 describe('Premiere readiness with actual platform validation and default connections', () => {
-  test('live upcoming Premiere stays stored but not ready until external start', async () => {
+  test('a currently live Premiere stays stored but not ready until external start', async () => {
     const f = fixture(); f.plans.set('synthetic-premiere', {
-      info: { basic_info: { is_live: true, is_upcoming: true, title: 'Synthetic premiere' } },
+      info: { basic_info: { id: 'synthetic-premiere', is_live: true, is_upcoming: false, title: 'Synthetic premiere' } },
     });
     expect(await f.platform.connectToYouTubeStream('synthetic-premiere')).toBe(true);
     expect(f.manager.hasConnection('synthetic-premiere')).toBe(true);
@@ -122,10 +122,12 @@ describe('Premiere readiness with actual platform validation and default connect
     ['status', { basic_info: { live_status: 'LIVE_STREAM' } }],
     ['hls', { basic_info: {}, streaming_data: { hls_manifest_url: 'https://synthetic.invalid/live.m3u8' } }],
     ['streamability', { basic_info: {}, playability_status: { liveStreamability: {} } }],
-  ] as const) test(`actual validation accepts external ${name} signal without declaring chat ready`, async () => {
-    const f = fixture(); f.plans.set('synthetic-signal', { info });
-    expect(await f.connect('synthetic-signal')).toBe(true);
+  ] as const) test(`actual validation requires current live state for external ${name} signal`, async () => {
+    const f = fixture();
+    f.plans.set('synthetic-signal', { info: { ...info, basic_info: { id: 'synthetic-signal', ...info.basic_info } } });
+    expect(await f.connect('synthetic-signal')).toBe(name === 'live');
     expect(f.manager.isConnectionReady('synthetic-signal')).toBe(false);
+    if (name !== 'live') expect(f.calls).toEqual(['info:synthetic-signal']);
   });
 
   for (const [count, readyIds] of [[3, [1]], [4, [1, 3]], [3, [0, 2]]] as const)
@@ -133,7 +135,7 @@ describe('Premiere readiness with actual platform validation and default connect
       const f = fixture(); expect(f.manager.getConnectionCount()).toBe(0);
       const ids = Array.from({ length: count }, (_, index) => `synthetic-premiere-${index}`);
       for (const id of ids) {
-        f.plans.set(id, { info: { basic_info: { is_live_content: true, is_upcoming: true, title: `Synthetic title ${id}` } } });
+        f.plans.set(id, { info: { basic_info: { id, is_live: true, is_live_content: true, is_upcoming: false, title: `Synthetic title ${id}` } } });
         expect(await f.connect(id)).toBe(true);
       }
       expect(f.manager.getReadyConnectionCount()).toBe(0);

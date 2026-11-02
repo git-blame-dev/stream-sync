@@ -29,7 +29,7 @@ test('stream end deactivates real connection and publishes terminal once', async
     await Promise.all([fixture.platform._handleStreamEnd({ code: 4404 }), fixture.platform._handleStreamEnd({ code: 4404 })]);
     expect(fixture.platform.connectionActive).toBe(false);
     expect(fixture.platform.connectionStateManager.isConnected()).toBe(false);
-    expect(statuses).toHaveLength(2); // One terminal and one ordinary disconnection status.
+    expect(statuses).toHaveLength(1); // Confirmed end owns the single terminal observation.
 });
 
 test('stores the public viewer-count callback by identity', () => {

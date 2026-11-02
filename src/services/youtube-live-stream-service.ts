@@ -10,6 +10,7 @@ import {
 } from './youtube-channel-resolver';
 
 const MAX_CHANNEL_CACHE_ENTRIES = 64;
+const MAX_STREAM_PAGES = 10;
 
 type LoggerLike = Pick<AppLogger<string>, 'error'> & Partial<Pick<AppLogger<string>, 'debug' | 'warn'>>;
 
@@ -20,6 +21,9 @@ type ChannelVideo = {
     title?: { text?: string; content?: string } | string;
     is_live?: boolean;
     is_live_content?: boolean;
+    is_upcoming?: boolean;
+    is_post_live_dvr?: boolean;
+    end_timestamp?: unknown;
     badges?: Array<{ label?: string; text?: string; style?: string }>;
     content_image?: {
         overlays?: Array<{
@@ -55,9 +59,15 @@ type ChannelVideo = {
     };
 };
 
+type StreamsPage = {
+    videos?: ChannelVideo[];
+    has_continuation?: boolean;
+    getContinuation?: () => Promise<StreamsPage>;
+};
+
 type ChannelLike = {
     videos?: ChannelVideo[];
-    getLiveStreams?: () => Promise<{ videos?: ChannelVideo[] }>;
+    getLiveStreams?: () => Promise<StreamsPage>;
 };
 
 type InnertubeClientLike = {
@@ -93,7 +103,7 @@ error?: string;
 
 // Observation quality does not authorize removal of omitted known streams.
 export type DiscoveryObservationKind = 'complete' | 'partial' | 'unavailable';
-export type DiscoveryQualityReason = 'missing_capability' | 'malformed_collection' | 'acquisition_failed' | 'parser_error' | 'invalid_video_ids' | 'detection_unavailable';
+export type DiscoveryQualityReason = 'missing_capability' | 'malformed_collection' | 'acquisition_failed' | 'parser_error' | 'invalid_video_ids' | 'detection_unavailable' | 'pagination_incomplete';
 export function isYouTubeVideoId(videoId: unknown): videoId is string {
     if (!videoId || typeof videoId !== 'string') return false;
     return /^[a-zA-Z0-9_-]{11}$/.test(videoId) || /^[a-zA-Z0-9_-]+$/.test(videoId);
@@ -123,6 +133,11 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             return false;
         }
 
+        // Historical live content and SDK-inferred live getters do not override
+        // explicit upcoming or ended evidence.
+        if (video.is_upcoming === true || video.is_post_live_dvr === true
+            || video.end_timestamp != null || video.is_live === false) return false;
+
         return !!(
             video.is_live
             || video.is_live_content
@@ -144,7 +159,8 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
     static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
         const timeout: number = options.timeout ?? 2000;
         const logger = options.logger;
-        const detectionStartedAt = Date.now();
+        const detectionStartedAt = performance.now();
+        const remainingTime = () => Math.max(1, Math.ceil(timeout - (performance.now() - detectionStartedAt)));
 
         try {
             const normalizedHandle = normalizeChannelHandle(channelHandle);
@@ -157,7 +173,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             const channelId = await this._getOrResolveChannelId(
                 innertubeClient,
                 normalizedHandle,
-                timeout,
+                remainingTime(),
                 logger
             );
 
@@ -169,7 +185,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
 
             const channel = await withTimeout(
                 innertubeClient.getChannel(channelId),
-                timeout,
+                remainingTime(),
                 'YouTube getChannel operation'
             );
 
@@ -185,34 +201,45 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 hasContent: false
             };
 
-            const channelVideos = this._extractLiveStreamsFromChannelVideos(channel, logger);
+            const channelVideos = this._extractLiveStreamsFromChannelVideos(channel, channelId, normalizedHandle.replace(/^@/, '').toLowerCase(), logger);
             let liveStreams = channelVideos.streams;
             let observed = channelVideos.observed;
             let qualityReason = channelVideos.qualityReason;
             let parserError = qualityReason === 'parser_error';
+            let authoritativeStreams = false;
             detectionMeta.hasContent = channelVideos.hasContent;
 
             if (typeof channel.getLiveStreams === 'function') {
-                const remainingTimeout = Math.max(1, timeout - (Date.now() - detectionStartedAt));
+                const remainingTimeout = remainingTime();
                 const apiTimeout = liveStreams.length
                     ? Math.max(1, Math.floor(remainingTimeout / 2))
-                    : timeout;
+                    : remainingTimeout;
                 const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
-                parserError ||= apiStreams.qualityReason === 'parser_error';
-                observed = observed || apiStreams.observed;
-                qualityReason ??= apiStreams.qualityReason;
-                detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
-                const streamIds = new Set(liveStreams.map((stream) => stream.videoId));
-                const additionalApiStreams = apiStreams.streams.filter((stream) => !streamIds.has(stream.videoId));
-                liveStreams = liveStreams.concat(additionalApiStreams);
-                if (additionalApiStreams.length) {
+                if (!apiStreams.qualityReason && apiStreams.observed) {
+                    // A complete target streams tab owns membership, including an
+                    // empty result; homepage recommendations cannot extend it.
+                    authoritativeStreams = true;
+                    liveStreams = apiStreams.streams;
+                    observed = true;
+                    qualityReason = undefined;
+                    parserError = false;
+                    detectionMeta.hasContent = apiStreams.hasContent;
                     detectionMeta.detectionMethod = 'channel_api';
+                } else {
+                    parserError ||= apiStreams.qualityReason === 'parser_error';
+                    observed = observed || apiStreams.observed;
+                    qualityReason ??= apiStreams.qualityReason;
+                    detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
+                    const streamIds = new Set(liveStreams.map((stream) => stream.videoId));
+                    const additionalApiStreams = apiStreams.streams.filter((stream) => !streamIds.has(stream.videoId));
+                    liveStreams = liveStreams.concat(additionalApiStreams);
+                    if (additionalApiStreams.length) detectionMeta.detectionMethod = 'channel_api';
                 }
             } else {
                 qualityReason ??= 'missing_capability';
             }
 
-            if (!liveStreams.length) {
+            if (!liveStreams.length && !authoritativeStreams) {
                 const searchOptions: {
                     channelId: string;
                     channelHandle: string;
@@ -221,7 +248,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 } = {
                     channelId,
                     channelHandle: normalizedHandle,
-                    timeout
+                    timeout: remainingTime()
                 };
                 if (logger !== undefined) {
                     searchOptions.logger = logger;
@@ -303,20 +330,6 @@ static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientL
         }
     }
 
-static extractVideoIds(result: { streams?: Array<{ videoId?: string }> } | null | undefined): string[] {
-        if (!result || !result.streams) {
-            return [];
-        }
-
-        return result.streams
-            .map((stream) => stream.videoId)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0);
-    }
-
-static isChannelId(channelHandle: unknown): boolean {
-        return isChannelId(channelHandle);
-    }
-
 static _isChannelNotFoundError(error: unknown): boolean {
         if (!error || typeof error !== 'object') {
             return false;
@@ -332,26 +345,41 @@ static _isChannelNotFoundError(error: unknown): boolean {
         return message.includes('channel not found');
     }
 
-static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike): VideoObservation {
-        return this._mapLiveVideos(channel?.videos, logger, 'channel_videos');
+static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, channelId: string, normalizedHandle: string, logger?: LoggerLike): VideoObservation {
+        return this._mapLiveVideos(channel?.videos, logger, 'channel_videos',
+            video => this._videoBelongsToChannel(video, channelId, normalizedHandle));
     }
 
 static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<VideoObservation> {
+        const result: VideoObservation = { streams: [], hasContent: false, observed: false };
+        const deadline = performance.now() + timeout;
+        const remainingTime = () => Math.max(1, Math.ceil(deadline - performance.now()));
         try {
             if (typeof channel.getLiveStreams !== 'function') {
-                return { streams: [], hasContent: false, observed: false, qualityReason: 'missing_capability' };
+                return { ...result, qualityReason: 'missing_capability' };
             }
-            const liveStreams = await withTimeout(
-                channel.getLiveStreams(),
-                timeout,
-                'YouTube getLiveStreams operation'
-            );
-
-            return this._mapLiveVideos(liveStreams?.videos, logger, 'channel_api');
+            let page = await withTimeout(channel.getLiveStreams(), remainingTime(), 'YouTube getLiveStreams operation');
+            const streams = new Map<string, LiveStreamRecord>();
+            for (let pageIndex = 0; pageIndex < MAX_STREAM_PAGES; pageIndex++) {
+                const observation = this._mapLiveVideos(page?.videos, logger, 'channel_api');
+                for (const stream of observation.streams) streams.set(stream.videoId, stream);
+                result.streams = [...streams.values()];
+                result.observed ||= observation.observed;
+                result.hasContent ||= observation.hasContent;
+                if (observation.qualityReason) result.qualityReason ??= observation.qualityReason;
+                if (page?.has_continuation === false || page?.has_continuation === undefined) return result;
+                if (page.has_continuation !== true || typeof page.getContinuation !== 'function'
+                    || pageIndex + 1 === MAX_STREAM_PAGES || performance.now() >= deadline) {
+                    return { ...result, qualityReason: result.qualityReason ?? 'pagination_incomplete' };
+                }
+                // Leave time to return acquired positives before the enclosing owner deadline.
+                page = await withTimeout(page.getContinuation(), Math.max(1, Math.floor(remainingTime() * 0.9)), 'YouTube streams continuation operation');
+            }
+            return { ...result, qualityReason: result.qualityReason ?? 'pagination_incomplete' };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this._log(logger, 'debug', `[YouTube] channel.getLiveStreams failed: ${errorMessage}`);
-            return { streams: [], hasContent: false, observed: false, qualityReason: isParserErrorMessage(errorMessage) ? 'parser_error' : 'acquisition_failed' };
+            return { ...result, qualityReason: result.qualityReason ?? (isParserErrorMessage(errorMessage) ? 'parser_error' : 'acquisition_failed') };
         }
     }
 

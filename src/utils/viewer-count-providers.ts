@@ -25,17 +25,7 @@ type YouTubeExtractionService = {
         successfulStreams: number;
         failedStreams?: number;
     }>;
-    extractViewerCount: (videoId: string) => Promise<{
-        success: boolean;
-        count: number;
-    }>;
-};
 
-type TikTokPlatformLike = {
-    connection?: {
-        isConnected?: boolean;
-    };
-    getViewerCount?: () => Promise<unknown>;
 };
 
 type ProviderErrorType = 'network' | 'authentication' | 'rate_limit' | 'resource_not_found' | 'unknown';
@@ -81,7 +71,7 @@ class ViewerCountProvider {
         throw new Error('isReady() must be implemented by subclass');
     }
 
-    _handleProviderError(error: unknown, operation = 'getViewerCount'): number {
+    _handleProviderError(error: unknown, operation = 'getViewerCount'): void {
         this.errorStats.totalErrors++;
         const message = getErrorMessage(error);
         this.errorStats.lastError = sanitizeLogText(message);
@@ -95,8 +85,6 @@ class ViewerCountProvider {
         this.errorHandler.handleEventProcessingError(
             normalizedError, operation, null, `${this.platform} ${operation} failed: ${message}`
         );
-
-        return 0;
     }
 
     _categorizeError(error: unknown): ProviderErrorType {
@@ -132,16 +120,12 @@ class ViewerCountProvider {
 
 class TwitchViewerCountProvider extends ViewerCountProvider {
     apiClient: TwitchApiClient;
-    connectionStateFactory: unknown;
     config: { channel?: string } | null;
-    getCurrentEventSub: unknown;
 
-    constructor(apiClient: TwitchApiClient, connectionStateFactory: unknown, config: { channel?: string } | null, getCurrentEventSub: unknown = null, logger: ProviderLogger | null = null) {
+    constructor(apiClient: TwitchApiClient, config: { channel?: string } | null, logger: ProviderLogger | null = null) {
         super('twitch', logger);
         this.apiClient = apiClient;
-        this.connectionStateFactory = connectionStateFactory;
         this.config = config;
-        this.getCurrentEventSub = getCurrentEventSub;
     }
 
     override isReady() {
@@ -237,6 +221,7 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         const unavailable = (reason: Extract<ViewerCountObservation, { kind: 'unavailable' }>['reason']): ViewerCountObservation =>
             ({ kind: 'unavailable', membershipGeneration, reason });
         if (!membership) return unavailable('capability_missing');
+        if (!membership.discoveryComplete) return unavailable('membership_unknown');
         if (membership.videoIds.length === 0) {
             if (membership.availability !== 'offline') return unavailable('membership_unknown');
             this.stats.successfulRequests++;
@@ -267,29 +252,6 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         }
     }
 
-    async getViewerCountForVideo(videoId: string): Promise<number | null> {
-        this.logger.debug(`Getting YouTube viewer count for video: ${videoId}`, 'viewer-count-provider');
-        
-        try {
-            const extractionService = this.viewerExtractionService;
-            if (!extractionService) {
-                return null;
-            }
-
-            const result = await extractionService.extractViewerCount(videoId);
-            if (result.success && Number.isSafeInteger(result.count) && result.count >= 0) {
-                this._resetErrorCount();
-                return result.count;
-            } else {
-                this._handleProviderError(new Error('Video extraction failed'), 'extractViewerCount');
-                return null;
-            }
-        } catch (error) {
-            this._handleProviderError(error, 'extractViewerCount');
-            return null;
-        }
-    }
-    
     getStats() {
         return {
             ...this.stats,
@@ -300,38 +262,9 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
     }
 }
 
-class TikTokViewerCountProvider extends ViewerCountProvider {
-    tiktokPlatform: TikTokPlatformLike | null;
-
-    constructor(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {
-        super('tiktok', options.logger);
-        this.tiktokPlatform = platform;
-    }
-
-    override isReady() {
-        if (!this.tiktokPlatform) return false;
-        const connection = this.tiktokPlatform.connection;
-        return !!(connection && connection.isConnected);
-    }
-
-    override async getViewerCount(): Promise<number> {
-        if (!this.tiktokPlatform || typeof this.tiktokPlatform.getViewerCount !== 'function') {
-            return this._handleProviderError(new Error('TikTok platform not available'), 'platformGetViewerCount');
-        }
-
-        try {
-            const count = await this.tiktokPlatform.getViewerCount();
-            this._resetErrorCount();
-            return typeof count === 'number' ? count : 0;
-        } catch (error) {
-            return this._handleProviderError(error, 'platformGetViewerCount');
-        }
-    }
-}
-
 class ViewerCountProviderFactory {
-    static createTwitchProvider(apiClient: TwitchApiClient, connectionStateFactory: unknown, config: { channel?: string } | null, getCurrentEventSub: unknown = null) {
-        return new TwitchViewerCountProvider(apiClient, connectionStateFactory, config, getCurrentEventSub);
+    static createTwitchProvider(apiClient: TwitchApiClient, config: { channel?: string } | null, logger: ProviderLogger | null = null) {
+        return new TwitchViewerCountProvider(apiClient, config, logger);
     }
 
     static createYouTubeProvider(
@@ -341,16 +274,11 @@ class ViewerCountProviderFactory {
     ) {
         return new YouTubeViewerCountProvider(config, getMembershipSnapshot, dependencies);
     }
-
-    static createTikTokProvider(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {
-        return new TikTokViewerCountProvider(platform, options);
-    }
 }
 
 export {
     ViewerCountProvider,
     TwitchViewerCountProvider,
     YouTubeViewerCountProvider,
-    TikTokViewerCountProvider,
     ViewerCountProviderFactory
 };

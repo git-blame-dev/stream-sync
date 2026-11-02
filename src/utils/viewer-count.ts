@@ -9,6 +9,7 @@ import type { ViewerCountObservation, ViewerCountSnapshot } from '../contracts/v
 type ViewerCountLogger = Pick<AppLogger<string>, 'debug' | 'info' | 'warn'>;
 
 type ViewerCountPlatform = {
+    readonly viewerCountIsEventDriven?: boolean;
     getViewerCount?: () => Promise<unknown> | unknown;
     getViewerCountObservation?: () => Promise<ViewerCountObservation>;
     getViewerMembershipGeneration?: () => number;
@@ -18,6 +19,7 @@ type ViewerCountObserver = {
     getObserverId: () => string;
     onViewerCountUpdate?: (update: ViewerCountUpdate) => Promise<unknown> | unknown;
     onStreamStatusChange?: (statusUpdate: StreamStatusUpdate) => Promise<unknown> | unknown;
+    onViewerCountUnavailable?: (update: { platform: string }) => Promise<unknown> | unknown;
     initialize?: () => Promise<unknown> | unknown;
     cleanup?: () => Promise<unknown> | unknown;
 };
@@ -45,6 +47,7 @@ type ViewerCountDependencies = {
             viewerCountPollingIntervalMs?: number;
         };
         youtube?: { enabled?: boolean };
+        twitch?: { enabled?: boolean };
     };
     platformProvider?: () => Record<string, ViewerCountPlatform>;
     getPlatforms?: () => Record<string, ViewerCountPlatform>;
@@ -90,17 +93,12 @@ class ViewerCountSystem {
     platformProvider: () => Record<string, ViewerCountPlatform>;
     pollingIntervalMs: number | undefined;
     private youtubePollingEnabled: boolean;
+    private twitchPollingEnabled: boolean;
     timeProvider: { now: () => number; createDate: (timestampMs: number) => Date };
     isPolling: boolean;
     pollingInterval: number | undefined | null;
     pollingHandles: Record<string, ReturnType<typeof setInterval>>;
-    observers: Map<string, {
-        getObserverId?: () => string;
-        onViewerCountUpdate?: (update: ViewerCountUpdate) => Promise<unknown> | unknown;
-        onStreamStatusChange?: (statusUpdate: StreamStatusUpdate) => Promise<unknown> | unknown;
-        initialize?: () => Promise<unknown> | unknown;
-        cleanup?: () => Promise<unknown> | unknown;
-    }>;
+    observers: Map<string, ViewerCountObserver>;
     private counts: Record<string, number>;
     private observations: Record<string, Omit<ViewerCountSnapshot, 'count'>> = {};
     private activePolls: Set<string>;
@@ -113,16 +111,8 @@ class ViewerCountSystem {
         totalPolls: number;
         successfulPolls: number;
         startTime: number;
-        memoryOptimized: boolean;
     };
-    memoryConfig: {
-        maxHistoryEntries: number;
-        cleanupInterval: number;
-        lastCleanup: number;
-    };
-    memoryOptimizationInterval: ReturnType<typeof setInterval> | null = null;
     _errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
-    hasUnifiedInitialization?: boolean;
 
     constructor(dependencies: ViewerCountDependencies = {}) {
         if (!dependencies.logger) {
@@ -139,6 +129,7 @@ class ViewerCountSystem {
         }
         this.pollingIntervalMs = dependencies.config.general.viewerCountPollingIntervalMs;
         this.youtubePollingEnabled = dependencies.config.youtube?.enabled === true;
+        this.twitchPollingEnabled = dependencies.config.twitch?.enabled === true;
         this.timeProvider = resolveTimeProvider(dependencies.timeProvider);
         this.isPolling = false;
         this.pollingInterval = null;
@@ -162,14 +153,7 @@ class ViewerCountSystem {
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
-            startTime: this._now(),
-            memoryOptimized: true
-        };
-
-        this.memoryConfig = {
-            maxHistoryEntries: 3,
-            cleanupInterval: 2 * 60 * 1000,
-            lastCleanup: this._now()
+            startTime: this._now()
         };
 
         this._errorHandler = null;
@@ -203,22 +187,7 @@ class ViewerCountSystem {
     }
 
     _initializeStreamStatus(): Record<string, boolean> {
-        const platformDefaults: Record<string, { default: boolean; reason: string }> = {
-            tiktok: { default: false, reason: 'Stream detection required' },
-            twitch: { default: true, reason: 'Chat always available' },
-            youtube: { default: false, reason: 'Stream detection required' }
-        };
-
-        const status: Record<string, boolean> = {};
-        Object.keys(platformDefaults).forEach(platform => {
-            const platformDefault = platformDefaults[platform];
-            if (!platformDefault) {
-                return;
-            }
-            status[platform] = platformDefault.default;
-        });
-
-        return status;
+        return { tiktok: false, twitch: true, youtube: false };
     }
 
     _trackStatusChange(platform: string, wasLive: boolean, isLive: boolean) {
@@ -245,11 +214,7 @@ class ViewerCountSystem {
 
         this.lastStatusUpdate.set(platform, change.timestamp);
 
-        const totalHistoryEntries = (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
-            .reduce((total: number, hist) => total + hist.length, 0);
-        if (totalHistoryEntries > 10) {
-            this._performMemoryOptimization();
-        }
+
     }
 
     _getStatusChangeReason(wasLive: boolean, isLive: boolean) {
@@ -324,9 +289,9 @@ class ViewerCountSystem {
         await Promise.allSettled(notificationPromises);
     }
 
-    async updateStreamStatus(platform: string, isLive: boolean) {
+    async updateStreamStatus(platform: string, isLive: boolean, options: { countUnavailable?: boolean } = {}) {
         const platformKey = this._normalizePlatformName(platform);
-        if (!(platformKey in this.streamStatus)) {
+        if (!Object.hasOwn(this.streamStatus, platformKey)) {
             this.logger.warn(`Unknown platform for status update: ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
         }
@@ -342,6 +307,12 @@ class ViewerCountSystem {
         }
         this.streamStatus[platformKey] = isLive;
         this._trackStatusChange(platformKey, wasLive, isLive);
+        const countUnavailable = options.countUnavailable || (!wasLive && isLive
+            && this._getPlatforms()[platformKey]?.viewerCountIsEventDriven);
+        // Invalidate the old observation before status observers can yield to a
+        // fresh room-user event. The later status continuation must not erase it.
+        const invalidation = countUnavailable ? this._markUnavailable(platformKey) : undefined;
+        if (options.countUnavailable) this.stopPlatformPolling(platformKey);
 
         if (wasLive !== isLive) {
             this.logger.info(`Stream status changed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -350,12 +321,19 @@ class ViewerCountSystem {
         }
 
         if (this.statusRevisions.get(platformKey) !== revision) return;
+        if (invalidation) {
+            await invalidation;
+            return;
+        }
         await this._optimizePollingForStatusChange(platformKey, isLive, !wasLive && isLive);
     }
 
     async _optimizePollingForStatusChange(platformKey: string, isLive: boolean, becameLive = false) {
+        if (this._getPlatforms()[platformKey]?.viewerCountIsEventDriven && isLive) {
+            return;
+        }
         if (platformKey === 'youtube' && becameLive && this.isPolling && this.pollingHandles[platformKey]) {
-            void this.pollPlatformImmediately(platformKey);
+            void this.pollPlatform(platformKey);
         }
         if (platformKey === 'youtube' && this._hasObservationCapability(this._getPlatforms()[platformKey])) {
             if (this.isPolling) this.startPlatformPolling(platformKey);
@@ -370,11 +348,12 @@ class ViewerCountSystem {
     }
 
     isStreamLive(platform: string) {
-        return this.streamStatus[this._normalizePlatformName(platform)] || false;
+        return this.streamStatus[this._normalizePlatformName(platform)] === true;
     }
 
     getViewerCount(platform: string) {
-        return this.counts[this._normalizePlatformName(platform)];
+        const key = this._normalizePlatformName(platform);
+        return Object.hasOwn(this.counts, key) ? this.counts[key] : undefined;
     }
 
     getViewerCounts() {
@@ -383,18 +362,17 @@ class ViewerCountSystem {
 
     getViewerCountSnapshot(platform: string): ViewerCountSnapshot {
         const key = this._normalizePlatformName(platform);
-        return { count: this.counts[key] ?? 0, hasCompleteObservation: false, lastCompleteAt: null,
+        return { count: this.getViewerCount(key) ?? 0, hasCompleteObservation: false, lastCompleteAt: null,
             latestOutcome: 'unknown', ...this.observations[key] };
     }
 
-    async updateViewerCount(platform: string, count: unknown, observation?: { membershipGeneration: number; isCurrent: () => boolean }) {
+    async updateViewerCount(platform: string, count: unknown, observation?: { membershipGeneration?: number; isCurrent: () => boolean }) {
         const platformKey = this._normalizePlatformName(platform);
-        if (!(platformKey in this.counts)) {
+        if (!Object.hasOwn(this.counts, platformKey)) {
             this.logger.warn(`Unknown platform for viewer count update: ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return false;
         }
-        if (typeof count !== 'number' || !Number.isFinite(count) || !Number.isInteger(count) || count < 0
-            || (observation && !Number.isSafeInteger(count))) {
+        if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
             this.logger.warn(`Invalid viewer count for ${platformKey}: ${JSON.stringify(count)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return false;
         }
@@ -404,17 +382,13 @@ class ViewerCountSystem {
         if (observation && !observation.isCurrent()) return false;
         this.counts[platformKey] = count;
         this.observations[platformKey] = { hasCompleteObservation: true, lastCompleteAt: completedAt,
-            latestOutcome: 'complete', ...(observation ? { membershipGeneration: observation.membershipGeneration } : {}) };
+            latestOutcome: 'complete', ...(observation?.membershipGeneration === undefined ? {} : { membershipGeneration: observation.membershipGeneration }) };
         if (count !== previousCount) this.logger.info(`${platformKey} viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         await this.notifyObservers(platformKey, count, previousCount);
         return true;
     }
 
     async initialize() {
-        this._startMemoryOptimization();
-
-        this.hasUnifiedInitialization = true;
-
         await this.initializeObservers();
 
         return Promise.resolve();
@@ -465,12 +439,16 @@ class ViewerCountSystem {
             }
         }
         // Registration and chat initialization may still be pending. Reserve the
-        // existing polling cadence for an enabled YouTube platform independently.
+        // existing polling cadence for enabled platforms independently.
         if (this.youtubePollingEnabled && !this.pollingHandles.youtube) this.startPlatformPolling('youtube');
+        if (this.twitchPollingEnabled && !this.pollingHandles.twitch) this.startPlatformPolling('twitch');
     }
 
     startPlatformPolling(platformName: string) {
         const platformKey = this._normalizePlatformName(platformName);
+        // TikTok room-user events are the observations; rereading their cache
+        // would falsely renew freshness without receiving new platform data.
+        if (this._getPlatforms()[platformKey]?.viewerCountIsEventDriven) return;
 
         if (this.pollingHandles[platformKey]) {
             return;
@@ -478,7 +456,7 @@ class ViewerCountSystem {
 
         this.logger.debug(`Starting viewer count polling for ${platformKey} (interval: ${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
-        void this.pollPlatformImmediately(platformKey);
+        void this.pollPlatform(platformKey);
 
         this.pollingHandles[platformKey] = safeSetInterval(
             () => {
@@ -497,10 +475,6 @@ class ViewerCountSystem {
             delete this.pollingHandles[platformKey];
             this._runCleanupDiagnostic(() => this.logger.debug(`Stopping viewer count polling for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
-    }
-
-    async pollPlatformImmediately(platformName: string) {
-        await this.pollPlatform(platformName);
     }
 
     isPlatformEligibleForPolling(platformName: string) {
@@ -543,63 +517,7 @@ class ViewerCountSystem {
         };
     }
 
-    _startMemoryOptimization() {
-        if (this.memoryOptimizationInterval) return;
-
-        this.memoryOptimizationInterval = safeSetInterval(() => {
-            this._performMemoryOptimization();
-        }, this.memoryConfig.cleanupInterval);
-    }
-
-    _performMemoryOptimization() {
-        const now = this._now();
-
-        if (now - this.memoryConfig.lastCleanup < this.memoryConfig.cleanupInterval - 10000) {
-            return;
-        }
-
-        try {
-            for (const history of this.statusChangeHistory.values()) {
-                if (history.length > this.memoryConfig.maxHistoryEntries) {
-                    const excess = history.length - this.memoryConfig.maxHistoryEntries;
-                    history.splice(0, excess);
-                }
-
-                if (history.length > 2) {
-                    history.splice(0, history.length - 2);
-                }
-            }
-
-            if (this.lastStatusUpdate.size > 3) {
-                const entries = Array.from(this.lastStatusUpdate.entries()) as Array<[string, number]>;
-                entries.sort((a, b) => b[1] - a[1]);
-                const toKeep = entries.slice(0, 3);
-                this.lastStatusUpdate.clear();
-                toKeep.forEach(([platform, timestamp]) => {
-                    this.lastStatusUpdate.set(platform, timestamp);
-                });
-            }
-
-            if (this.pollingStats.totalPolls > 10000) {
-                this.pollingStats.totalPolls = Math.min(this.pollingStats.totalPolls, 1000);
-                this.pollingStats.successfulPolls = Math.min(this.pollingStats.successfulPolls, this.pollingStats.totalPolls);
-            }
-
-            this.memoryConfig.lastCleanup = now;
-
-            if (global.gc) {
-                global.gc();
-            }
-        } catch (error) {
-            this._handleViewerCountError(`Memory optimization failed: ${getErrorMessage(error)}`, error, 'memory-optimization');
-        }
-    }
-
     _performMemoryCleanup() {
-        if (this.memoryOptimizationInterval) {
-            clearInterval(this.memoryOptimizationInterval);
-            this.memoryOptimizationInterval = null;
-        }
 
         for (const handle of Object.values(this.pollingHandles)) {
             if (handle) {
@@ -620,8 +538,7 @@ class ViewerCountSystem {
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
-            startTime: this._now(),
-            memoryOptimized: true
+            startTime: this._now()
         };
     }
 
@@ -631,8 +548,6 @@ class ViewerCountSystem {
             activePollingHandles: Object.keys(this.pollingHandles).length,
             statusHistorySize: (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
                 .reduce((total: number, history) => total + history.length, 0),
-            lastCleanup: this.memoryConfig.lastCleanup,
-            timeSinceCleanup: this._now() - this.memoryConfig.lastCleanup
         };
     }
 
@@ -709,6 +624,7 @@ class ViewerCountSystem {
         if (!platform) {
             return { valid: false, reason: `No platform found for ${platformKey}` };
         }
+        if (platform.viewerCountIsEventDriven) return { valid: false, reason: 'Viewer counts are event driven' };
 
         if (platformKey === 'youtube' && this._hasObservationCapability(platform)) return { valid: true, platform };
         if (typeof platform.getViewerCount !== 'function') {
@@ -729,22 +645,6 @@ class ViewerCountSystem {
         return typeof platform?.getViewerCountObservation === 'function' && typeof platform.getViewerMembershipGeneration === 'function';
     }
 
-    createViewerCountUpdate(platformName: string, count: number, previousCount: number) {
-        return {
-            platform: platformName,
-            count,
-            previousCount,
-            isStreamLive: this.isStreamLive(platformName),
-            timestamp: this._createDate(this._now())
-        };
-    }
-
-    async notifyObserversOfUpdate(platformName: string, count: number, previousCount: number) {
-        const update = this.createViewerCountUpdate(platformName, count, previousCount);
-        await this.notifyObservers(platformName, count, previousCount);
-        return update;
-    }
-
     async pollPlatform(platformName: string) {
         const platformKey = this._normalizePlatformName(platformName);
         if (this.activePolls.has(platformKey)) {
@@ -755,7 +655,11 @@ class ViewerCountSystem {
 
         if (!validation.valid) {
             const reasonText = typeof validation.reason === 'string' ? validation.reason : 'Viewer count polling validation failed';
-            const waitingForRegistration = platformKey === 'youtube' && this.youtubePollingEnabled && reasonText.includes('No platform found');
+            if (Object.hasOwn(this.counts, platformKey) && !reasonText.includes('offline') && !reasonText.includes('event driven')) {
+                await this._markUnavailable(platformKey);
+            }
+            const waitingForRegistration = ((platformKey === 'youtube' && this.youtubePollingEnabled)
+                || (platformKey === 'twitch' && this.twitchPollingEnabled)) && reasonText.includes('No platform found');
             if (!waitingForRegistration && !reasonText.includes('offline')) {
                 this.logger.warn(reasonText, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
@@ -768,18 +672,18 @@ class ViewerCountSystem {
 
         try {
             const platform = validation.platform;
+            const isSamePoll = () => pollGeneration === this._getPollGeneration(platformKey)
+                && this._getPlatforms()[platformKey] === platform;
             if (platformKey === 'youtube' && this._hasObservationCapability(platform)) {
                 const observation = await platform.getViewerCountObservation();
-                const isSamePoll = () => pollGeneration === this._getPollGeneration(platformKey)
-                    && this._getPlatforms()[platformKey] === platform;
                 const isCurrent = () => isSamePoll() && platform.getViewerMembershipGeneration() === observation.membershipGeneration;
                 if (observation.kind === 'complete') {
                     if (await this.updateViewerCount(platformKey, observation.count, {
                         membershipGeneration: observation.membershipGeneration, isCurrent
                     })) this.pollingStats.successfulPolls++;
-                    else if (isSamePoll()) this._markUnavailable(platformKey);
+                    else if (isSamePoll()) await this._markUnavailable(platformKey);
                 } else if (isSamePoll()) {
-                    this._markUnavailable(platformKey);
+                    await this._markUnavailable(platformKey);
                 }
                 return;
             }
@@ -790,22 +694,22 @@ class ViewerCountSystem {
 
             const count = await platform.getViewerCount();
 
-            if (pollGeneration !== this._getPollGeneration(platformKey) || !this.isStreamLive(platformKey)) {
+            if (!isSamePoll() || !this.isStreamLive(platformKey)) {
                 this.logger.debug(`Discarding stale viewer count poll for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 return;
             }
 
             if (count !== null && count !== undefined) {
-                if (await this.updateViewerCount(platformKey, count)) {
+                if (await this.updateViewerCount(platformKey, count, { isCurrent: () => isSamePoll() && this.isStreamLive(platformKey) })) {
                     this.pollingStats.successfulPolls++;
-                }
+                } else if (isSamePoll()) await this._markUnavailable(platformKey);
             } else {
+                await this._markUnavailable(platformKey);
                 this.logger.warn(`${platformKey} returned null/undefined viewer count`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
         } catch (error) {
-            if (platformKey === 'youtube' && this._hasObservationCapability(validation.platform)
-                && pollGeneration === this._getPollGeneration(platformKey)
-                && this._getPlatforms()[platformKey] === validation.platform) this._markUnavailable(platformKey);
+            if (pollGeneration === this._getPollGeneration(platformKey)
+                && this._getPlatforms()[platformKey] === validation.platform) await this._markUnavailable(platformKey);
             this._handleViewerCountError(`Failed to poll ${platformKey}: ${getErrorMessage(error)}`, error, 'polling', { platform: platformKey });
         } finally {
             this.activePolls.delete(platformKey);
@@ -820,9 +724,13 @@ class ViewerCountSystem {
         }
     }
 
-    private _markUnavailable(platformKey: string): void {
+    private async _markUnavailable(platformKey: string): Promise<void> {
         this.observations[platformKey] = { hasCompleteObservation: false, lastCompleteAt: null,
             ...this.observations[platformKey], latestOutcome: 'unavailable' };
+        const notifications = [...this.observers.values()].map(async observer => {
+            await observer.onViewerCountUnavailable?.({ platform: platformKey });
+        });
+        await Promise.allSettled(notifications);
     }
 
     async cleanup() {
@@ -831,10 +739,6 @@ class ViewerCountSystem {
         }
         this.stopPolling();
 
-        if (this.memoryOptimizationInterval) {
-            clearInterval(this.memoryOptimizationInterval);
-            this.memoryOptimizationInterval = null;
-        }
 
         const cleanupPromises: Array<Promise<unknown>> = [];
         const observerEntries = Array.from(this.observers.entries()) as Array<[string, { cleanup?: () => Promise<unknown> | unknown }]>;

@@ -21,14 +21,14 @@ test.each(orders.map(order => ({ order })))('completed mean excludes pending sam
     const abort = new AbortController();
     try {
         expect(service.getStats().averageResponseTime).toBe(0);
-        const requests = held.map((_, index) => service.extractViewerCount(`synthetic-${index}`, index === 2 ? { signal: abort.signal } : {}));
+        const requests = held.map((_, index) => service.extractViewerCount(`test000000${index}`, index === 2 ? { signal: abort.signal } : {}));
         await entered.promise;
         let total = 0;
         for (const [step, index] of order.entries()) {
             clock = 110 + step * 10;
             setSystemTime(new Date(1700000000000 - step * 100000));
             if (index === 2) abort.abort();
-            held[index]!.resolve(index === 1 ? {} : { video_details: { viewer_count: 12 } });
+            held[index]!.resolve(index === 1 ? {} : { page: [{}, { current_video_endpoint: { payload: { videoId: `test000000${index}` } } }], basic_info: { id: `test000000${index}` }, primary_info: { view_count: { is_live: true, original_view_count: 12 } } });
             const result = await requests[index]!;
             total += 10 + step * 10;
             expect(result.responseTime).toBe(10 + step * 10);
@@ -47,13 +47,13 @@ test('sequential fractional samples retain unrounded accumulation', async () => 
     let clock = 100;
     const monotonic = spyOn(performance, 'now').mockImplementation(() => clock);
     const durations = [1, 2, 1, 0.4];
-    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => {
+    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async (id: string) => {
         clock += durations.shift()!;
-        return { video_details: { viewer_count: 0 } };
+        return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id }, primary_info: { view_count: { is_live: true, original_view_count: 0 } } };
     } }) }, { logger });
     const service = new ViewerCountExtractionService(owner, { logger });
     try {
-        for (let i = 0; i < 4; i++) await service.extractViewerCount('synthetic-zero');
+        for (let i = 0; i < 4; i++) await service.extractViewerCount('test0000000');
         expect(service.getStats().averageResponseTime).toBe(1);
         expect(service.getStats().successfulExtractions).toBe(4);
     } finally { monotonic.mockRestore(); await owner.dispose(); }

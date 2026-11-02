@@ -115,8 +115,8 @@ test('concurrent disconnection handlers emit each distinct status once', async (
     ]);
     expect(events.filter(event => event.type === 'platform:chat-disconnected')).toHaveLength(1);
     const statuses = events.filter(event => event.type === 'platform:stream-status');
-    expect(statuses).toHaveLength(2);
-    expect(statuses.filter(event => event.data.status === 'stream-ended')).toHaveLength(1);
+    expect(statuses).toHaveLength(1);
+    expect(statuses.every(event => event.data.status === 'stream-ended')).toBe(true);
     expect(statuses.every(event => event.data.isLive === false)).toBe(true);
     expect(fixture.retry.getRetryCount('tiktok')).toBe(0);
 });

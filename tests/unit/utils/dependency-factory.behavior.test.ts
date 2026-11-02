@@ -70,12 +70,12 @@ describe("DependencyFactory behavior", () => {
           return {
             getInfo: async (videoId: string) => {
               reads.push(videoId);
-              return { video_details: { concurrent_viewers: 37 } };
+              return { page: [{}, { current_video_endpoint: { payload: { videoId } } }], basic_info: { id: videoId }, primary_info: { view_count: { is_live: true, original_view_count: 37 } } };
             },
             getChannel: async (id: string) => {
               reads.push(id);
               return { getLiveStreams: async () => ({ videos: [{
-                id: "synthetic-live", title: "Synthetic stream", is_live: true,
+                id: "test0000001", title: "Synthetic stream", is_live: true,
                 author: { id: channelId, name: "Synthetic channel" },
               }] }) };
             },
@@ -91,11 +91,11 @@ describe("DependencyFactory behavior", () => {
           );
           const discovery = await (deps.streamDetectionService as YouTubeStreamDetectionService).detectLiveStreams(channelId);
           expect(discovery.success).toBe(true);
-          expect(discovery.videoIds).toEqual(["synthetic-live"]);
-          expect(await deps.viewerExtractionService.extractViewerCount("synthetic-live")).toMatchObject({ success: true, count: 37 });
+          expect(discovery.videoIds).toEqual(["test0000001"]);
+          expect(await deps.viewerExtractionService.extractViewerCount("test0000001")).toMatchObject({ success: true, count: 37 });
         }
         expect(creations).toBe(1);
-        expect(reads).toEqual([channelId, "synthetic-live", channelId, "synthetic-live"]);
+        expect(reads).toEqual([channelId, "test0000001", channelId, "test0000001"]);
       } finally {
         await root.dispose();
       }
@@ -155,7 +155,7 @@ describe("DependencyFactory behavior", () => {
             id: string;
             title: { text: string };
             is_live: boolean;
-            author: { name: string };
+            author: { name: string; id: string };
           }>;
         }>
       >().mockResolvedValue({
@@ -164,7 +164,7 @@ describe("DependencyFactory behavior", () => {
             id: "liveVideo01",
             title: { text: "Test live stream" },
             is_live: true,
-            author: { name: "Test Channel" },
+            author: { name: "Synthetic Channel", id: "UCabcdefghijklmnopqrstuv" },
           },
         ],
       });

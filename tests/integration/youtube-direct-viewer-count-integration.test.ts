@@ -7,7 +7,7 @@ import { noOpLogger } from '../helpers/mock-factories';
 import { initializeLoggingConfig } from '../../src/core/logging';
 import { withTimeout } from '../../src/utils/timeout-wrapper';
 
-const videoId = 'synthetic_direct_count';
+const videoId = 'test0000001';
 
 function fixture() {
     initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
@@ -16,14 +16,14 @@ function fixture() {
     let metadataRequests = 0;
     let holdMetadata: (() => Promise<void>) | undefined;
     const owner = new InnertubeService({ createWithTimeout: async () => ({
-        getChannel: async () => ({ videos: [{ id: videoId, is_live: true }], getLiveStreams: async () => ({ videos: [] }) }),
+        getChannel: async () => ({ videos: [{ id: videoId, is_live: true }], getLiveStreams: async () => ({ videos: [{ id: videoId, is_live: true }] }) }),
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
             expect(id).toBe(videoId);
             metadataRequests++;
             await holdMetadata?.();
             if (unavailable) throw new Error('synthetic metadata unavailable');
-            return { basic_info: { id, is_live: true, is_live_content: true, view_count: count } };
+            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true, is_live_content: true }, primary_info: { view_count: { is_live: true, original_view_count: count } } };
         }
     }) }, { logger: noOpLogger });
     const platform = new YouTubePlatform({ username: `UC${'q'.repeat(22)}`, dataLoggingEnabled: false,

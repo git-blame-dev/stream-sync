@@ -4,12 +4,14 @@ import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
 import { createTextProcessingManager } from '../utils/text-processing';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import type { ViewerCountSnapshot } from '../contracts/viewer-count';
+import { withTimeout } from '../utils/timeout-wrapper';
 
 type LoggerLike = Pick<AppLogger<string>, 'debug' | 'info' | 'warn' | 'error'>;
 
 type ObsManagerLike = {
     isConnected: () => boolean;
     call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
+    onConnected?: (listener: () => void) => () => void;
 };
 
 type PlatformConfig = {
@@ -31,13 +33,6 @@ type ViewerCountUpdate = {
     observationKind?: 'complete';
 };
 
-type StreamStatusUpdate = {
-    platform: string;
-    isLive: boolean;
-    wasLive: boolean;
-    timestamp?: unknown;
-};
-
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
@@ -53,6 +48,9 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     textProcessing: { formatViewerCount: (count: number) => string };
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     private getViewerCountSnapshot?: ObserverDependencies['getViewerCountSnapshot'];
+    private unsubscribeConnected: (() => void) | undefined;
+    private disposed = false;
+    private writes = new Map<string, { pending?: string; running?: Promise<void> }>();
 
     constructor(obsManager: ObsManagerLike, logger: LoggerLike, deps: ObserverDependencies = {}) {
         super();
@@ -75,7 +73,12 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     }
 
     override async initialize() {
-
+        if (this.disposed) return;
+        this.unsubscribeConnected ??= this.obsManager.onConnected?.(() => {
+            void this.initializeObsViewerCounts().catch(error => {
+                this._handleObserverError('Failed to restore viewer counts after OBS reconnect', error);
+            });
+        });
         if (this.obsManager && this.obsManager.isConnected()) {
             await this.initializeObsViewerCounts();
         }
@@ -87,7 +90,10 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         for (const platformName of platformNames) {
             try {
                 const snapshot = this.getViewerCountSnapshot?.(platformName);
-                if (snapshot?.hasCompleteObservation) await this.updateObsCount(platformName, snapshot.count);
+                if (!snapshot) continue;
+                if (snapshot.hasCompleteObservation && snapshot.latestOutcome === 'complete') {
+                    await this.updateObsCount(platformName, snapshot.count);
+                } else await this.updateObsText(platformName, '—');
             } catch (error: unknown) {
                 this.logger.debug(`Could not initialize ${platformName} viewer count (source may not exist): ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             }
@@ -98,7 +104,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     override async onViewerCountUpdate(update: ViewerCountUpdate) {
         const { platform, count, isStreamLive } = update;
         
-        if (!isStreamLive && !(platform.toLowerCase() === 'youtube' && update.observationKind === 'complete')) {
+        if (!isStreamLive && update.observationKind !== 'complete') {
             return;
         }
 
@@ -109,17 +115,13 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
     }
 
-    override async onStreamStatusChange(statusUpdate: StreamStatusUpdate) {
-        const { platform, isLive, wasLive } = statusUpdate;
-        
-        if (platform.toLowerCase() !== 'youtube' && wasLive && !isLive) {
-            try {
-                await this.updateObsCount(platform, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
-            } catch (error: unknown) {
-                this._handleObserverError(`Failed to reset OBS count for ${platform}: ${getErrorMessage(error)}`, error, { platform });
-            }
-        }
-        
+    override async onStreamStatusChange(_update: unknown) {
+        // Stream status is not a viewer observation. The shared owner publishes
+        // confirmed offline zero or unavailable through the count callbacks.
+    }
+
+    override async onViewerCountUnavailable({ platform }: { platform: string }) {
+        await this.updateObsText(platform, '—');
     }
 
     validateObsUpdateParameters(platformName: unknown, count: unknown) {
@@ -127,8 +129,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             return { valid: false, reason: 'Platform name must be a non-empty string' };
         }
         
-        if (typeof count !== 'number' || count < 0 || isNaN(count)
-            || (platformName.toLowerCase() === 'youtube' && !Number.isSafeInteger(count))) {
+        if (typeof count !== 'number' || count < 0 || !Number.isSafeInteger(count)) {
             return { valid: false, reason: 'Count must be a non-negative number' };
         }
         
@@ -158,6 +159,12 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             return;
         }
 
+        await this.updateObsText(platformName, this.textProcessing.formatViewerCount(count));
+    }
+
+    private async updateObsText(platformName: string, text: string) {
+        if (this.disposed) return;
+
         if (!this.obsManager || !this.obsManager.isConnected()) {
             return;
         }
@@ -173,17 +180,38 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             return;
         }
 
-        try {
-            const newText = this.textProcessing.formatViewerCount(count);
-            await this.obsManager.call('SetInputSettings', {
-                inputName: sourceName,
-                inputSettings: { text: newText },
-                overlay: true
-            });
-            
-        } catch (error) {
-            this.handleObsUpdateError(error, sourceName, platformName);
+        let write = this.writes.get(platformName);
+        if (!write) {
+            write = {};
+            this.writes.set(platformName, write);
         }
+        write.pending = text;
+        if (!write.running) {
+            const current = write;
+            current.running = (async () => {
+                try {
+                    while (!this.disposed && current.pending !== undefined && this.obsManager.isConnected()) {
+                        const next = current.pending;
+                        delete current.pending;
+                        try {
+                            await this.obsManager.call('SetInputSettings', {
+                                inputName: sourceName, inputSettings: { text: next }, overlay: true
+                            });
+                        } catch (error) { this.handleObsUpdateError(error, sourceName, platformName); }
+                    }
+                } finally { this.writes.delete(platformName); }
+            })();
+        }
+        await write.running;
+    }
+
+    override async cleanup() {
+        this.disposed = true;
+        this.unsubscribeConnected?.();
+        this.unsubscribeConnected = undefined;
+        await withTimeout(Promise.allSettled([...this.writes.values()].map(write => write.running)), 5000,
+            'Viewer count OBS writes did not settle').catch(() => {});
+        this.writes.clear();
     }
 
     _handleObserverError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {

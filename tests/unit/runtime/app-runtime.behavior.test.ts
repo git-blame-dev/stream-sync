@@ -49,6 +49,41 @@ const base = { userId: 'synthetic-user', timestamp: '2024-01-01T00:00:00.000Z' }
 const gift = { ...base, id: 'synthetic-gift', giftType: 'Synthetic gift', giftCount: 1, amount: 5, currency: 'USD' };
 
 describe('AppRuntime with production main owners', () => {
+  it('starts viewer polling while a real platform waits for its external connection', async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const connection = {
+      isConnected: false,
+      on: () => {}, emit: () => {}, removeAllListeners: () => {},
+      connect: async () => { entered.resolve(); await release.promise; connection.isConnected = true; },
+      disconnect: async () => { connection.isConnected = false; },
+    };
+    const config = { ...h.config, general: { ...h.config.general, viewerCountPollingIntervalMs: 60000 },
+      tiktok: { ...h.config.tiktok, enabled: true, username: 'synthetic-creator', dataLoggingEnabled: false },
+      twitch: { ...h.config.twitch, viewerCountEnabled: true, viewerCountSource: 'synthetic-startup-viewers' } };
+    const factory = new DependencyFactory();
+    const lifecycle = new PlatformLifecycleService({ config: { tiktok: config.tiktok }, logger: noOpLogger, eventBus: h.bus,
+      dependencyFactory: { createTiktokDependencies: platformConfig => factory.createTiktokDependencies(platformConfig, {
+        config: { tiktok: config.tiktok }, logger: noOpLogger, connectionFactory: { createConnection: () => connection },
+      }) },
+    });
+    const runtime = new AppRuntime(config, { ...h.runtime.dependencies, platformLifecycleService: lifecycle as unknown as ConstructorParameters<typeof AppRuntime>[1]['platformLifecycleService'] });
+    const starting = runtime.start();
+    try {
+      await entered.promise;
+      expect(runtime.isStarted).toBe(false);
+      expect(runtime.viewerCountSystem.isPolling).toBe(true);
+      await runtime.updateViewerCount('twitch', 12);
+      release.resolve();
+      await starting;
+      expect(runtime.viewerCountSystem.observers.size).toBe(1);
+      expect(h.socket.writes.some(write => write.inputName === 'synthetic-startup-viewers')).toBe(true);
+      expect(runtime.isStarted).toBe(true);
+      await runtime.shutdown();
+      expect(runtime.viewerCountSystem.isPolling).toBe(false);
+    } finally { release.resolve(); await starting; await runtime.shutdown(); }
+  });
+
   it('drains real accepted raw capture before OBS retirement and shutdown completion', async () => {
     const raw = new RawEventLogWriter({ directories: [h.dir] });
     h.runtime.dependencies.rawEventLogWriter = raw;
@@ -339,7 +374,6 @@ describe('AppRuntime with production main owners', () => {
         expect(cooldown.globalCommandCooldowns.size).toBe(0);
         expect(runtime.viewerCountSystem.observers.size).toBe(0);
         expect(runtime.viewerCountSystem.pollingHandles).toEqual({});
-        expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
         expect(h.bus.listenerCount(PlatformEvents.VFX_COMMAND_RECEIVED)).toBe(0);
         expect(h.bus.listenerCount(PlatformEvents.STREAM_STATUS)).toBe(0);
         expect((await h.persistedFunding()).currentMicros).toBe(5_000_000);
@@ -637,7 +671,6 @@ describe('AppRuntime with production main owners', () => {
         if (mode === 'automatic-rollback') expect(outcome).toMatchObject({ message: 'GUI transport requires non-empty host' });
         expect(runtime.viewerCountSystem.observers.size).toBe(0);
         expect(runtime.viewerCountSystem.isPolling).toBe(false);
-        expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
         expect(runtime.viewerCountSystem.pollingHandles).toEqual({});
       } finally { release.resolve(); await early; await repeated; await stopping; await runtime.rollbackStartup(); }
     });

@@ -59,7 +59,7 @@ describe("ViewerCountSystem polling with malformed payloads", () => {
       system.addObserver({ getObserverId: () => "synthetic-observer", onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => observerUpdates.push(payload) });
       await system.pollPlatform("youtube");
       expect(system.getViewerCount("youtube")).toBe(12);
-      expect(system.getViewerCountSnapshot("youtube")).toEqual(before);
+      expect(system.getViewerCountSnapshot("youtube")).toEqual({ ...before, latestOutcome: "unavailable" });
       expect(observerUpdates).toHaveLength(0);
     }
   });

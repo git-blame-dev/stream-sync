@@ -138,10 +138,6 @@ type TikTokDependencies = {
     connectionFactory?: ConnectionFactoryLike;
     RawPlatformDataLoggingService?: new (options: RawPlatformDataLoggingOptions) => RawPlatformDataLoggingService;
     selfMessageDetectionService?: SelfMessageDetectionService | null;
-    viewerCountProvider?: {
-        getViewerCount: () => number;
-        isReady: () => boolean;
-    };
 };
 
 type EventFactory = ReturnType<typeof createTikTokEventFactory>;
@@ -322,6 +318,7 @@ const getErrorMessage = (error: unknown): string => {
 type TikTokEventRouterAdapter = Parameters<typeof setupTikTokEventListeners>[0];
 
 class TikTokPlatform extends EventEmitter {
+    readonly viewerCountIsEventDriven = true;
     private cachedEventRouterAdapter?: TikTokEventRouterAdapter;
     private readonly monotonicNow: () => number;
     private connectionEstablishedAt: number | null = null;
@@ -350,7 +347,6 @@ class TikTokPlatform extends EventEmitter {
     declare connectionStateManager: ConnectionStateManager;
     declare rawPlatformDataLoggingService: RawPlatformDataLoggingService;
     declare selfMessageDetectionService: SelfMessageDetectionService | null;
-    declare viewerCountProvider: { getViewerCount: () => number; isReady: () => boolean };
     declare connection: TikTokConnection | null;
     declare handlers: TikTokHandlers;
     declare connectionActive: boolean;
@@ -364,7 +360,7 @@ class TikTokPlatform extends EventEmitter {
     declare giftAggregation: Record<string, TikTokGiftAggregationState>;
     declare giftAggregationDelay: number;
     declare giftAggregator: TikTokGiftAggregator;
-    declare cachedViewerCount: number;
+    declare cachedViewerCount: number | null;
     declare connectionOrchestrator: TikTokConnectionOrchestrator;
     private offlineMonitoring = false;
 
@@ -454,11 +450,6 @@ class TikTokPlatform extends EventEmitter {
             ? dependencies.selfMessageDetectionService
             : null;
 
-        this.viewerCountProvider = dependencies.viewerCountProvider || {
-            getViewerCount: () => 0,
-            isReady: () => false
-        };
-
         this.connection = null;
         this.handlers = this._createDefaultHandlers();
         this.connectionActive = false;
@@ -473,7 +464,7 @@ class TikTokPlatform extends EventEmitter {
         this.giftAggregationDelay = 2000;
         this.giftAggregator = createTikTokGiftAggregator({ platform: this, safeSetTimeout });
 
-        this.cachedViewerCount = 0;
+        this.cachedViewerCount = null;
         this.connectionOrchestrator = createTikTokConnectionOrchestrator({ platform: this._createOrchestratorPlatform() });
 
     }
@@ -550,7 +541,7 @@ class TikTokPlatform extends EventEmitter {
             get connectionActive() { return platform.connectionActive; },
             set connectionActive(connectionActive: boolean) { platform.connectionActive = connectionActive; },
             get cachedViewerCount() { return platform.cachedViewerCount; },
-            set cachedViewerCount(cachedViewerCount: number) { platform.cachedViewerCount = cachedViewerCount; },
+            set cachedViewerCount(cachedViewerCount: number | null) { platform.cachedViewerCount = cachedViewerCount; },
             get connectionTime() { return platform.connectionTime; },
             set connectionTime(connectionTime: number) { platform.connectionTime = connectionTime; },
             _getTimestamp: (data: TikTokRawEvent) => platform._getTimestamp(data),
@@ -756,6 +747,7 @@ class TikTokPlatform extends EventEmitter {
     setupEventListeners() {
         const adapter = this._createEventRouterPlatformAdapter();
         if (isTikTokEventListenerSetupCurrent(adapter)) return;
+        this.cachedViewerCount = null;
         this._connectionGeneration += 1;
         this.dataRegistration += 1;
         this._terminalStreamEndEmitted = false;
@@ -1170,7 +1162,7 @@ class TikTokPlatform extends EventEmitter {
       this.listenersConfigured = false;
 
       const disconnectionMessage = decision.isStreamNotLive ? 'Stream is not live' : message;
-      await this._handleDisconnection(disconnectionMessage, decision.willReconnect);
+      await this._handleDisconnection(disconnectionMessage, decision.willReconnect, decision.isStreamNotLive);
 
       let retryResult = null;
       if (decision.shouldDeferReconnect) {
@@ -1485,8 +1477,8 @@ class TikTokPlatform extends EventEmitter {
         return normalizedBaseType;
     }
 
-    getViewerCount(): number {
-        return this.cachedViewerCount || 0;
+    getViewerCount(): number | null {
+        return this.cachedViewerCount;
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
@@ -1494,6 +1486,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     cleanupEventListeners() {
+        this.cachedViewerCount = null;
         this.dataRegistration += 1;
         cleanupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
@@ -2013,7 +2006,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleDisconnection(reason: string, willReconnect: boolean | null = null) {
+    async _handleDisconnection(reason: string, willReconnect: boolean | null = null, streamEnded = this._terminalStreamEndEmitted) {
         try {
             const reconnectFlag = willReconnect !== null ? willReconnect : !!(!this.isPlannedDisconnection && this.config.enabled);
             const eventData = this.eventFactory.createDisconnection(reason, reconnectFlag);
@@ -2030,9 +2023,12 @@ class TikTokPlatform extends EventEmitter {
                 willReconnect: reconnectFlag,
                 error: { message: reason }
             });
+            if (streamEnded && this._terminalStreamEndEmitted) return;
+            if (streamEnded) this._terminalStreamEndEmitted = true;
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: false,
+                status: streamEnded ? 'stream-ended' : 'unavailable',
                 reason,
                 willReconnect: reconnectFlag,
                 timestamp: eventData.timestamp,
@@ -2123,6 +2119,7 @@ class TikTokPlatform extends EventEmitter {
                 this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                     platform: 'tiktok',
                     isLive: false,
+                    status: 'unavailable',
                     error,
                     timestamp: eventData.timestamp,
                     metadata: eventData.metadata

@@ -5,7 +5,6 @@ import {
   ViewerCountProvider,
   TwitchViewerCountProvider,
   YouTubeViewerCountProvider,
-  TikTokViewerCountProvider,
 } from "../../../src/utils/viewer-count-providers";
 
 type AggregatedViewerCount = {
@@ -20,8 +19,7 @@ const createViewerExtractionService = (
   >(),
 ) => ({
   getAggregatedViewerCount,
-  extractViewerCount: vi.fn<(...args: [string]) => Promise<{ success: boolean; count: number }>
-  >(),
+
 });
 
 const createTwitchApiClient = (
@@ -33,12 +31,11 @@ describe("ViewerCountProvider error handling", () => {
   it("categorizes unknown errors when message is missing", () => {
     const provider = new ViewerCountProvider("testPlatform", noOpLogger);
 
-    const result = provider._handleProviderError(
+    provider._handleProviderError(
       new Error(""),
       "testOperation",
     );
 
-    expect(result).toBe(0);
     expect(provider.getErrorStats().errorTypes.unknown).toBe(1);
   });
 });
@@ -64,7 +61,7 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live", discoveryComplete: true }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -75,31 +72,11 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
   });
 });
 
-describe("TikTokViewerCountProvider error recovery", () => {
-  it("handles missing getViewerCount gracefully", async () => {
-    const platform = {
-      connection: { isConnected: true },
-    };
-    const provider = new TikTokViewerCountProvider(platform, {
-      logger: noOpLogger,
-    });
-
-    const count = await provider.getViewerCount();
-
-    expect(count).toBe(0);
-    expect(provider.getErrorStats().totalErrors).toBe(1);
-  });
-});
-
 describe("TwitchViewerCountProvider readiness", () => {
   it("returns unavailable without an API call when channel is missing", async () => {
     const apiClient = createTwitchApiClient();
     const provider = new TwitchViewerCountProvider(
-      apiClient,
-      {},
-      {},
-      null,
-      noOpLogger,
+      apiClient, {}, noOpLogger
     );
 
     const count = await provider.getViewerCount();
@@ -116,11 +93,7 @@ describe("TwitchViewerCountProvider readiness", () => {
         .mockResolvedValueOnce({ isLive: true, viewerCount: 15 }),
     );
     const provider = new TwitchViewerCountProvider(
-      apiClient,
-      {},
-      { channel: "testChannel" },
-      null,
-      noOpLogger,
+      apiClient, { channel: "testChannel" }, noOpLogger
     );
 
     await provider.getViewerCount();

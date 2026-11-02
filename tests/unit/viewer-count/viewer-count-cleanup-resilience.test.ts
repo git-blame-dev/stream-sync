@@ -20,7 +20,7 @@ describe('ViewerCountSystem cleanup resilience', () => {
             const baseline = getTimerCount();
             const system = createSystem();
             await system.initialize();
-            expect(getTimerCount()).toBe(baseline + 1);
+            expect(getTimerCount()).toBe(baseline);
             const invoked: string[] = [];
             if (outcome !== 'empty') {
                 system.addObserver({
@@ -37,7 +37,6 @@ describe('ViewerCountSystem cleanup resilience', () => {
             await system.cleanup();
             expect(invoked).toEqual(outcome === 'empty' ? [] : ['first', 'second']);
             expect(system.observers.size).toBe(0);
-            expect(system.memoryOptimizationInterval).toBeNull();
             expect(system.isPolling).toBe(false);
             expect(getTimerCount()).toBe(baseline);
             await system.cleanup();
@@ -50,7 +49,7 @@ describe('ViewerCountSystem cleanup resilience', () => {
             const baseline = getTimerCount();
             const system = createSystem();
             await system.initialize();
-            expect(getTimerCount()).toBe(baseline + 1);
+            expect(getTimerCount()).toBe(baseline);
             const pending = Promise.withResolvers<void>();
             system.addObserver({ getObserverId: () => 'synthetic-held', cleanup: () => pending.promise });
             let completed = false;
@@ -65,7 +64,6 @@ describe('ViewerCountSystem cleanup resilience', () => {
                 await cleanup;
                 expect(completed).toBe(true);
                 expect(system.observers.size).toBe(0);
-                expect(system.memoryOptimizationInterval).toBeNull();
                 expect(getTimerCount()).toBe(baseline);
                 if (lateOutcome === 'reject') pending.reject(new Error('synthetic late rejection'));
                 else pending.resolve();

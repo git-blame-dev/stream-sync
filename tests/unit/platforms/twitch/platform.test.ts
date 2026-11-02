@@ -111,7 +111,6 @@ type TestPlatform = Omit<
   initializeEventSub: (broadcasterId?: string) => Promise<void>;
 };
 type EventSubCalls = { initialize: boolean[]; disconnect: boolean[] };
-type ViewerCountProviderCalls = { startPolling: boolean[]; stopPolling: boolean[] };
 
 const createRequiredApiClientMocks = () => ({
   getBroadcasterId: vi.fn<(...args: [string]) => Promise<string>>().mockResolvedValue(
@@ -190,11 +189,9 @@ describe("Twitch Platform", () => {
   let eventBus: EventBus;
   let runtime: TestRuntime;
 
-  let viewerCountProviderCalls: ViewerCountProviderCalls;
   let eventSubCalls: EventSubCalls;
 
   beforeEach(() => {
-    viewerCountProviderCalls = { startPolling: [], stopPolling: [] };
     eventSubCalls = { initialize: [], disconnect: [] };
 
     mockTwitchAuth = {
@@ -214,8 +211,6 @@ describe("Twitch Platform", () => {
     };
     mockViewerCountProvider = {
       getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(1500),
-      startPolling: () => viewerCountProviderCalls.startPolling.push(true),
-      stopPolling: () => viewerCountProviderCalls.stopPolling.push(true),
     };
     mockRetrySystem = {
       isConnected: () => false,
@@ -1123,16 +1118,6 @@ describe("Twitch Platform", () => {
     });
   });
 
-  describe("when handling stream status", () => {
-    it("should start viewer polling on stream online and stop on offline", () => {
-      platform.handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" });
-      expect(viewerCountProviderCalls.startPolling).toHaveLength(1);
-
-      platform.handleStreamOfflineEvent({ timestamp: "2024-01-01T00:00:00Z" });
-      expect(viewerCountProviderCalls.stopPolling).toHaveLength(1);
-    });
-  });
-
   describe("when getting viewer count", () => {
     it("should provide accurate viewer count to streamer", async () => {
       mockViewerCountProvider.getViewerCount.mockResolvedValue(1500);
@@ -1206,18 +1191,10 @@ describe("Twitch Platform", () => {
       expect(firstTuple(logOperationalError.mock.calls)[0]).toBe("test message");
     });
 
-    it("returns zero viewer count when provider is unavailable", async () => {
+    it("returns unavailable viewer count when provider is unavailable", async () => {
       platform.viewerCountProvider = null;
 
-      await expect(platform.getViewerCount()).resolves.toBe(0);
-    });
-
-    it("skips viewer count polling when provider lacks startPolling", () => {
-      platform.viewerCountProvider = {
-        getViewerCount: vi.fn<(...args: []) => Promise<number>>().mockResolvedValue(0),
-      };
-
-      expect(() => platform.initializeViewerCountProvider()).not.toThrow();
+      await expect(platform.getViewerCount()).resolves.toBeNull();
     });
 
     it("loads badge catalogs once and reuses cached broadcaster catalogs", async () => {
@@ -1517,21 +1494,6 @@ describe("Twitch Platform", () => {
   describe("when managing viewer count provider", () => {
     it("should initialize viewer count provider correctly", () => {
       expect(platform.viewerCountProvider).toBe(mockViewerCountProvider);
-    });
-
-    it("should start polling when enabled", () => {
-      platform.config.viewerCountEnabled = true;
-      platform.initializeViewerCountProvider();
-
-      expect(viewerCountProviderCalls.startPolling.length).toBeGreaterThan(0);
-    });
-
-    it("should stop polling during cleanup", async () => {
-      platform.viewerCountProvider = mockViewerCountProvider;
-
-      await platform.cleanup();
-
-      expect(viewerCountProviderCalls.stopPolling.length).toBeGreaterThan(0);
     });
   });
 });

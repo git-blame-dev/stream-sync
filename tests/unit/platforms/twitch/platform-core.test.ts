@@ -594,20 +594,6 @@ describe("TwitchPlatform core behavior", () => {
     expect(platform.eventSubListeners).toEqual([]);
   });
 
-  it("does not throw when viewer count stop fails during stream offline", () => {
-    platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    platform.viewerCountProvider = {
-      stopPolling: () => {
-        throw new Error("stop failed");
-      },
-      getViewerCount: async () => 0,
-    } satisfies ViewerCountProvider;
-
-    expect(() =>
-      requireDefined(platform, "platform").handleStreamOfflineEvent({ timestamp: "2024-01-01T00:00:00Z" }),
-    ).not.toThrow();
-  });
-
   it("sends messages successfully when EventSub is connected and active", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     const sendMessageCalls: string[] = [];
@@ -673,33 +659,16 @@ describe("TwitchPlatform core behavior", () => {
     expect(isConfigured).toBe(true);
   });
 
-  it("initializes viewer count provider when stream comes online", () => {
-    platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const startPollingCalls: boolean[] = [];
-    const mockProvider = {
-      startPolling: () => {
-        startPollingCalls.push(true);
-      },
-      getViewerCount: async () => 0,
-    } satisfies ViewerCountProvider;
-    platform.viewerCountProvider = mockProvider;
-    platform.handlers = { onStreamStatus: () => {} };
-
-    platform.handleStreamOnlineEvent({ startedAt: "2024-01-01T00:00:00Z" });
-
-    expect(startPollingCalls).toHaveLength(1);
-  });
-
-  it("returns zero viewer count when provider is not initialized", async () => {
+  it("returns unavailable viewer count when provider is not initialized", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     platform.viewerCountProvider = null;
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("returns zero viewer count when provider throws", async () => {
+  it("returns unavailable viewer count when provider throws", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     platform.viewerCountProvider = {
       getViewerCount: async () => {
@@ -709,7 +678,7 @@ describe("TwitchPlatform core behavior", () => {
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
   it("cleans up EventSub and resets connection state", async () => {
@@ -727,7 +696,6 @@ describe("TwitchPlatform core behavior", () => {
     });
     platform.eventSub = mockEventSub;
     platform.viewerCountProvider = {
-      stopPolling: () => {},
       getViewerCount: async () => 0,
     } satisfies ViewerCountProvider;
 

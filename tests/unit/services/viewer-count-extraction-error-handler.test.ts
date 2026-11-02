@@ -5,8 +5,6 @@ import { InnertubeService } from "../../../src/services/innertube-service";
 
 describe("ViewerCountExtractionService error handler integration", () => {
   type MockInnertube = { getVideoInfo: (videoId: string) => Promise<Record<string, unknown>> };
-  type ExtractionResult = { success: boolean; count: number; metadata: Record<string, unknown> };
-  type MockExtractor = { extractConcurrentViewers: () => ExtractionResult };
   type MockLogger = {
     debug: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
     info: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
@@ -15,19 +13,11 @@ describe("ViewerCountExtractionService error handler integration", () => {
   };
 
   let mockInnertube: MockInnertube;
-  let mockExtractor: MockExtractor;
   let mockLogger: MockLogger;
 
   beforeEach(() => {
     mockInnertube = {
       getVideoInfo: vi.fn(async () => ({})),
-    };
-    mockExtractor = {
-      extractConcurrentViewers: vi.fn(() => ({
-        success: false,
-        count: 0,
-        metadata: {},
-      })),
     };
     mockLogger = {
       debug: vi.fn<(...args: unknown[]) => unknown>(),
@@ -47,10 +37,9 @@ describe("ViewerCountExtractionService error handler integration", () => {
     }, { logger: mockLogger });
     const service = new ViewerCountExtractionService(owner, {
       logger: mockLogger,
-      YouTubeViewerExtractor: mockExtractor,
     });
 
-    const result = await service.extractViewerCount("test-vid-1");
+    const result = await service.extractViewerCount("test0000001");
 
     expect(result.success).toBe(false);
     expect(mockLogger.error).toHaveBeenCalled();
@@ -60,7 +49,7 @@ describe("ViewerCountExtractionService error handler integration", () => {
     }
     expect(result.error).toBe("Viewer count extraction failed");
     const diagnostics = JSON.stringify(mockLogger.error.mock.calls) + JSON.stringify(mockLogger.debug.mock.calls);
-    expect(diagnostics).not.toContain("test-vid-1");
+    expect(diagnostics).not.toContain("test0000001");
     expect(diagnostics).not.toContain("synthetic-private-video");
     expect(diagnostics).not.toContain("synthetic-secret");
   });

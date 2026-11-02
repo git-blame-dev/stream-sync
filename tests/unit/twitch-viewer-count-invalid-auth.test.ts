@@ -21,9 +21,6 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
   };
 
   let mockApiClient: TwitchApiClientFixture;
-  let mockConnectionStateFactory: {
-    createTwitchState: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
-  };
   let configFixture: TwitchConfigFixture;
   let viewerCountProvider: InstanceType<typeof TwitchViewerCountProvider>;
   let mockLogger: typeof noOpLogger;
@@ -31,10 +28,6 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
   beforeEach(() => {
     mockApiClient = {
       getStreamInfo: vi.fn<(...args: [channel: string]) => Promise<StreamInfo>>(),
-    };
-
-    mockConnectionStateFactory = {
-      createTwitchState: vi.fn<(...args: unknown[]) => unknown>(),
     };
 
     configFixture = {
@@ -54,11 +47,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       }));
 
       viewerCountProvider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        configFixture,
-        null,
-        mockLogger,
+        mockApiClient, configFixture, mockLogger
       );
     });
 
@@ -77,11 +66,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
         username: "backup_name",
       };
       const providerWithDifferentUsername = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        configWithDifferentUsername,
-        null,
-        mockLogger,
+        mockApiClient, configWithDifferentUsername, mockLogger
       );
 
       const viewerCount = await providerWithDifferentUsername.getViewerCount();
@@ -98,11 +83,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       };
 
       viewerCountProvider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        invalidConfig,
-        null,
-        mockLogger,
+        mockApiClient, invalidConfig, mockLogger
       );
     });
 
@@ -118,21 +99,10 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
 
   describe("when authentication is valid but API call fails", () => {
     beforeEach(() => {
-      const mockState = {
-        isApiReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
-        isConnected: true,
-        channel: "hero_stream",
-        username: "hero_stream",
-      };
-      mockConnectionStateFactory.createTwitchState.mockReturnValue(mockState);
       mockApiClient.getStreamInfo.mockRejectedValue(new Error("Network error"));
 
       viewerCountProvider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        configFixture,
-        null,
-        mockLogger,
+        mockApiClient, configFixture, mockLogger
       );
     });
 
@@ -158,24 +128,13 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
 
   describe("when authentication is valid and API returns data", () => {
     beforeEach(() => {
-      const mockState = {
-        isApiReady: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true),
-        isConnected: true,
-        channel: "hero_stream",
-        username: "hero_stream",
-      };
-      mockConnectionStateFactory.createTwitchState.mockReturnValue(mockState);
       mockApiClient.getStreamInfo.mockResolvedValue({
         isLive: true,
         viewerCount: 42,
       });
 
       viewerCountProvider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        configFixture,
-        null,
-        mockLogger,
+        mockApiClient, configFixture, mockLogger
       );
     });
 
@@ -195,11 +154,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       };
 
       const provider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        realWorldConfig,
-        null,
-        mockLogger,
+        mockApiClient, realWorldConfig, mockLogger
       );
 
       expect(provider.isReady()).toBe(true);
@@ -216,11 +171,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       });
 
       const provider = new TwitchViewerCountProvider(
-        mockApiClient,
-        mockConnectionStateFactory,
-        realWorldConfig,
-        null,
-        mockLogger,
+        mockApiClient, realWorldConfig, mockLogger
       );
 
       const viewerCount = await provider.getViewerCount();

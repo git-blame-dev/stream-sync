@@ -131,8 +131,7 @@ const createHttpProvider = (initial: unknown = 100) => {
     post: async () => ({}), put: async () => ({}), delete: async () => ({}),
   } });
   const provider = new TwitchViewerCountProvider(
-    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }),
-    null, { channel: "synthetic-channel" }, null, noOpLogger,
+    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }), { channel: "synthetic-channel" }, noOpLogger
   );
   return { provider, attempts, respond: (next: () => Promise<unknown>) => { response = next; } };
 };
@@ -930,44 +929,13 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expectSystemStability(system);
     });
 
-    test("performs memory optimization housekeeping when limits are exceeded", () => {
+    test("bounds status history when updates arrive without background maintenance", async () => {
       const { system } = createEdgeCaseTestEnvironment();
-      const now = testClock.now();
-
-      system.memoryConfig.lastCleanup =
-        now - system.memoryConfig.cleanupInterval;
-      system.statusChangeHistory.set("tiktok", [
-        { timestamp: 1, from: false, to: true, reason: "stream_started" },
-        { timestamp: 2, from: true, to: false, reason: "stream_ended" },
-        { timestamp: 3, from: false, to: true, reason: "stream_started" },
-        { timestamp: 4, from: true, to: false, reason: "stream_ended" },
-      ]);
-      system.lastStatusUpdate = new Map([
-        ["tiktok", 1],
-        ["twitch", 2],
-        ["youtube", 3],
-        ["extra", 4],
-      ]);
-      system.pollingStats.totalPolls = 15000;
-      system.pollingStats.successfulPolls = 12000;
-
-      const originalGc = global.gc;
-      const gcSpy = vi.fn<(...args: unknown[]) => unknown>();
-      global.gc = async () => {
-        gcSpy();
-      };
-
-      try {
-        system._performMemoryOptimization();
-      } finally {
-        global.gc = originalGc;
+      for (let index = 0; index < 20; index++) {
+        await system.updateStreamStatus("youtube", index % 2 === 0);
       }
-
-      expect(requireStatusHistory(system, "tiktok").length).toBe(2);
-      expect(system.lastStatusUpdate.size).toBe(3);
-      expect(system.pollingStats.totalPolls).toBe(1000);
-      expect(system.pollingStats.successfulPolls).toBe(1000);
-      expect(gcSpy).toHaveBeenCalledTimes(1);
+      expect(requireStatusHistory(system, "youtube").length).toBe(2);
+      expect(system.lastStatusUpdate.size).toBe(1);
     });
 
     test("performs memory cleanup by resetting polling and observer state", async () => {
@@ -981,7 +949,6 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         tiktok: safeSetInterval(() => {}, 1000),
         youtube: safeSetInterval(() => {}, 1000),
       };
-      system.memoryOptimizationInterval = safeSetInterval(() => {}, 1000);
       await system.updateViewerCount("tiktok", 123);
       system.pollingStats.totalPolls = 100;
 
@@ -992,7 +959,6 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(system.statusChangeHistory.size).toBe(0);
       expect(system.lastStatusUpdate.size).toBe(0);
       expect(system.getViewerCount("tiktok")).toBe(0);
-      expect(system.memoryOptimizationInterval).toBeNull();
       expect(system.pollingStats.totalPolls).toBe(0);
     });
   });

@@ -194,7 +194,8 @@ class YouTubeStreamDetectionService {
                 if (!hasDetectionCapability(client)) {
                     throw new Error('Innertube client requires getChannel for stream detection');
                 }
-                const result = await this._performDetection(cleanHandle, client, resolveTimeout(options.timeoutMs, this.timeout));
+                const remainingTimeout = Math.max(1, Math.ceil(resolveTimeout(options.timeoutMs, this.timeout) - (performance.now() - startTime)));
+                const result = await this._performDetection(cleanHandle, client, remainingTimeout);
                 signal.throwIfAborted();
                 return result;
             });

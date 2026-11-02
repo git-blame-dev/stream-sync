@@ -248,6 +248,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       const videoInfo = {
         primary_info: {
           view_count: {
+            is_live: true,
             view_count: {
               text: "5,432 watching now",
             },
@@ -262,18 +263,16 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       expect(result.strategy).toBe("view_text");
     });
 
-    test("should fallback to alternative extraction strategies", () => {
+    test("should extract exact SDK concurrent counts", () => {
       const videoInfo = {
-        video_details: {
-          viewer_count: "9876",
-        },
+        primary_info: { view_count: { is_live: true, original_view_count: 9876 } },
       };
 
       const result = YouTubeViewerExtractor.extractConcurrentViewers(videoInfo);
 
       expect(result.success).toBe(true);
       expect(result.count).toBe(9876);
-      expect(result.strategy).toBe("video_details");
+      expect(result.strategy).toBe("original_view_count");
     });
 
     test("should validate extracted viewer counts", () => {

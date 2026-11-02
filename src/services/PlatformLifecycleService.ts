@@ -85,7 +85,6 @@ type PlatformInstance = {
     cleanup: () => Promise<void> | void;
     getViewerCount?: () => Promise<unknown> | unknown;
     getStatus?: () => unknown;
-    isConnected?: () => boolean;
     isActive?: () => boolean;
 };
 
@@ -750,6 +749,11 @@ class PlatformLifecycleService {
         });
 
         const platform = this.platforms[platformName];
+        if (!this.shutdownRequested) {
+            this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, {
+                isLive: false, status: 'unavailable', timestamp
+            });
+        }
         if (platform) {
             try {
                 await this.cleanupPlatformInstance(platform);

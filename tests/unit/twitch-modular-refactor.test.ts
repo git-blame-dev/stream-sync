@@ -258,11 +258,7 @@ describe("TwitchPlatform Modular Refactor", () => {
         eventSub: { isActive: () => true },
       };
       provider = new TwitchViewerCountProvider(
-        apiClient,
-        ConnectionStateFactory,
-        configFixture,
-        null,
-        mockLogger,
+        apiClient, configFixture, mockLogger
       );
     });
 
@@ -290,11 +286,7 @@ describe("TwitchPlatform Modular Refactor", () => {
       beforeEach(() => {
         const notReadyConfig = { ...configFixture, channel: "" };
         provider = new TwitchViewerCountProvider(
-          apiClient,
-          ConnectionStateFactory,
-          notReadyConfig,
-          null,
-          mockLogger,
+          apiClient, notReadyConfig, mockLogger
         );
       });
 
@@ -347,11 +339,7 @@ describe("connection state interface consistency", () => {
       const config = { channel: "test", eventSub: { isActive: () => true } };
 
       const provider = new TwitchViewerCountProvider(
-        mockApiClient,
-        ConnectionStateFactory,
-        config,
-        null,
-        noOpLogger,
+        mockApiClient, config, noOpLogger
       );
 
       expect(typeof provider.getViewerCount).toBe("function");

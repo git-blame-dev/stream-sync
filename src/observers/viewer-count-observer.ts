@@ -8,6 +8,9 @@ class ViewerCountObserver {
         throw new Error('ViewerCountObserver.onStreamStatusChange() must be implemented by subclass');
     }
 
+    async onViewerCountUnavailable(_update: { platform: string }) {
+    }
+
     async initialize() {
     }
 

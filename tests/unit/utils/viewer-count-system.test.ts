@@ -128,8 +128,7 @@ const createHttpProvider = (initial: unknown = 100) => {
     post: async () => ({}), put: async () => ({}), delete: async () => ({}),
   } });
   const provider = new TwitchViewerCountProvider(
-    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }),
-    null, { channel: "synthetic-channel" }, null, noOpLogger,
+    new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }), { channel: "synthetic-channel" }, noOpLogger
   );
   return { provider, attempts, respond: (next: () => Promise<unknown>) => { response = next; } };
 };
@@ -200,23 +199,15 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
   });
 
   describe("System Initialization & Configuration", () => {
-    test("acquires memory maintenance only during initialization and keeps one timer", async () => {
+    test("initialization does not acquire a maintenance timer for bounded counter state", async () => {
       const timerBaseline = getTimerCount();
       const { system } = createViewerCountTestEnvironment();
-      try {
-        expect(system.memoryOptimizationInterval).toBeNull();
-        expect(getTimerCount()).toBe(timerBaseline);
-        await system.initialize();
-        const interval = system.memoryOptimizationInterval;
-        expect(interval).not.toBeNull();
-        expect(getTimerCount()).toBe(timerBaseline + 1);
-        await system.initialize();
-        expect(system.memoryOptimizationInterval).toBe(interval);
-        expect(getTimerCount()).toBe(timerBaseline + 1);
-      } finally {
-        await system.cleanup();
-      }
-      expect(system.memoryOptimizationInterval).toBeNull();
+      await system.initialize();
+      expect(getTimerCount()).toBe(timerBaseline);
+      await system.initialize();
+      expect(getTimerCount()).toBe(timerBaseline);
+      await system.cleanup();
+      expect(getTimerCount()).toBe(timerBaseline);
     });
 
     test("should initialize with proper default viewer counts for all platforms", () => {
@@ -628,16 +619,15 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       expect(await h.provider.getViewerCount()).toBeNull();
       await system.pollPlatform("twitch");
       expect(h.attempts).toHaveLength(1);
-      expect(system.getViewerCountSnapshot("twitch")).toEqual(lastGood);
+      expect(system.getViewerCountSnapshot("twitch")).toEqual({ ...lastGood, latestOutcome: "unavailable" });
       h.provider.config = { channel: "synthetic-channel" };
       h.respond(async () => { throw new Error("synthetic transport rejection"); });
       expect(await h.provider.getViewerCount()).toBeNull();
       await system.pollPlatform("twitch");
       expect(h.attempts).toHaveLength(3);
       expect(h.provider.getErrorStats()).toMatchObject({ totalErrors: 2, consecutiveErrors: 2 });
-      // Twitch null does not change the store's last complete snapshot. YouTube's
-      // observation unavailable policy is separately owned by the membership suite.
-      expect(system.getViewerCountSnapshot("twitch")).toEqual(lastGood);
+      // History remains available, while the current observation is unavailable.
+      expect(system.getViewerCountSnapshot("twitch")).toEqual({ ...lastGood, latestOutcome: "unavailable" });
       expect(observer.receivedUpdates.map(u => u.count)).toEqual([42]);
       h.respond(async () => 0); await system.pollPlatform("twitch");
       expect(h.attempts).toHaveLength(4);

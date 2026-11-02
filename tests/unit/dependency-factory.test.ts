@@ -189,9 +189,9 @@ describe("DependencyFactory", () => {
         Innertube: { create: async () => {
           creations += 1;
           return {
-            getInfo: async () => ({ video_details: { concurrent_viewers: 37 } }),
+            getInfo: async (id: string) => ({ page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id }, primary_info: { view_count: { is_live: true, original_view_count: 37 } } }),
             getChannel: async () => ({ getLiveStreams: async () => ({ videos: [{
-              id: "synthetic-live", title: "Synthetic stream", is_live: true,
+              id: "test0000001", title: "Synthetic stream", is_live: true,
               author: { id: channelId, name: "Synthetic channel" },
             }] }) }),
             search: async () => ({ videos: [] }),
@@ -210,8 +210,8 @@ describe("DependencyFactory", () => {
         expect(result.streamDetectionService).toBe(injectedService);
         expect(result.innertubeService).toBe(owner);
         const detection = await injectedService.detectLiveStreams(channelId);
-        expect(detection).toMatchObject({ success: true, videoIds: ["synthetic-live"] });
-        expect(await result.viewerExtractionService.extractViewerCount("synthetic-live")).toMatchObject({ success: true, count: 37 });
+        expect(detection).toMatchObject({ success: true, videoIds: ["test0000001"] });
+        expect(await result.viewerExtractionService.extractViewerCount("test0000001")).toMatchObject({ success: true, count: 37 });
         expect(creations).toBe(1);
       } finally { await injectedService.cleanup(); }
     });

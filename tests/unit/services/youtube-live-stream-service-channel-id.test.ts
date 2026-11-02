@@ -5,6 +5,7 @@ import {
   expectNoTechnicalArtifacts,
   validateUserFacingString,
 } from "../../helpers/assertion-helpers";
+import { isChannelId } from "../../../src/services/youtube-channel-resolver";
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service.ts";
 
 type LiveStreamClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreams>[0];
@@ -124,12 +125,12 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       ];
 
       validChannelIds.forEach((channelId) => {
-        const isValid = YouTubeLiveStreamService.isChannelId(channelId);
+        const isValid = isChannelId(channelId);
         expect(isValid).toBe(true);
       });
 
       invalidChannelIds.forEach((channelId) => {
-        const isValid = YouTubeLiveStreamService.isChannelId(channelId);
+        const isValid = isChannelId(channelId);
         expect(isValid).toBe(false);
       });
     });
@@ -213,7 +214,7 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       ];
 
       testCases.forEach(({ input, expected }) => {
-        const isValid = YouTubeLiveStreamService.isChannelId(input);
+        const isValid = isChannelId(input);
         expect(isValid).toBe(expected);
       });
     });
@@ -228,7 +229,7 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       ];
 
       edgeCases.forEach((channelId) => {
-        const isValid = YouTubeLiveStreamService.isChannelId(channelId);
+        const isValid = isChannelId(channelId);
         expect(isValid).toBe(true);
       });
     });

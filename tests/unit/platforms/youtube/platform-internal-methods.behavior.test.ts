@@ -74,30 +74,28 @@ describe("YouTubePlatform internal behavior", () => {
     const platform = createPlatform({ logger: { ...noOpLogger, info } });
 
     const liveResult = platform._validateVideoForConnection("video-live", {
-      basic_info: { is_live: true, is_upcoming: false },
+      basic_info: { id: "video-live", is_live: true, is_upcoming: false },
       playability_status: { status: "OK" },
     });
 
     const upcomingResult = platform._validateVideoForConnection(
       "video-upcoming",
       {
-        basic_info: { is_live: false, is_upcoming: true },
+        basic_info: { id: "video-upcoming", is_live: false, is_upcoming: true },
         playability_status: { status: "OK" },
       },
     );
 
     const vodResult = platform._validateVideoForConnection("video-vod", {
-      basic_info: { is_live: false, is_upcoming: false },
+      basic_info: { id: "video-vod", is_live: false, is_upcoming: false },
       playability_status: { status: "ERROR" },
     });
 
     const premiere = platform._validateVideoForConnection("synthetic-premiere", {
-      basic_info: { is_live: true, is_upcoming: true, title: "Synthetic premiere" },
+      basic_info: { id: "synthetic-premiere", is_live: true, is_upcoming: true, title: "Synthetic premiere" },
     });
-    expect(premiere.shouldConnect).toBe(true);
-    expect(info.mock.calls).toEqual([
-      ["Premiere detected: Synthetic premiere (synthetic-premiere)", "youtube"],
-    ]);
+    expect(premiere.shouldConnect).toBe(false);
+    expect(info).not.toHaveBeenCalled();
     expect(liveResult.shouldConnect).toBe(true);
     expect(liveResult.reason).toBe("Stream is live");
     expect(upcomingResult.shouldConnect).toBe(false);

@@ -231,7 +231,7 @@ describe('managed YouTube chat ownership', () => {
             sendMessage: async (message: unknown) => { sent.push(message); return true; }
         });
         const service = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => ({
-            basic_info: { is_live: true }, getLiveChat: async () => chat
+            basic_info: { id: 'synthetic-root', is_live: true }, getLiveChat: async () => chat
         }) }) }, { logger: noOpLogger });
         const root = new YouTubePlatform({ enabled: true, username: 'synthetic-channel' }, { ...dependencies, innertubeService: service });
         const events: unknown[] = [];

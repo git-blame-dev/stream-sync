@@ -20,6 +20,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     let now = epoch;
     let discovered = [a, b];
     let discoveryUnavailable = false;
+    let discoveryPartial = false;
     const failures = new Set<string>();
     const chatFailures = new Set<string>();
     const infoOverrides = new Map<string, Record<string, unknown>>();
@@ -31,7 +32,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     const owner = new InnertubeService({ createWithTimeout: async () => ({
         getChannel: async () => {
             if (discoveryUnavailable) throw new Error('synthetic discovery unavailable');
-            return { videos: discovered.map(id => ({ id, is_live: true })), getLiveStreams: async () => ({ videos: [] }) };
+            return { videos: discovered.map(id => ({ id, is_live: true })), getLiveStreams: async () => ({ videos: discovered.map(id => ({ id, is_live: true })), has_continuation: discoveryPartial }) };
         },
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
@@ -39,7 +40,9 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
             if (infoErrors.has(id)) throw infoErrors.get(id)!;
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');
             return {
-                basic_info: infoOverrides.get(id) ?? { id, is_live: true, is_live_content: true, view_count: counts.get(id) },
+                page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
+                basic_info: infoOverrides.get(id) ?? { id, is_live: true, is_live_content: true },
+                primary_info: { view_count: { is_live: true, original_view_count: counts.get(id) } },
                 getLiveChat: () => {
                     membershipAtChat.set(id, platform.getDetectedStreamIds());
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
@@ -81,6 +84,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
         if (event.type === PlatformEvents.STREAM_DETECTED) detected.push(event.data.newStreamIds);
     });
     return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, infoOverrides, infoErrors,
+        setPartial(partial: boolean) { discoveryPartial = partial; now += 2; },
         setDiscovery(ids: string[]) { discovered = ids; now += 2; },
         failDiscovery() { discoveryUnavailable = true; now += 2; },
         recoverDiscovery() { discoveryUnavailable = false; now += 2; },
@@ -91,6 +95,28 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
+    it('never publishes an initial partial membership as a complete count and fences completeness transitions', async () => {
+        const f = fixture();
+        try {
+            f.setPartial(true);
+            await f.platform.getLiveVideoIds();
+            const partial = f.platform.getViewerMembershipSnapshot();
+            expect(partial).toMatchObject({ videoIds: [a, b], availability: 'live', discoveryComplete: false });
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
+            f.setPartial(false);
+            await f.platform.getLiveVideoIds();
+            const complete = f.platform.getViewerMembershipSnapshot();
+            expect(complete.discoveryComplete).toBe(true);
+            expect(complete.generation).toBeGreaterThan(partial.generation);
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, latestOutcome: 'complete' });
+            f.setPartial(true);
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getViewerMembershipGeneration()).toBeGreaterThan(complete.generation);
+        } finally { await f.close(); }
+    });
+
     it('logs confirmed offline once and keeps repeated offline checks and one live stream below capacity healthy', async () => {
         const f = fixture();
         try {
@@ -207,12 +233,12 @@ describe('authoritative membership through real platform, metadata, provider, st
         } finally { release?.(); await pending; await f.close(); }
     });
 
-    it('does not overwrite OBS during unknown initialization or an unavailable first poll', async () => {
+    it('shows an unavailable dash during initialization and the first unavailable poll', async () => {
         const f = fixture();
         try {
             await f.observer.initialize();
             await f.store.pollPlatform('youtube');
-            expect(f.writes).toEqual([]);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
         } finally { await f.close(); }
     });
@@ -230,7 +256,8 @@ describe('authoritative membership through real platform, metadata, provider, st
             await f.store.pollPlatform('youtube');
             expect(f.platform.getViewerMembershipSnapshot().availability).toBe('unknown');
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 0, lastCompleteAt: previous.lastCompleteAt, latestOutcome: 'unavailable' });
-            expect(f.writes).toHaveLength(writes);
+            expect(f.writes).toHaveLength(writes + 1);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
     });
 
@@ -293,7 +320,7 @@ describe('authoritative membership through real platform, metadata, provider, st
         } finally { await f.close(); }
     });
 
-    it('keeps the last complete output when all metadata requests fail and publishes recovery', async () => {
+    it('keeps the historical count and displays a dash when metadata fails, then publishes recovery', async () => {
         const f = fixture();
         try {
             await f.platform.getLiveVideoIds();
@@ -305,7 +332,8 @@ describe('authoritative membership through real platform, metadata, provider, st
             await f.store.pollPlatform('youtube');
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, hasCompleteObservation: true,
                 lastCompleteAt: previous.lastCompleteAt, latestOutcome: 'unavailable' });
-            expect(f.writes).toHaveLength(writes);
+            expect(f.writes).toHaveLength(writes + 1);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
             f.failures.clear();
             f.counts.set(a, 40);
             await f.store.pollPlatform('youtube');
@@ -324,7 +352,7 @@ describe('authoritative membership through real platform, metadata, provider, st
             f.counts.set(b, 1);
             await f.store.pollPlatform('youtube');
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
-            expect(f.writes).toEqual([]);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
     });
 
@@ -335,7 +363,7 @@ describe('authoritative membership through real platform, metadata, provider, st
             for (let i = 0; i < 30; i++) await Promise.resolve();
             expect(f.store.pollingHandles.youtube).toBeDefined();
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
-            expect(f.writes).toEqual([]);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
     });
 
@@ -356,7 +384,7 @@ describe('authoritative membership through real platform, metadata, provider, st
         } finally { await store.cleanup(); await f.close(); useRealTimers(); }
     });
 
-    it('retains stale complete output when both chats and subsequent metadata/discovery are unavailable', async () => {
+    it('retains historical counts and shows a dash when chats, metadata and discovery become unavailable', async () => {
         const f = fixture();
         f.chatFailures.add(a);
         f.chatFailures.add(b);
@@ -374,9 +402,10 @@ describe('authoritative membership through real platform, metadata, provider, st
             expect(f.statuses).toEqual([true]);
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, lastCompleteAt: previous.lastCompleteAt,
                 hasCompleteObservation: true, latestOutcome: 'unavailable' });
-            expect(f.writes).toHaveLength(writes);
+            expect(f.writes).toHaveLength(writes + 1);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
             await f.observer.initialize();
-            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '30' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
             expect(f.store.getViewerCountSnapshot('youtube').lastCompleteAt).toBe(previous.lastCompleteAt);
         } finally { await f.close(); }
     });
@@ -407,7 +436,8 @@ describe('authoritative membership through real platform, metadata, provider, st
             await secondStore.pollPlatform('youtube');
             expect(secondStore.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, lastCompleteAt: previous.lastCompleteAt,
                 latestOutcome: 'unavailable' });
-            expect(f.writes).toHaveLength(writes);
+            expect(f.writes).toHaveLength(writes + 1);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await secondStore?.cleanup(); await f.close(); }
     });
 
@@ -456,7 +486,7 @@ describe('authoritative membership through real platform, metadata, provider, st
             retireOnClock = true;
             await secondStore.pollPlatform('youtube');
             expect(secondStore.getViewerCountSnapshot('youtube').hasCompleteObservation).toBe(false);
-            expect(f.writes).toEqual([]);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await retirement; await secondStore?.cleanup(); await f.close(); }
     });
 
@@ -468,7 +498,7 @@ describe('authoritative membership through real platform, metadata, provider, st
             expect(await f.platform.getViewerCount()).toBeNull();
             await f.store.pollPlatform('youtube');
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
-            expect(f.writes).toEqual([]);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
     });
 
@@ -607,7 +637,8 @@ describe('authoritative membership through real platform, metadata, provider, st
             expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
             expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, hasCompleteObservation: true,
                 lastCompleteAt: previous.lastCompleteAt, latestOutcome: 'unavailable' });
-            expect(f.writes).toHaveLength(writeCount);
+            expect(f.writes).toHaveLength(writeCount + 1);
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
     });
 

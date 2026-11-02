@@ -11,7 +11,7 @@ function setup(counts: Record<string, number | Error>) {
                 requests.push(id);
                 const count = counts[id];
                 if (count instanceof Error) throw count;
-                return { basic_info: { is_live: true, view_count: count } };
+                return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: count } } };
             }
         })
     }, { logger: noOpLogger });
@@ -21,13 +21,13 @@ function setup(counts: Record<string, number | Error>) {
 
 describe('complete unique viewer aggregates through owned metadata and real extraction', () => {
     it('does not publish a successful subtotal when one SDK request fails', async () => {
-        const { owner, service } = setup({ 'test-a': 10, 'test-b': new Error('synthetic SDK failure') });
+        const { owner, service } = setup({ 'test0000001': 10, 'test0000002': new Error('synthetic SDK failure') });
         try {
-            const result = await service.getAggregatedViewerCount(['test-a', 'test-b']);
+            const result = await service.getAggregatedViewerCount(['test0000001', 'test0000002']);
             expect(result).toMatchObject({ success: false, totalCount: 0, successfulStreams: 1, failedStreams: 1 });
             expect(result.streams).toEqual([
-                { videoId: 'test-a', count: 10, success: true, strategy: 'basic_info' },
-                { videoId: 'test-b', count: 0, success: false, error: 'Viewer count extraction failed' }
+                { videoId: 'test0000001', count: 10, success: true, strategy: 'original_view_count' },
+                { videoId: 'test0000002', count: 0, success: false, error: 'Viewer count extraction failed' }
             ]);
         } finally {
             await owner.dispose();
@@ -35,23 +35,23 @@ describe('complete unique viewer aggregates through owned metadata and real extr
     });
 
     it('captures unique exact IDs in first-seen order, including across batches', async () => {
-        const { owner, service, requests } = setup({ 'test-b': 7, 'test-a': 3, ' test-a ': 2 });
+        const { owner, service, requests } = setup({ 'test0000002': 7, 'test0000001': 3, 'test0000003': 2 });
         try {
-            const ids = ['test-b', 'test-a', 'test-b', ' test-a ', 'test-a'];
+            const ids = ['test0000002', 'test0000001', 'test0000002', 'test0000003', 'test0000001'];
             const result = await service.getAggregatedViewerCount(ids, { maxConcurrency: 1 });
             expect(result).toMatchObject({ success: true, totalCount: 12, successfulStreams: 3, failedStreams: 0 });
-            expect(requests).toEqual(['test-b', 'test-a', ' test-a ']);
+            expect(requests).toEqual(['test0000002', 'test0000001', 'test0000003']);
             expect(result.streams.map(stream => stream.videoId)).toEqual(requests);
-            expect(ids).toEqual(['test-b', 'test-a', 'test-b', ' test-a ', 'test-a']);
+            expect(ids).toEqual(['test0000002', 'test0000001', 'test0000002', 'test0000003', 'test0000001']);
         } finally {
             await owner.dispose();
         }
     });
 
     it('rejects an unsafe sum while retaining valid per-member diagnostics', async () => {
-        const { owner, service } = setup({ 'test-a': Number.MAX_SAFE_INTEGER, 'test-b': 1 });
+        const { owner, service } = setup({ 'test0000001': Number.MAX_SAFE_INTEGER, 'test0000002': 1 });
         try {
-            expect(await service.getAggregatedViewerCount(['test-a', 'test-b'])).toMatchObject({
+            expect(await service.getAggregatedViewerCount(['test0000001', 'test0000002'])).toMatchObject({
                 success: false, totalCount: 0, successfulStreams: 2, failedStreams: 0,
                 error: 'Unsafe aggregate viewer count'
             });
@@ -62,12 +62,12 @@ describe('complete unique viewer aggregates through owned metadata and real extr
 
     for (const count of [Number.MAX_SAFE_INTEGER + 1, Infinity, NaN, -1, 1.5]) {
         it(`rejects invalid individual count ${String(count)} without publishing a subtotal`, async () => {
-            const { owner, service } = setup({ 'test-a': 10, 'test-b': count });
+            const { owner, service } = setup({ 'test0000001': 10, 'test0000002': count });
             try {
-                expect(await service.extractViewerCount('test-b')).toMatchObject({ success: false, count: 0 });
-                const result = await service.getAggregatedViewerCount(['test-a', 'test-b']);
+                expect(await service.extractViewerCount('test0000002')).toMatchObject({ success: false, count: 0 });
+                const result = await service.getAggregatedViewerCount(['test0000001', 'test0000002']);
                 expect(result).toMatchObject({ success: false, totalCount: 0, successfulStreams: 1, failedStreams: 1 });
-                expect(result.streams[1]).toMatchObject({ videoId: 'test-b', success: false, count: 0 });
+                expect(result.streams[1]).toMatchObject({ videoId: 'test0000002', success: false, count: 0 });
             } finally {
                 await owner.dispose();
             }
@@ -75,14 +75,14 @@ describe('complete unique viewer aggregates through owned metadata and real extr
     }
 
     it('accepts zero, the largest safe count, and the empty arithmetic identity', async () => {
-        const { owner, service, requests } = setup({ 'test-zero': 0, 'test-max': Number.MAX_SAFE_INTEGER });
+        const { owner, service, requests } = setup({ 'test0000000': 0, 'test0000009': Number.MAX_SAFE_INTEGER });
         try {
             expect(await service.getAggregatedViewerCount([])).toMatchObject({
                 success: true, totalCount: 0, successfulStreams: 0, failedStreams: 0, streams: []
             });
             expect(requests).toEqual([]);
-            expect(await service.extractViewerCount('test-zero')).toMatchObject({ success: true, count: 0 });
-            expect(await service.getAggregatedViewerCount(['test-zero', 'test-max'])).toMatchObject({
+            expect(await service.extractViewerCount('test0000000')).toMatchObject({ success: true, count: 0 });
+            expect(await service.getAggregatedViewerCount(['test0000000', 'test0000009'])).toMatchObject({
                 success: true, totalCount: Number.MAX_SAFE_INTEGER, successfulStreams: 2, failedStreams: 0
             });
         } finally {

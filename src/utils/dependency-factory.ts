@@ -8,7 +8,6 @@ import { InnertubeService } from '../services/innertube-service';
 import { SelfMessageDetectionService } from '../services/SelfMessageDetectionService';
 import { ViewerCountExtractionService } from '../services/viewer-count-extraction-service';
 import { YouTubeStreamDetectionService } from '../services/youtube-stream-detection-service';
-import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { PlatformConnectionFactory } from './platform-connection-factory';
 
 type PlatformDependencyConfig = Record<string, unknown> & {
@@ -46,9 +45,6 @@ type DependencyFactoryOptions = Record<string, unknown> & {
     Innertube?: InnertubeDependency;
     innertubeService?: InnertubeService;
     timeout?: number;
-    strategies?: string[];
-    debug?: boolean;
-    retries?: number;
 };
 
 type DependencyInterfaceType = 'logger' | 'notificationManager' | 'apiClient';
@@ -355,11 +351,7 @@ class DependencyFactory {
     _createViewerExtractionService(innertubeService: InnertubeService, logger: AppLogger, options: DependencyFactoryOptions = {}) {
         return new ViewerCountExtractionService(innertubeService, {
             logger,
-            YouTubeViewerExtractor,
-            timeout: options.timeout || 8000,
-            strategies: options.strategies || ['view_text', 'video_details', 'basic_info'],
-            debug: options.debug || false,
-            retries: options.retries || 0
+            timeout: options.timeout || 8000
         });
     }
 

@@ -13,12 +13,13 @@ function fixture(streams: Stream[]) {
     const chats = new Map<string, EventEmitter>();
     const owner = new InnertubeService({ createWithTimeout: async () => ({
         getChannel: async () => ({ videos: streams.map(s => ({ id: s.id,
-            ...(s.premiere ? { is_live_content: true } : { is_live: true }) })), getLiveStreams: async () => ({ videos: [] }) }),
+            ...(s.premiere ? { is_live_content: true } : { is_live: true }) })), getLiveStreams: async () => ({ videos: streams.map(s => ({ id: s.id, ...(s.premiere ? { is_live_content: true } : { is_live: true }) })) }) }),
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');
             const stream = streams.find(s => s.id === id)!;
-            return { basic_info: { id, is_live: true, is_live_content: true, view_count: stream.count },
+            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true, is_live_content: true, view_count: stream.count },
+                primary_info: { view_count: { is_live: true, original_view_count: stream.count } },
                 getLiveChat: () => {
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
                     const chat = Object.assign(new EventEmitter(), { start(this: EventEmitter) { this.emit('start', {}); }, stop() {}, applyFilter() {} });
@@ -35,7 +36,7 @@ function fixture(streams: Stream[]) {
     });
     return { platform, failures, chatFailures, chats, async close() { await platform.cleanup(); await owner.dispose(); } };
 }
-const streams = (counts: number[]) => counts.map((count, index) => ({ id: `synthetic_${index}`, count }));
+const streams = (counts: number[]) => counts.map((count, index) => ({ id: `test000000${index}`, count }));
 
 describe('YouTube detected membership and metadata aggregation', () => {
     it.each([
@@ -58,9 +59,9 @@ describe('YouTube detected membership and metadata aggregation', () => {
         const f = fixture(streams([300, 200, 700]));
         try {
             await f.platform.getLiveVideoIds();
-            f.failures.add('synthetic_1');
+            f.failures.add('test0000001');
             expect(await f.platform.getViewerCount()).toBeNull();
-            f.failures.add('synthetic_0'); f.failures.add('synthetic_2');
+            f.failures.add('test0000000'); f.failures.add('test0000002');
             expect(await f.platform.getViewerCount()).toBeNull();
             f.failures.clear();
             expect(await f.platform.getViewerCount()).toBe(1200);
@@ -86,7 +87,7 @@ describe('YouTube detected membership and metadata aggregation', () => {
             await f.platform.requestImmediateYouTubeStreamRefresh();
             expect(f.platform.getActiveYouTubeVideoIds()).toHaveLength(4);
             expect(await f.platform.getViewerCount()).toBe(5900);
-            f.chats.get('synthetic_1')!.emit('end');
+            f.chats.get('test0000001')!.emit('end');
             expect(await f.platform.getViewerCount()).toBe(5900);
             await f.platform.requestImmediateYouTubeStreamRefresh();
             expect(await f.platform.getViewerCount()).toBe(5900);
@@ -96,11 +97,11 @@ describe('YouTube detected membership and metadata aggregation', () => {
     it('counts both ready and failed chats and keeps the total through interruption and recovery', async () => {
         const f = fixture(streams([4000, 1000]));
         try {
-            f.chatFailures.add('synthetic_1');
+            f.chatFailures.add('test0000001');
             await f.platform.checkMultiStream();
-            expect(f.platform.getActiveYouTubeVideoIds()).toEqual(['synthetic_0']);
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual(['test0000000']);
             expect(await f.platform.getViewerCount()).toBe(5000);
-            f.chats.get('synthetic_0')!.emit('end');
+            f.chats.get('test0000000')!.emit('end');
             expect(await f.platform.getViewerCount()).toBe(5000);
             f.chatFailures.clear();
             await f.platform.requestImmediateYouTubeStreamRefresh();

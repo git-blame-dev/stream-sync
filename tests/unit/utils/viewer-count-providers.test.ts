@@ -7,7 +7,6 @@ import {
   ViewerCountProvider,
   TwitchViewerCountProvider,
   YouTubeViewerCountProvider,
-  TikTokViewerCountProvider,
 } from "../../../src/utils/viewer-count-providers";
 
 type AggregatedViewerCount = {
@@ -22,8 +21,7 @@ const createViewerExtractionService = (
   >(),
 ) => ({
   getAggregatedViewerCount,
-  extractViewerCount: vi.fn<(...args: [string]) => Promise<{ success: boolean; count: number }>
-  >(),
+
 });
 
 const createTwitchApiClient = (
@@ -34,12 +32,11 @@ const createTwitchApiClient = (
 describe("ViewerCountProvider base behavior", () => {
   it("tracks error stats and categorizes network errors", () => {
     const provider = new ViewerCountProvider("testPlatform", noOpLogger);
-    const result = provider._handleProviderError(
+    provider._handleProviderError(
       new Error("Network timeout"),
       "fetch",
     );
 
-    expect(result).toBe(0);
     const stats = provider.getErrorStats();
     expect(stats.totalErrors).toBe(1);
     expect(stats.consecutiveErrors).toBe(1);
@@ -78,9 +75,8 @@ describe("ViewerCountProvider base behavior", () => {
   it("handles non-Error inputs without message gracefully", () => {
     const provider = new ViewerCountProvider("testPlatform", noOpLogger);
 
-    const result = provider._handleProviderError({}, "testOperation");
+    provider._handleProviderError({}, "testOperation");
 
-    expect(result).toBe(0);
     const stats = provider.getErrorStats();
     expect(stats.errorTypes.unknown).toBe(1);
     expect(stats.lastError).toBe("Unknown error");
@@ -92,7 +88,7 @@ describe("TwitchViewerCountProvider", () => {
     const api = createTwitchApiClient();
     api.getStreamInfo.mockResolvedValue({ isLive: true, viewerCount: 0 });
     const config = { channel: " \t " };
-    const provider = new TwitchViewerCountProvider(api, {}, config, null, noOpLogger);
+    const provider = new TwitchViewerCountProvider(api, config, noOpLogger);
     expect(provider.isReady()).toBe(false);
     expect(await provider.getViewerCount()).toBeNull();
     expect(api.getStreamInfo).not.toHaveBeenCalled();
@@ -105,7 +101,7 @@ describe("TwitchViewerCountProvider", () => {
   it("preserves last-good state and errors when the configured channel becomes unavailable", async () => {
     const api = createTwitchApiClient();
     const config = { channel: "synthetic-channel" };
-    const provider = new TwitchViewerCountProvider(api, {}, config, null, noOpLogger);
+    const provider = new TwitchViewerCountProvider(api, config, noOpLogger);
     const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
     system.streamStatus.twitch = true;
     api.getStreamInfo.mockResolvedValue({ isLive: true, viewerCount: 12 });
@@ -118,7 +114,7 @@ describe("TwitchViewerCountProvider", () => {
       config.channel = channel;
       expect(await provider.getViewerCount()).toBeNull();
       await system.pollPlatform("twitch");
-      expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+      expect(system.getViewerCountSnapshot("twitch")).toEqual({ ...before, latestOutcome: "unavailable" });
       expect(system.getViewerCount("twitch")).toBe(12);
       expect(provider.getErrorStats().consecutiveErrors).toBe(1);
     }
@@ -130,7 +126,7 @@ describe("TwitchViewerCountProvider", () => {
     for (const isLive of [undefined, "false", 1, null]) {
       const api = createTwitchApiClient();
       api.getStreamInfo.mockResolvedValue({ isLive: isLive as unknown as boolean, viewerCount: 12 });
-      const provider = new TwitchViewerCountProvider(api, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+      const provider = new TwitchViewerCountProvider(api, { channel: "synthetic-channel" }, noOpLogger);
       expect(await provider.getViewerCount()).toBeNull();
       expect(provider.getErrorStats().consecutiveErrors).toBe(1);
     }
@@ -140,7 +136,7 @@ describe("TwitchViewerCountProvider", () => {
     for (const count of [NaN, Infinity, -Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "12", undefined, null]) {
       const api = createTwitchApiClient();
       api.getStreamInfo.mockResolvedValue({ isLive: true, viewerCount: count as number });
-      const provider = new TwitchViewerCountProvider(api, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+      const provider = new TwitchViewerCountProvider(api, { channel: "synthetic-channel" }, noOpLogger);
       provider._handleProviderError(new Error("prior failure"));
       expect(await provider.getViewerCount()).toBeNull();
       expect(provider.getErrorStats().consecutiveErrors).toBe(2);
@@ -149,7 +145,7 @@ describe("TwitchViewerCountProvider", () => {
 
   it("accepts offline zero despite stale positive count, and live zero", async () => {
     const api = createTwitchApiClient();
-    const provider = new TwitchViewerCountProvider(api, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+    const provider = new TwitchViewerCountProvider(api, { channel: "synthetic-channel" }, noOpLogger);
     for (const response of [{ isLive: false, viewerCount: 99 }, { isLive: true, viewerCount: 0 }]) {
       provider._handleProviderError(new Error("prior failure"));
       api.getStreamInfo.mockResolvedValue(response);
@@ -160,7 +156,7 @@ describe("TwitchViewerCountProvider", () => {
 
   it("retains real store measurement and freshness after malformed provider polls", async () => {
     const api = createTwitchApiClient();
-    const provider = new TwitchViewerCountProvider(api, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+    const provider = new TwitchViewerCountProvider(api, { channel: "synthetic-channel" }, noOpLogger);
     const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
     system.streamStatus.twitch = true;
     await system.updateViewerCount("twitch", 12);
@@ -171,7 +167,7 @@ describe("TwitchViewerCountProvider", () => {
       api.getStreamInfo.mockResolvedValue({ isLive: true, viewerCount: count });
       await system.pollPlatform("twitch");
       expect(system.getViewerCount("twitch")).toBe(12);
-      expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+      expect(system.getViewerCountSnapshot("twitch")).toEqual({ ...before, latestOutcome: "unavailable" });
     }
     expect(updates).toHaveLength(0);
     api.getStreamInfo.mockResolvedValue({ isLive: true, viewerCount: 0 });
@@ -185,11 +181,7 @@ describe("TwitchViewerCountProvider", () => {
 
   it("returns unavailable when not ready", async () => {
     const provider = new TwitchViewerCountProvider(
-      createTwitchApiClient(),
-      {},
-      {},
-      null,
-      noOpLogger,
+      createTwitchApiClient(), {}, noOpLogger
     );
 
     await expect(provider.getViewerCount()).resolves.toBeNull();
@@ -203,11 +195,7 @@ describe("TwitchViewerCountProvider", () => {
           isLive: true,
           viewerCount: 42,
         }),
-      ),
-      {},
-      { channel: "testStreamer" },
-      null,
-      noOpLogger,
+      ), { channel: "testStreamer" }, noOpLogger
     );
 
     const count = await provider.getViewerCount();
@@ -240,7 +228,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live", discoveryComplete: true }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -261,7 +249,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live", discoveryComplete: true }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -281,7 +269,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ({ generation: 1, videoIds: ["testVideoId1", "testVideoId2"], availability: "live" }),
+      () => ({ generation: 1, videoIds: ["testVideoId1", "testVideoId2"], availability: "live", discoveryComplete: true }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -292,7 +280,7 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("returns confirmed empty zero without incrementing errors", async () => {
-    const provider = new YouTubeViewerCountProvider({}, () => ({ generation: 1, videoIds: [], availability: "offline" }), {
+    const provider = new YouTubeViewerCountProvider({}, () => ({ generation: 1, videoIds: [], availability: "offline", discoveryComplete: true }), {
       viewerExtractionService: createViewerExtractionService(),
       logger: noOpLogger,
     });
@@ -315,7 +303,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live", discoveryComplete: true }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -326,68 +314,5 @@ describe("YouTubeViewerCountProvider", () => {
 
     expect(count).toBe(5);
     expect(provider.errorStats.consecutiveErrors).toBe(0);
-  });
-});
-
-describe("TikTokViewerCountProvider", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("handles missing platform gracefully", async () => {
-    const provider = new TikTokViewerCountProvider(null, {
-      logger: noOpLogger,
-    });
-
-    const count = await provider.getViewerCount();
-    expect(count).toBe(0);
-    expect(provider.getErrorStats().totalErrors).toBe(1);
-  });
-
-  it("returns platform viewer count when available", async () => {
-    const platform = {
-      connection: { isConnected: true },
-      getViewerCount: vi.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(33),
-    };
-    const provider = new TikTokViewerCountProvider(platform, {
-      logger: noOpLogger,
-    });
-
-    const count = await provider.getViewerCount();
-    expect(count).toBe(33);
-    expect(provider.errorStats.consecutiveErrors).toBe(0);
-  });
-
-  it("resets error count on success after previous failure", async () => {
-    let callCount = 0;
-    const platform = {
-      connection: { isConnected: true },
-      getViewerCount: vi.fn<(...args: []) => Promise<number>>(async () => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error("network");
-        }
-        return 10;
-      }),
-    };
-    const provider = new TikTokViewerCountProvider(platform, {
-      logger: noOpLogger,
-    });
-
-    await provider.getViewerCount();
-    expect(provider.errorStats.consecutiveErrors).toBe(1);
-
-    const count = await provider.getViewerCount();
-    expect(count).toBe(10);
-    expect(provider.errorStats.consecutiveErrors).toBe(0);
-  });
-
-  it("is not ready when connection missing or disconnected", () => {
-    const provider = new TikTokViewerCountProvider(
-      { connection: { isConnected: false } },
-      { logger: noOpLogger },
-    );
-
-    expect(provider.isReady()).toBe(false);
   });
 });

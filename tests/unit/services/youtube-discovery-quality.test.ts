@@ -2,13 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import { InnertubeService } from '../../../src/services/innertube-service';
 import { YouTubeStreamDetectionService } from '../../../src/services/youtube-stream-detection-service';
 import { noOpLogger } from '../../helpers/mock-factories';
+import { useFakeTimers, useRealTimers, advanceTimersByTime } from '../../helpers/bun-timers';
 
 const channelId = `UC${'q'.repeat(22)}`;
 const live = { id: 'synthetic_live', is_live: true, author: { id: channelId } };
 function setup(channel: unknown, search?: () => Promise<unknown>) {
     const owner = new InnertubeService({
         createWithTimeout: async () => ({
-            getInfo: async (_id: string) => ({ basic_info: { is_live: true, view_count: 9 } }),
+            getInfo: async (id: string) => ({ basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 9 } } }),
             getChannel: async () => channel,
             resolveURL: async () => ({ payload: { browseId: channelId } }),
             ...(search ? { search } : {})
@@ -19,6 +20,103 @@ function setup(channel: unknown, search?: () => Promise<unknown>) {
 }
 
 describe('discovery observation quality through real metadata ownership and detection', () => {
+    for (const tabIds of [[], ['synthetic_target']]) {
+        it(`reconciles foreign and stale owned homepage entries against complete target tab: ${tabIds.length}`, async () => {
+            const { owner, detection } = setup({
+                videos: [{ ...live, id: 'synthetic_foreign', author: { id: `UC${'r'.repeat(22)}` } },
+                    { ...live, id: 'synthetic_stale' }],
+                getLiveStreams: async () => ({ videos: tabIds.map(id => ({ ...live, id })) })
+            });
+            try {
+                expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: tabIds });
+            } finally { await owner.dispose(); }
+        });
+    }
+    it('validates homepage ownership while retaining only owned positives on tab failure', async () => {
+        const { owner, detection } = setup({ videos: [live, { ...live, id: 'synthetic_foreign', author: { id: `UC${'r'.repeat(22)}` } },
+            { id: 'synthetic_unattributed', is_live: true }],
+            getLiveStreams: async () => { throw new Error('synthetic tab failure'); } });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'partial', videoIds: ['synthetic_live'] });
+        } finally { await owner.dispose(); }
+    });
+    for (const contradiction of [{ is_upcoming: true }, { is_post_live_dvr: true }, { end_timestamp: new Date('2020-01-01') }, { is_live: false, is_live_content: true }]) {
+        it(`rejects contradictory live discovery signals: ${Object.keys(contradiction).join(',')}`, async () => {
+            const video = { ...live, ...contradiction };
+            const { owner, detection } = setup({ videos: [video], getLiveStreams: async () => ({ videos: [video] }) });
+            try { expect((await detection.detectLiveStreams(channelId)).videoIds).toEqual([]); }
+            finally { await owner.dispose(); }
+        });
+    }
+
+    it('traverses continuation pages before declaring complete discovery', async () => {
+        let continuations = 0;
+        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
+            videos: [live], has_continuation: true,
+            getContinuation: async () => { continuations++; return { videos: [{ ...live, id: 'synthetic_next' }], has_continuation: false }; }
+        }) });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'complete', videoIds: ['synthetic_live', 'synthetic_next'] });
+            expect(continuations).toBe(1);
+        } finally { await owner.dispose(); }
+    });
+
+    it('bounds endless pagination and retains positives as partial membership', async () => {
+        let pages = 0;
+        const page = { videos: [live], has_continuation: true, getContinuation: async () => { pages++; return page; } };
+        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => page });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'partial', videoIds: ['synthetic_live'] });
+            expect(pages).toBeGreaterThan(0);
+            expect(pages).toBeLessThan(20);
+        } finally { await owner.dispose(); }
+    });
+
+    it('uses complete streams-tab membership over contaminated homepage positives', async () => {
+        const { owner, detection } = setup({ videos: [null, { ...live, id: 'synthetic_home' }],
+            getLiveStreams: async () => ({ videos: [live], has_continuation: false }) });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'complete', videoIds: ['synthetic_live'] });
+        } finally { await owner.dispose(); }
+    });
+
+    it('returns acquired positives before a stalled continuation exceeds the operation budget', async () => {
+        useFakeTimers();
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>(resolve => { entered = resolve; });
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
+            videos: [live], has_continuation: true,
+            getContinuation: async () => { entered(); await gate; return { videos: [{ ...live, id: 'synthetic_late' }], has_continuation: false }; }
+        }) });
+        try {
+            const pending = detection.detectLiveStreams(channelId);
+            await started;
+            advanceTimersByTime(2000);
+            expect(await pending).toMatchObject({ success: true, observationKind: 'partial', videoIds: ['synthetic_live'] });
+        } finally { release(); await owner.dispose(); useRealTimers(); }
+    });
+
+    it('keeps earlier pages when a continuation fails', async () => {
+        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
+            videos: [live], has_continuation: true,
+            getContinuation: async () => { throw new Error('synthetic continuation failure'); }
+        }) });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({
+                success: true, observationKind: 'partial', qualityReason: 'acquisition_failed', videoIds: ['synthetic_live']
+            });
+        } finally { await owner.dispose(); }
+    });
+
+    it('allows a complete empty streams tab to supersede a malformed homepage', async () => {
+        const { owner, detection } = setup({ videos: [null, live], getLiveStreams: async () => ({ videos: [], has_continuation: false }) });
+        try {
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: [] });
+        } finally { await owner.dispose(); }
+    });
+
     const metadataIdentity = (browseIds: unknown[]) => ({ metadata: { metadata: { metadata_rows: [{
         metadata_parts: browseIds.map(browseId => ({ text: { endpoint: { payload: { browseId } } } }))
     }] } } });
@@ -46,23 +144,24 @@ describe('discovery observation quality through real metadata ownership and dete
         { label: 'malformed metadata channel', identity: metadataIdentity([3]), owned: undefined }
     ];
     for (const { label, identity, owned } of attributionCases) {
-        it(`classifies search attribution conservatively: ${label}`, async () => {
-            const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({ videos: [] }) },
-                async () => ({ videos: [{ id: 'synthetic_search', is_live: true, ...identity }] }));
+        it(`classifies homepage and fallback attribution conservatively: ${label}`, async () => {
+            const videos = [{ id: 'synthetic_search', is_live: true, ...identity }];
+            const { owner, detection } = setup({ videos, getLiveStreams: async () => { throw new Error('synthetic tab failure'); } },
+                async () => ({ videos }));
             try {
                 const result = await detection.detectLiveStreams('@synthetic');
                 expect(result).toMatchObject({
-                    observationKind: owned === undefined ? 'partial' : 'complete',
-                    success: owned !== undefined, videoIds: owned === true ? ['synthetic_search'] : []
+                    observationKind: owned === undefined ? 'unavailable' : 'partial',
+                    success: owned === true, videoIds: owned === true ? ['synthetic_search'] : []
                 });
-                expect(result.qualityReason).toBe(owned === undefined ? 'malformed_collection' : undefined);
+                expect(result.qualityReason).toBe(owned === undefined ? 'malformed_collection' : 'acquisition_failed');
             } finally { await owner.dispose(); }
         });
     }
 
     for (const id of [42, null, undefined, '']) {
         it(`rejects a non-string or absent ID on non-live entries: ${String(id)}`, async () => {
-            const { owner, detection } = setup({ videos: [{ id, is_live: false }], getLiveStreams: async () => ({ videos: [] }) },
+            const { owner, detection } = setup({ videos: [{ id, is_live: false }], getLiveStreams: async () => ({ videos: [{ id, is_live: false }] }) },
                 async () => ({ videos: [] }));
             try {
                 expect(await detection.detectLiveStreams(channelId)).toMatchObject({
@@ -76,11 +175,11 @@ describe('discovery observation quality through real metadata ownership and dete
         for (const handle of ['@@', '@synthetic other']) {
             it(`degrades malformed handle-only search attribution ${handle}; owned neighbor: ${withOwnedNeighbor}`, async () => {
                 const unknown = { id: 'synthetic_unknown_owner', is_live: true, author: { handle } };
-                const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({ videos: [] }) },
+                const { owner, detection } = setup({ videos: [null], getLiveStreams: async () => ({ videos: [null] }) },
                     async () => ({ videos: withOwnedNeighbor ? [unknown, live] : [unknown] }));
                 try {
                     expect(await detection.detectLiveStreams('@synthetic')).toMatchObject({
-                        observationKind: 'partial', qualityReason: 'malformed_collection',
+                        observationKind: withOwnedNeighbor ? 'partial' : 'unavailable', qualityReason: 'malformed_collection',
                         success: withOwnedNeighbor, videoIds: withOwnedNeighbor ? ['synthetic_live'] : []
                     });
                 } finally { await owner.dispose(); }
@@ -88,11 +187,11 @@ describe('discovery observation quality through real metadata ownership and dete
         }
         it(`degrades unattributed live search results without admitting them; owned neighbor: ${withOwnedNeighbor}`, async () => {
             const unknown = { id: 'synthetic_unknown_owner', is_live: true };
-            const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({ videos: [] }) },
+            const { owner, detection } = setup({ videos: [null], getLiveStreams: async () => ({ videos: [null] }) },
                 async () => ({ videos: withOwnedNeighbor ? [unknown, live] : [unknown] }));
             try {
                 expect(await detection.detectLiveStreams(channelId)).toMatchObject({
-                    observationKind: 'partial', qualityReason: 'malformed_collection',
+                    observationKind: withOwnedNeighbor ? 'partial' : 'unavailable', qualityReason: 'malformed_collection',
                     success: withOwnedNeighbor, videoIds: withOwnedNeighbor ? ['synthetic_live'] : []
                 });
             } finally { await owner.dispose(); }
@@ -101,7 +200,7 @@ describe('discovery observation quality through real metadata ownership and dete
         it(`degrades invalid non-live IDs before treating the collection as observed; live neighbor: ${withOwnedNeighbor}`, async () => {
             const invalid = { id: 'synthetic invalid id', is_live: false };
             const { owner, detection } = setup({ videos: withOwnedNeighbor ? [invalid, live] : [invalid],
-                getLiveStreams: async () => ({ videos: [] }) }, async () => ({ videos: [] }));
+                getLiveStreams: async () => ({ videos: withOwnedNeighbor ? [invalid, live] : [invalid] }) }, async () => ({ videos: [] }));
             try {
                 expect(await detection.detectLiveStreams(channelId)).toMatchObject({
                     observationKind: 'partial', qualityReason: 'malformed_collection',
@@ -111,11 +210,13 @@ describe('discovery observation quality through real metadata ownership and dete
         });
     }
 
-    it('preserves complete negative search observations with explicit other-channel identity', async () => {
+    it('skips search after authoritative empty target membership', async () => {
+        let searches = 0;
         const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({ videos: [] }) },
-            async () => ({ videos: [{ ...live, author: { id: `UC${'r'.repeat(22)}` } }] }));
+            async () => { searches++; return { videos: [live] }; });
         try {
             expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: [] });
+            expect(searches).toBe(0);
         } finally { await owner.dispose(); }
     });
 
@@ -129,14 +230,14 @@ describe('discovery observation quality through real metadata ownership and dete
             expect(detection.getUsageMetrics()).toMatchObject({ totalRequests: 1, successfulRequests: 1, failedRequests: 0 });
             await detection.cleanup();
             expect(detection.getUsageMetrics()).toMatchObject({ totalRequests: 0, successfulRequests: 0, failedRequests: 0 });
-            expect(await owner.withMetadataOperation({}, client => client.getInfo('synthetic_live'))).toMatchObject({ basic_info: { view_count: 9 } });
+            expect(await owner.withMetadataOperation({}, client => client.getInfo('synthetic_live'))).toMatchObject({ primary_info: { view_count: { is_live: true, original_view_count: 9 } } });
         } finally { await owner.dispose(); }
     });
 
-    for (const scenario of ['failed search', 'missing search', 'missing live tab', 'malformed channel', 'malformed live tab', 'malformed search'] as const) {
-        it(`does not declare complete empty discovery after ${scenario}`, async () => {
+    for (const scenario of ['failed search', 'missing search', 'missing live tab', 'malformed live tab', 'malformed search'] as const) {
+        it(`uses authoritative empty membership when available after ${scenario}`, async () => {
             const channel = {
-                videos: scenario === 'malformed channel' ? {} : [],
+                videos: [],
                 ...(scenario === 'missing live tab' ? {} : { getLiveStreams: async () => ({ videos: scenario === 'malformed live tab' ? {} : [] }) })
             };
             const search = scenario === 'missing search' ? undefined : async () => {
@@ -145,12 +246,11 @@ describe('discovery observation quality through real metadata ownership and dete
             };
             const { owner, detection } = setup(channel, search);
             try {
-                expect(await detection.detectLiveStreams(channelId)).toMatchObject({
-                    success: false, observationKind: 'partial', videoIds: [],
-                    qualityReason: scenario.startsWith('malformed') ? 'malformed_collection'
-                        : scenario.startsWith('missing') ? 'missing_capability' : 'acquisition_failed'
-                });
-                expect(detection.getUsageMetrics()).toMatchObject({ successfulRequests: 0, failedRequests: 1 });
+                const incomplete = scenario === 'missing live tab' || scenario === 'malformed live tab';
+                const result = await detection.detectLiveStreams(channelId);
+                expect(result).toMatchObject({ success: !incomplete, observationKind: incomplete ? 'partial' : 'complete', videoIds: [] });
+                expect(result.qualityReason).toBe(incomplete ? (scenario === 'missing live tab' ? 'missing_capability' : 'malformed_collection') : undefined);
+                expect(detection.getUsageMetrics()).toMatchObject({ successfulRequests: incomplete ? 0 : 1, failedRequests: incomplete ? 1 : 0 });
             } finally { await owner.dispose(); }
         });
     }
@@ -188,7 +288,7 @@ describe('discovery observation quality through real metadata ownership and dete
     });
 
     it('does not treat missing IDs in otherwise empty-looking collections as a complete negative', async () => {
-        const { owner, detection } = setup({ videos: [{}], getLiveStreams: async () => ({ videos: [] }) }, async () => ({ videos: [] }));
+        const { owner, detection } = setup({ videos: [{}], getLiveStreams: async () => ({ videos: [{}] }) }, async () => ({ videos: [] }));
         try {
             expect(await detection.detectLiveStreams(channelId)).toMatchObject({
                 success: false, observationKind: 'partial', qualityReason: 'malformed_collection', videoIds: []
@@ -226,7 +326,7 @@ describe('discovery observation quality through real metadata ownership and dete
     });
 
     it('keeps valid positives from a malformed collection but does not call it complete', async () => {
-        const { owner, detection } = setup({ videos: [null, live], getLiveStreams: async () => ({ videos: [live] }) });
+        const { owner, detection } = setup({ videos: [null, live], getLiveStreams: async () => ({ videos: [null, live] }) });
         try {
             expect(await detection.detectLiveStreams(channelId)).toMatchObject({
                 success: true, observationKind: 'partial', qualityReason: 'malformed_collection', videoIds: ['synthetic_live']
@@ -236,10 +336,10 @@ describe('discovery observation quality through real metadata ownership and dete
 
     it('does not turn rejected live IDs into complete empty discovery', async () => {
         const invalid = { id: 'synthetic invalid id', is_live: true };
-        const { owner, detection } = setup({ videos: [invalid], getLiveStreams: async () => ({ videos: [] }) });
+        const { owner, detection } = setup({ videos: [invalid], getLiveStreams: async () => ({ videos: [invalid] }) });
         try {
             expect(await detection.detectLiveStreams(channelId)).toMatchObject({
-                success: false, observationKind: 'partial', qualityReason: 'malformed_collection', videoIds: []
+                success: false, observationKind: 'unavailable', qualityReason: 'malformed_collection', videoIds: []
             });
         } finally { await owner.dispose(); }
     });

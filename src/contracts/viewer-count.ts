@@ -2,6 +2,7 @@ export type ViewerMembershipSnapshot = {
     generation: number;
     videoIds: readonly string[];
     availability: 'unknown' | 'live' | 'offline';
+    discoveryComplete: boolean;
 };
 
 export type ViewerCountObservation =

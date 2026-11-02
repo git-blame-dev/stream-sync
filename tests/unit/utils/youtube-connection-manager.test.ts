@@ -302,10 +302,10 @@ describe('YouTube manager through actual platform and default factory', () => {
     }
   });
 
-  test('empty ID is passed to the external SDK without imposing a new ID policy', async () => {
-    const f = fixture(); expect(await f.connect('')).toBe(true);
-    expect(f.calls).toEqual(['info:', 'chat:', 'start:']);
-    expect(f.manager.getConnectionCount()).toBe(1);
+  test('empty video identity never starts a chat connection', async () => {
+    const f = fixture(); expect(await f.connect('')).toBe(false);
+    expect(f.calls).toEqual(['info:']);
+    expect(f.manager.getConnectionCount()).toBe(0);
     expect(f.manager.isConnectionReady('')).toBe(false);
   });
 

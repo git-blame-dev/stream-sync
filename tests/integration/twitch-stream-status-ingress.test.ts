@@ -93,8 +93,7 @@ test('real Twitch ingress drives offline and online store recovery and retires c
             get: async () => { attempts++; return { data: { data: [{ viewer_count: 17 }] } }; },
             post: async () => ({}), put: async () => ({}), delete: async () => ({})
         } });
-        const provider = new TwitchViewerCountProvider(new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }), null,
-            { channel: 'synthetic-channel' }, null, noOpLogger);
+        const provider = new TwitchViewerCountProvider(new TwitchApiClient(null, {}, noOpLogger, { enhancedHttpClient: http }), { channel: 'synthetic-channel' }, noOpLogger);
         const axios = { get: async () => ({ data: { data: [] } }), post: async () => ({ data: { data: [{ id: 'synthetic-subscription', status: 'enabled' }] } }), delete: async () => ({ data: {} }) };
         const platform = owners.platform = new TwitchPlatform(createTwitchConfigFixture({ enabled: true, clientId: 'synthetic-client' }),
             { logger: noOpLogger, twitchAuth: auth, axios, WebSocketCtor: SyntheticSocket });

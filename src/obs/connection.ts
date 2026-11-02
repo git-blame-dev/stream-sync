@@ -4,7 +4,7 @@ import { ERROR_MESSAGES as DEFAULT_ERROR_MESSAGES } from '../core/constants';
 import { secrets } from '../core/secrets';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { safeSetTimeout } from '../utils/timeout-validator';
-import { withTimeout } from '../utils/timeout-wrapper';
+import { withTimeout, withOperationDeadline } from '../utils/timeout-wrapper';
 import { OBSHealthChecker } from './health-checker';
 import { initializeHandcamGlow } from './handcam-glow';
 
@@ -84,6 +84,8 @@ class OBSConnectionManager {
     private cancelConnectAttempt: (() => void) | null = null;
     private transportRetirement: Promise<void> | null = null;
     private transportInUse = false;
+    private connectedListeners = new Set<() => void>();
+    private requestLifetime = new AbortController();
 
     constructor(dependencies: ConnectionDependencies = {}) {
         this.logger = logger;
@@ -142,6 +144,7 @@ class OBSConnectionManager {
                 code: typeof data?.code === 'number' && Number.isFinite(data.code) ? data.code : undefined
             });
             this._isConnected = false;
+            this.requestLifetime.abort(new Error('OBS connection closed'));
             this.lifecycleState = this.isDisposed
                 ? 'disposed'
                 : (this.isConnecting ? 'connecting' : 'disconnected');
@@ -300,11 +303,16 @@ class OBSConnectionManager {
                 }
                 if (connectionCompleted || !sdkConnected || !identified) return;
                 finishAttempt();
+                this.requestLifetime = new AbortController();
                 this._isConnected = true;
                 this.lifecycleState = 'connected';
                 this.clearReconnectTimer();
                 this.log.info('Successfully connected and authenticated with OBS.', 'obs-connection');
                 resolve(true);
+                for (const listener of this.connectedListeners) {
+                    try { listener(); }
+                    catch (error) { this._handleConnectionError('OBS connected listener failed', error); }
+                }
             };
             
             this.connectionCompleteHandler = () => {
@@ -394,6 +402,7 @@ class OBSConnectionManager {
     }
 
     async disconnect() {
+        this.requestLifetime.abort(new Error('OBS connection closed'));
         this.isIntentionalDisconnect = true;
         this.clearReconnectTimer();
         this.cancelConnectAttempt?.();
@@ -457,7 +466,15 @@ class OBSConnectionManager {
         }
         
         try {
-            const response = await this.obs.call(requestType, requestData);
+            // The SDK can abandon pending responses on disconnect. Retire their
+            // waiters with the connection so output queues can resume after reconnect.
+            const pending = this.obs.call(requestType, requestData);
+            // An SDK call may synchronously close the transport before the
+            // deadline owner admits it; still observe its eventual rejection.
+            void pending.catch(() => {});
+            const response = await withOperationDeadline(() => pending, {
+                parentAbortSignal: this.requestLifetime.signal, operationName: 'OBS request'
+            });
             return response;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -468,6 +485,12 @@ class OBSConnectionManager {
     
     addEventListener(eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) {
         this.obs.on(eventName, handler);
+    }
+
+    onConnected(listener: () => void): () => void {
+        if (this.isDisposed) return () => {};
+        this.connectedListeners.add(listener);
+        return () => { this.connectedListeners.delete(listener); };
     }
     
     removeEventListener(eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) {
@@ -544,6 +567,8 @@ class OBSConnectionManager {
         // synchronous contract while asynchronous close errors are observed.
         void this.disconnect().catch(error => this._handleConnectionError('OBS disposal disconnect failed', error));
         this.sourcesCacheInvalidator = null;
+
+        this.connectedListeners.clear();
 
         for (const [eventName, handler] of this.eventHandlers.entries()) {
             this.obs.off(eventName, handler);

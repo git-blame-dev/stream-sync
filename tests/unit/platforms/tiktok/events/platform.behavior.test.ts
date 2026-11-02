@@ -385,6 +385,40 @@ describe("TikTokPlatform behavior alignment", () => {
   });
 
   describe("connection state and viewer count", () => {
+    it("keeps unknown counts null and retires observations with the connection", async () => {
+      const platform = createPlatform();
+      const listeners: Record<string, (payload: unknown) => void | Promise<void>> = {};
+      const connection = {
+        on: (event: string, handler: (payload: unknown) => void | Promise<void>) => { listeners[event] = handler; },
+        removeAllListeners: () => {},
+        connect: async () => {},
+        disconnect: async () => {},
+      };
+      const payload = { viewerCount: 42, common: { createTime: Date.parse("2025-01-01T00:00:00Z") } };
+      try {
+        expect(platform.getViewerCount()).toBeNull();
+        platform.connection = connection;
+        platform.setupEventListeners();
+        const retiredRoomUser = expectDefined(listeners.roomUser);
+        await retiredRoomUser(payload);
+        expect(platform.getViewerCount()).toBe(42);
+        platform.setupEventListeners();
+        expect(platform.getViewerCount()).toBe(42);
+        platform.cleanupEventListeners();
+        expect(platform.getViewerCount()).toBeNull();
+        platform.connection = { ...connection };
+        platform.setupEventListeners();
+        await retiredRoomUser(payload);
+        expect(platform.getViewerCount()).toBeNull();
+        await expectDefined(listeners.roomUser)({ ...payload, viewerCount: "invalid" });
+        expect(platform.getViewerCount()).toBeNull();
+        await expectDefined(listeners.roomUser)({ ...payload, viewerCount: 0 });
+        expect(platform.getViewerCount()).toBe(0);
+        await platform.cleanup();
+        expect(platform.getViewerCount()).toBeNull();
+      } finally { await platform.cleanup(); }
+    });
+
     it("caches viewer count and emits viewer-count event", async () => {
       const events: Array<{ type: string; platform: string; data: PlatformEventPayload }> = [];
       const platform = createPlatform(

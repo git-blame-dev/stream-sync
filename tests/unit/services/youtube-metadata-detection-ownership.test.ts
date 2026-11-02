@@ -18,7 +18,7 @@ describe('YouTube metadata detection ownership', () => {
             const owner = new InnertubeService({
                 createWithTimeout: async () => ({
                     getInfo: async () => ({}),
-                    getChannel: async () => ({ videos: [{ id: 'synthetic_live', is_live: true }] })
+                    getChannel: async () => ({ videos: [{ id: 'synthetic_live', is_live: true, author: { id: channel } }] })
                 })
             }, { logger: noOpLogger });
             const caller = new AbortController();
@@ -67,10 +67,10 @@ describe('YouTube metadata detection ownership', () => {
                     const fetch = options?.fetch as typeof globalThis.fetch;
                     const read = async (step: string) => (await fetch(`https://metadata.example.test/${step}`)).text();
                     return {
-                        getInfo: async () => ({ basic_info: { is_live: true, view_count: 3 } }),
+                        getInfo: async (id: string) => ({ page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 3 } } }),
                         getChannel: async () => {
                             await read('channel');
-                            return { videos: stage === 'live' ? [{ id: 'synthetic_live', is_live: true }] : [], getLiveStreams: async () => {
+                            return { videos: stage === 'live' ? [{ id: 'synthetic_live', is_live: true, author: { id: channel } }] : [], getLiveStreams: async () => {
                                 if (stage === 'search') throw new Error('synthetic parser failure');
                                 await read('live');
                                 return { videos: [] };
@@ -131,7 +131,7 @@ describe('YouTube metadata detection ownership', () => {
                 started();
                 await gate;
                 return {
-                    getInfo: async () => ({ basic_info: { is_live: true, view_count: 9 } }),
+                    getInfo: async (id: string) => ({ page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 9 } } }),
                     getChannel: async () => ({ videos: [] })
                 };
             } }
@@ -142,7 +142,7 @@ describe('YouTube metadata detection ownership', () => {
         await detection.cleanup();
         expect(await pending).toMatchObject({ success: false });
         release();
-        expect(await deps.viewerExtractionService.extractViewerCount('synthetic_viewer')).toMatchObject({ success: true, count: 9 });
+        expect(await deps.viewerExtractionService.extractViewerCount('test0000001')).toMatchObject({ success: true, count: 9 });
         expect(creations).toBe(1);
         expect(detection.isActive()).toBe(false);
         expect(await detection.detectLiveStreams(channel)).toMatchObject({ success: false });
@@ -227,8 +227,8 @@ describe('YouTube metadata detection ownership', () => {
                     expect(typeof options?.fetch).toBe('function');
                     expect(options?.retrieve_player).toBe(false);
                     return {
-                        getInfo: async () => ({ basic_info: { is_live: true, view_count: 18 } }),
-                        getChannel: async () => ({ videos: [{ id: 'synthetic_live', is_live: true }] })
+                        getInfo: async (id: string) => ({ page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 18 } } }),
+                        getChannel: async () => ({ videos: [{ id: 'synthetic_live', is_live: true, author: { id: channel } }] })
                     };
                 } };
             }
@@ -241,7 +241,7 @@ describe('YouTube metadata detection ownership', () => {
         const cancellation = new AbortController();
         const cancelled = detection.detectLiveStreams(channel, { signal: cancellation.signal });
         const healthy = detection.detectLiveStreams(channel);
-        const viewer = deps.viewerExtractionService.extractViewerCount('synthetic_live');
+        const viewer = deps.viewerExtractionService.extractViewerCount('test0000001');
         cancellation.abort(new Error('cancel only waiter A'));
         release();
         expect(await cancelled).toMatchObject({ success: false });

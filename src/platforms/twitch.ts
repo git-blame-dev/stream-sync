@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
-import { ConnectionStateFactory } from '../utils/platform-connection-state';
 import { createTwitchEventFactory } from './twitch/events/event-factory';
 import { normalizeTimestampValue } from './twitch/events/event-normalizer';
 import { createTwitchEventSubWiring } from './twitch/connections/wiring';
@@ -102,9 +101,7 @@ type TwitchApiClientLike = {
 type TwitchApiClientConstructor = new (twitchAuth: TwitchAuthLike, config: TwitchConfig) => TwitchApiClientLike;
 
 type ViewerCountProviderLike = {
-    startPolling?: () => void;
-    stopPolling?: () => void;
-    getViewerCount: () => Promise<number>;
+    getViewerCount: () => Promise<number | null>;
 };
 
 type RawPlatformDataLoggingServiceLike = {
@@ -466,9 +463,8 @@ class TwitchPlatform extends EventEmitter {
             this.apiClient = new TwitchApiClientClass(this.twitchAuth, this.config);
             this.viewerCountProvider = ViewerCountProviderFactory.createTwitchProvider(
                 this.apiClient,
-                ConnectionStateFactory,
                 this.config,
-                () => this.eventSub
+                this.logger
             ) as unknown as ViewerCountProviderLike;
 
             const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel || '');
@@ -1300,7 +1296,6 @@ class TwitchPlatform extends EventEmitter {
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
-        this.initializeViewerCountProvider();
         this.logger.info('Stream online', 'twitch');
     }
 
@@ -1323,13 +1318,6 @@ class TwitchPlatform extends EventEmitter {
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
-        if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
-            try {
-                this.viewerCountProvider.stopPolling();
-            } catch (error) {
-                this.errorHandler.handleCleanupError(error, 'twitch viewer count stop');
-            }
-        }
         this.logger.info('Stream offline', 'twitch');
     }
 
@@ -1388,13 +1376,7 @@ class TwitchPlatform extends EventEmitter {
                 }
             }
             if (cleanupGeneration !== this.initializationGeneration) return;
-            if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
-                try {
-                    this.viewerCountProvider.stopPolling();
-                } catch (error) {
-                    this.errorHandler.handleCleanupError(error, 'twitch viewer count stop');
-                }
-            }
+
             this.avatarUrlCache.clear();
             this.avatarLookupMissCache.clear();
             this.broadcasterId = '';
@@ -1526,26 +1508,16 @@ class TwitchPlatform extends EventEmitter {
         return this.getStatus();
     }
 
-    initializeViewerCountProvider(): void {
-        if (this.viewerCountProvider && this.config.enabled) {
-            if (typeof this.viewerCountProvider.startPolling === 'function') {
-                this.viewerCountProvider.startPolling();
-            } else {
-                this.logger.debug('Viewer count provider missing startPolling(), skipping start', 'twitch');
-            }
-        }
-    }
-
-    async getViewerCount(): Promise<number> {
+    async getViewerCount(): Promise<number | null> {
         if (!this.viewerCountProvider) {
-            return 0;
+            return null;
         }
 
         try {
             return await this.viewerCountProvider.getViewerCount();
         } catch (error) {
             this._logPlatformError('Error getting viewer count', error, 'viewer-count');
-            return 0;
+            return null;
         }
     }
 

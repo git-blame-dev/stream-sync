@@ -119,7 +119,7 @@ test('real chat threshold retires held platform acquisition before the graceful 
         runtime.viewerCountSystem.startPolling();
         runtime.viewerCountSystem.startPlatformPolling('tiktok');
         expect(runtime.viewerCountSystem.isPolling).toBe(true);
-        expect(runtime.viewerCountSystem.pollingHandles.tiktok).toBeDefined();
+        expect(runtime.viewerCountSystem.pollingHandles.tiktok).toBeUndefined();
         expect(fixture.client.isConnecting).toBe(true);
         expect(fixture.lifecycle.backgroundPlatformInits).toHaveLength(1);
         expect(graceful.getProcessedMessageCount()).toBe(0);

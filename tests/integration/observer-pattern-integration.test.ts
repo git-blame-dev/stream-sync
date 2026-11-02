@@ -346,7 +346,7 @@ describe("Observer Pattern Integration", () => {
         obsManager,
         createViewerCountLogger(),
         {
-          config: createObsConfigFixture(),
+          config: { youtube: { viewerCountEnabled: true, viewerCountSource: "test-viewer-count-source" } },
           getViewerCountSnapshot: platform => viewerCountSystem.getViewerCountSnapshot(platform),
         },
       );
@@ -354,7 +354,10 @@ describe("Observer Pattern Integration", () => {
       viewerCountSystem.addObserver(obsObserver);
       await viewerCountSystem.initializeObservers();
 
-      expect(socket.call.mock.calls.filter(call => call[0] === "SetInputSettings")).toHaveLength(0);
+      expect(socket.call.mock.calls.filter(call => call[0] === "SetInputSettings")).toEqual([
+        ["SetInputSettings", { inputName: "test-viewer-count-source", inputSettings: { text: "—" }, overlay: true }],
+      ]);
+      socket.call.mockClear();
       viewerCountSystem.removeObserver(obsObserver.getObserverId());
       await viewerCountSystem.updateViewerCount("youtube", 42);
       viewerCountSystem.addObserver(obsObserver);

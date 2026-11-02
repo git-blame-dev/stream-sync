@@ -466,15 +466,15 @@ describe("TwitchPlatform behavior standards", () => {
     expect(firstCall).toBe(payload);
   });
 
-  it("returns zero when viewer count provider is missing", async () => {
+  it("returns unavailable when viewer count provider is missing", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("returns zero when viewer count provider throws", async () => {
+  it("returns unavailable when viewer count provider throws", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     platform.viewerCountProvider = {
       getViewerCount: async () => {
@@ -484,6 +484,6 @@ describe("TwitchPlatform behavior standards", () => {
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 });

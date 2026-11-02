@@ -79,36 +79,9 @@ const createPlatform = () =>
     },
   );
 
-describe("YouTube stream status + viewer count event bus (integration)", () => {
+describe("YouTube stream status event bus (integration)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  test("emits viewer-count events through lifecycle handlers", async () => {
-    const eventBus = createEventBus();
-    const lifecycle = new PlatformLifecycleService({
-      config: { youtube: { enabled: true, username: "test-channel" } },
-      eventBus,
-      logger: noOpLogger,
-    });
-    const platform = createPlatform();
-    platform.handlers = lifecycle.createDefaultEventHandlers("youtube");
-
-    const eventPromise = waitForPlatformEvent(eventBus);
-
-    try {
-      platform.updateViewerCountForStream("test-stream-1", 123);
-
-      const event = await eventPromise;
-
-      expect(event.type).toBe(PlatformEvents.VIEWER_COUNT);
-      expect(event.platform).toBe("youtube");
-      expect(event.data.count).toBe(123);
-      expect(event.data.streamId).toBe("test-stream-1");
-      expect(Number.isNaN(Date.parse(event.data.timestamp))).toBe(false);
-    } finally {
-      lifecycle.dispose();
-    }
   });
 
   test("emits stream-status events through lifecycle handlers", async () => {

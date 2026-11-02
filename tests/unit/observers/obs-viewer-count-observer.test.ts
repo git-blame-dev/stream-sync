@@ -278,8 +278,6 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
         { isLive: false, wasLive: true },
       ];
 
-      let obsCallCount = 0;
-
       for (const transition of transitions) {
         await observer.onStreamStatusChange({
           platform: "twitch",
@@ -287,42 +285,20 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
           timestamp: new Date(),
         });
 
-        if (!transition.isLive && transition.wasLive) {
-          obsCallCount++;
-        }
       }
 
-      expect(obsManager.call).toHaveBeenCalledTimes(obsCallCount);
+      expect(obsManager.call).not.toHaveBeenCalled();
     });
 
-    test("should maintain state consistency during status changes", async () => {
-      const scenarios = [
-        { isLive: true, wasLive: false, shouldReset: false },
-        { isLive: false, wasLive: true, shouldReset: true },
-        { isLive: false, wasLive: false, shouldReset: false },
-        { isLive: true, wasLive: true, shouldReset: false },
-      ];
-
-      for (const scenario of scenarios) {
+    test("publishes confirmed offline zero for every platform", async () => {
+      for (const platform of defaultPlatforms) {
         obsManager.call.mockClear();
-
-        await observer.onStreamStatusChange({
-          platform: "tiktok",
-          isLive: scenario.isLive,
-          wasLive: scenario.wasLive,
-          timestamp: new Date(),
+        await observer.onViewerCountUpdate({
+          platform, count: 0, isStreamLive: false, observationKind: 'complete'
         });
-
-        if (scenario.shouldReset) {
-          expect(obsManager.call.mock.calls).toContainEqual([
-            "SetInputSettings",
-            expect.objectContaining({
-              inputSettings: { text: "0" },
-            }),
-          ]);
-        } else {
-          expect(obsManager.call).not.toHaveBeenCalled();
-        }
+        expect(obsManager.call.mock.calls).toEqual([['SetInputSettings', {
+          inputName: `${platform} viewer count`, inputSettings: { text: '0' }, overlay: true
+        }]]);
       }
     });
   });

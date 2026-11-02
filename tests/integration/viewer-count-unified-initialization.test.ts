@@ -2,7 +2,7 @@ import { vi, type Mock, describe, test, afterEach, expect } from 'bun:test';
 
 
 import { noOpLogger } from "../helpers/mock-factories";
-import { TikTokViewerCountProvider } from "../../src/utils/viewer-count-providers";
+import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
 
@@ -19,12 +19,10 @@ type PlatformProviderAdapter = {
 
 const createConcretePlatformAdapter = (initialViewerCount: number): PlatformProviderAdapter => {
   let streamResponse: () => Promise<number> = async () => initialViewerCount;
-  const provider = new TikTokViewerCountProvider(
-    {
-      connection: { isConnected: true },
-      getViewerCount: () => streamResponse(),
-    },
-    { logger: noOpLogger },
+  const provider = new TwitchViewerCountProvider(
+    { getStreamInfo: async () => ({ isLive: true, viewerCount: await streamResponse() }) },
+    { channel: "synthetic-channel" },
+    noOpLogger,
   );
   const getViewerCount = vi.fn<(...args: []) => Promise<number | null>>(() =>
     provider.getViewerCount(),
@@ -251,7 +249,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.pollPlatform("tiktok");
       expect(platforms.tiktok.getViewerCount).toHaveBeenCalledTimes(1);
       expect(system.getViewerCountSnapshot("tiktok")).toMatchObject({
-        count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+        count: 0, hasCompleteObservation: false, latestOutcome: "unavailable",
       });
 
       const recoveryStability = validateSystemStability(system);
@@ -273,7 +271,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.pollPlatform("youtube");
       expect(platforms.youtube.getViewerCount).toHaveBeenCalledTimes(1);
       expect(system.getViewerCountSnapshot("youtube")).toMatchObject({
-        count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+        count: 0, hasCompleteObservation: false, latestOutcome: "unavailable",
       });
 
       platforms.youtube.setStreamResponse(async () => 250);
@@ -312,7 +310,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       for (const [name, platform] of Object.entries(platforms)) {
         expect(platform.getViewerCount).toHaveBeenCalledTimes(1);
         expect(system.getViewerCountSnapshot(name)).toMatchObject({
-          count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+          count: 0, hasCompleteObservation: false, latestOutcome: "unavailable",
         });
       }
 

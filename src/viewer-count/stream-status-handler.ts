@@ -13,7 +13,7 @@ type WireStreamStatusHandlersOptions = {
         subscribe?: (eventName: string, handler: (event?: unknown) => Promise<void>) => unknown;
     } | null;
     viewerCountSystem?: {
-        updateStreamStatus?: (platform: string, isLive: boolean) => Promise<unknown>;
+        updateStreamStatus?: (platform: string, isLive: boolean, options?: { countUnavailable?: boolean }) => Promise<unknown>;
     } | null;
     logger?: Partial<Pick<AppLogger<string>, 'warn'>> | null;
     isViewerCountEnabled?: ((platform: string) => boolean) | null;
@@ -45,7 +45,7 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
         return true;
     };
 
-    const safeUpdate = async (platform: string, isLive: boolean) => {
+    const safeUpdate = async (platform: string, isLive: boolean, countUnavailable: boolean) => {
         if (!platform || typeof viewerCountSystem.updateStreamStatus !== 'function') {
             return;
         }
@@ -55,7 +55,8 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
         }
 
         try {
-            await viewerCountSystem.updateStreamStatus(platform, isLive);
+            if (countUnavailable) await viewerCountSystem.updateStreamStatus(platform, isLive, { countUnavailable: true });
+            else await viewerCountSystem.updateStreamStatus(platform, isLive);
         } catch (error) {
             logger?.warn?.(`[ViewerCount] Failed to update ${platform} stream status: ${getErrorMessage(error)}`, 'stream-status-handler');
         }
@@ -72,14 +73,14 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
             if (!streamEvent.data || typeof streamEvent.data !== 'object') {
                 return;
             }
-            const data = streamEvent.data as { isLive?: unknown };
+            const data = streamEvent.data as { isLive?: unknown; status?: unknown };
             if (typeof data.isLive !== 'boolean') {
                 return;
             }
             if (typeof streamEvent.platform !== 'string' || streamEvent.platform.length === 0) {
                 return;
             }
-            await safeUpdate(streamEvent.platform, data.isLive);
+            await safeUpdate(streamEvent.platform, data.isLive, data.status === 'unavailable');
         });
 
     if (typeof unsubscribe === 'function') {

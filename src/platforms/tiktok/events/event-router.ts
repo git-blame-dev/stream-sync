@@ -121,7 +121,7 @@ type TikTokPlatformRouterContract = {
     handleTikTokShare: (data: TikTokRawEvent) => Promise<void>;
     handleTikTokSocial: (data: TikTokRawEvent) => Promise<void>;
     connectionActive: boolean;
-    cachedViewerCount: number;
+    cachedViewerCount: number | null;
     connectionTime: number;
     _getTimestamp: (data: TikTokRawEvent) => string | null;
     _getPlatformMessageId: (data: TikTokRawEvent) => string | null;
