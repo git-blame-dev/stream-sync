@@ -23,6 +23,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     let discoveryPartial = false;
     const failures = new Set<string>();
     const chatFailures = new Set<string>();
+    const playbackUnavailable = new Set<string>();
     const infoOverrides = new Map<string, Record<string, unknown>>();
     const infoErrors = new Map<string, Error>();
     const chats = new Map<string, EventEmitter>();
@@ -36,12 +37,14 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
         },
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
+            const basic = infoOverrides.get(id) ?? { id, is_live: true, is_live_content: true };
             await heldInfo?.(id);
             if (infoErrors.has(id)) throw infoErrors.get(id)!;
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');
             return {
                 page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
-                basic_info: infoOverrides.get(id) ?? { id, is_live: true, is_live_content: true },
+                basic_info: basic,
+                playability_status: { status: playbackUnavailable.has(id) ? 'UNPLAYABLE' : 'OK' },
                 primary_info: { view_count: { is_live: true, original_view_count: counts.get(id) } },
                 getLiveChat: () => {
                     membershipAtChat.set(id, platform.getDetectedStreamIds());
@@ -83,7 +86,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
         if (event.type === PlatformEvents.STREAM_STATUS) statuses.push(event.data.isLive);
         if (event.type === PlatformEvents.STREAM_DETECTED) detected.push(event.data.newStreamIds);
     });
-    return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, infoOverrides, infoErrors,
+    return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, playbackUnavailable, infoOverrides, infoErrors,
         setPartial(partial: boolean) { discoveryPartial = partial; now += 2; },
         setDiscovery(ids: string[]) { discovered = ids; now += 2; },
         failDiscovery() { discoveryUnavailable = true; now += 2; },
@@ -95,26 +98,119 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
-    it('never publishes an initial partial membership as a complete count and fences completeness transitions', async () => {
+    it('counts verified observed broadcasts without exhausting archive pagination or waiting for chat', async () => {
         const f = fixture();
         try {
             f.setPartial(true);
-            await f.platform.getLiveVideoIds();
+            f.chatFailures.add(b);
+            await f.platform.checkMultiStream();
             const partial = f.platform.getViewerMembershipSnapshot();
             expect(partial).toMatchObject({ videoIds: [a, b], availability: 'live', discoveryComplete: false });
             await f.store.pollPlatform('youtube');
-            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ hasCompleteObservation: false, latestOutcome: 'unavailable' });
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, latestOutcome: 'complete' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '30' });
             f.setPartial(false);
             await f.platform.getLiveVideoIds();
-            const complete = f.platform.getViewerMembershipSnapshot();
-            expect(complete.discoveryComplete).toBe(true);
-            expect(complete.generation).toBeGreaterThan(partial.generation);
+            expect(f.platform.getViewerMembershipSnapshot()).toMatchObject({ generation: partial.generation, discoveryComplete: true });
+            f.failures.add(b);
             await f.store.pollPlatform('youtube');
-            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, latestOutcome: 'complete' });
-            f.setPartial(true);
-            await f.platform.getLiveVideoIds();
-            expect(f.platform.getViewerMembershipGeneration()).toBeGreaterThan(complete.generation);
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, latestOutcome: 'unavailable' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
         } finally { await f.close(); }
+    });
+
+    it('verifies discovery cards before admission and retires a confirmed end even while its card remains live', async () => {
+        const f = fixture();
+        try {
+            f.infoOverrides.set(b, { id: b, is_live: false, end_timestamp: new Date(epoch - 1) });
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getDetectedStreamIds()).toEqual([a]);
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '10' });
+            f.infoOverrides.delete(b);
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
+            f.infoOverrides.set(a, { id: a, is_live: false, end_timestamp: new Date(epoch - 1) });
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getDetectedStreamIds()).toEqual([b]);
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '20' });
+        } finally { await f.close(); }
+    });
+
+    it('keeps the verified registry count fresh when discovery fails and never turns an unverified candidate into offline zero', async () => {
+        const f = fixture();
+        try {
+            f.setDiscovery([a]);
+            f.failures.add(a);
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getViewerMembershipSnapshot()).toMatchObject({ videoIds: [], availability: 'unknown' });
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '—' });
+            f.failures.delete(a);
+            await f.platform.getLiveVideoIds();
+            f.failDiscovery();
+            await f.platform.getLiveVideoIds();
+            f.counts.set(a, 7);
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '7' });
+        } finally { await f.close(); }
+    });
+
+    it('counts live metadata while playback restrictions prevent every chat connection', async () => {
+        const f = fixture();
+        try {
+            f.setPartial(true);
+            f.playbackUnavailable.add(a);
+            f.playbackUnavailable.add(b);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([]);
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '30' });
+            f.infoOverrides.set(a, { id: a, is_live: false, end_timestamp: new Date(epoch - 1) });
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getDetectedStreamIds()).toEqual([b]);
+            await f.store.pollPlatform('youtube');
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '20' });
+        } finally { await f.close(); }
+    });
+
+    it('bounds verification to three requests while refilling a freed slot and preserving registry order', async () => {
+        const f = fixture();
+        const ids = [a, b, 'synthetic_C', 'synthetic_D'];
+        const gates = new Map(ids.map(id => [id, Promise.withResolvers<void>()]));
+        const three = Promise.withResolvers<void>();
+        const four = Promise.withResolvers<void>();
+        const entered: string[] = [];
+        let active = 0;
+        let peak = 0;
+        let pending: Promise<string[]> | undefined;
+        try {
+            f.setDiscovery(ids);
+            f.holdInfo(async id => {
+                entered.push(id);
+                active++;
+                peak = Math.max(peak, active);
+                if (entered.length === 3) three.resolve();
+                if (entered.length === 4) four.resolve();
+                await gates.get(id)?.promise;
+                active--;
+            });
+            pending = f.platform.getLiveVideoIds();
+            await three.promise;
+            expect(entered).toEqual(ids.slice(0, 3));
+            gates.get(a)!.resolve();
+            await four.promise;
+            expect(entered).toEqual(ids);
+            expect(peak).toBe(3);
+            for (const gate of gates.values()) gate.resolve();
+            expect(await pending).toEqual(ids);
+        } finally {
+            for (const gate of gates.values()) gate.resolve();
+            await pending;
+            await f.close();
+        }
     });
 
     it('logs confirmed offline once and keeps repeated offline checks and one live stream below capacity healthy', async () => {
@@ -154,6 +250,16 @@ describe('authoritative membership through real platform, metadata, provider, st
             await f.platform.checkMultiStream();
             expect(f.platform.connectionManager.isConnectionReady(a)).toBe(true);
             expect(f.platform.getViewerMembershipSnapshot().availability).toBe('live');
+        } finally { await f.close(); }
+    });
+
+    it('reports the bounded discovery reason and known-stream count without identities', async () => {
+        const f = fixture();
+        try {
+            f.setPartial(true);
+            await f.platform.getLiveVideoIds();
+            const warning = f.logger.entries.find(entry => entry.level === 'warn' && entry.message.includes('discovery'));
+            expect(warning?.data).toEqual({ observationKind: 'partial', reason: 'pagination_incomplete', detectedStreams: 2 });
         } finally { await f.close(); }
     });
 
@@ -502,15 +608,13 @@ describe('authoritative membership through real platform, metadata, provider, st
         } finally { await f.close(); }
     });
 
-    it('retains membership without a borrowed confirmation capability', async () => {
+    it('does not admit candidates without an owned verification capability', async () => {
         const f = fixture();
         const detector = new YouTubeStreamDetectionService(f.owner, { logger: noOpLogger });
         const platform = new YouTubePlatform({ username: channelId }, { logger: noOpLogger, streamDetectionService: detector });
         try {
             await platform.getLiveVideoIds();
-            f.setDiscovery([]);
-            await platform.getLiveVideoIds();
-            expect(platform.getDetectedStreamIds()).toEqual([a, b]);
+            expect(platform.getViewerMembershipSnapshot()).toMatchObject({ videoIds: [], availability: 'unknown' });
         } finally { await platform.cleanup(); await f.close(); }
     });
 
@@ -562,10 +666,12 @@ describe('authoritative membership through real platform, metadata, provider, st
             await f.platform.checkMultiStream();
             f.setDiscovery([a]);
             f.infoOverrides.set(b, { id: b, is_live: false, end_timestamp: new Date(epoch - 1000) });
-            f.holdInfo(async id => { if (id === b) { entered(); await gate; } });
+            let held = false;
+            f.holdInfo(async id => { if (id === b && !held) { held = true; entered(); await gate; } });
             const pending = f.platform.getLiveVideoIds();
             await started;
             f.setDiscovery([a, b]);
+            f.infoOverrides.delete(b);
             await f.platform.getLiveVideoIds();
             release();
             await pending;

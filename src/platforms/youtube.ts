@@ -2,7 +2,7 @@ import type { AppLogger } from '../core/logger/types';
 import { EventEmitter } from 'node:events';
 import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 import type { InnertubeService } from '../services/innertube-service';
-import { isYouTubeVideoId } from '../services/youtube-live-stream-service';
+import { isYouTubeVideoId, type DiscoveryQualityReason } from '../services/youtube-live-stream-service';
 
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
@@ -14,6 +14,7 @@ import { validateYouTubePlatformDependencies } from '../utils/dependency-validat
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
 import { ensureLogDirectorySync } from '../utils/log-directory';
+import { mapConcurrent } from '../utils/map-concurrent';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
 import { getFallbackUsername } from '../utils/validation';
@@ -94,6 +95,7 @@ type StreamDetectionServiceLike = {
   detectLiveStreams: (channelHandle: unknown, options?: { signal?: AbortSignal }) => Promise<{
     success?: boolean;
     observationKind?: 'complete' | 'partial' | 'unavailable';
+    qualityReason?: DiscoveryQualityReason;
     videoIds?: unknown;
     detectionMethod?: string | null;
     error?: string;
@@ -569,8 +571,11 @@ class YouTubePlatform extends EventEmitter {
 
     private setMembership(videoIds: string[], availability: ViewerMembershipSnapshot['availability'], discoveryComplete: boolean): void {
         const previous = this.membership;
-        if (previous.discoveryComplete === discoveryComplete && previous.availability === availability && videoIds.length === previous.videoIds.length
-            && videoIds.every(id => previous.videoIds.includes(id))) return;
+        if (previous.availability === availability && videoIds.length === previous.videoIds.length
+            && videoIds.every(id => previous.videoIds.includes(id))) {
+            this.membership = { ...previous, discoveryComplete };
+            return;
+        }
         this.membership = { generation: previous.generation + 1, videoIds: [...videoIds], availability, discoveryComplete };
         if (availability === 'offline') {
             this.logger.info('YouTube offline; monitoring for next stream', 'youtube');
@@ -665,65 +670,74 @@ class YouTubePlatform extends EventEmitter {
         if (!isCurrent()) return [];
         const positives = Array.isArray(result.videoIds)
             ? [...new Set(result.videoIds.filter(isYouTubeVideoId))] : [];
-        const complete = result.success === true && result.observationKind === 'complete'
-            && Array.isArray(result.videoIds) && result.videoIds.every(isYouTubeVideoId);
-        this.reportDiscoveryHealth(complete);
         const previousIds = this.getDetectedStreamIds();
-        const added = positives.filter(id => !previousIds.includes(id));
-        const members = [...previousIds, ...added];
-        if (members.length > 0) this.setMembership(members, 'live', complete);
-        else this.setMembership([], complete ? 'offline' : 'unknown', complete);
-        if (!isCurrent()) return [];
+        const verificationSignal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(8000)]);
+        const statuses = await mapConcurrent([...new Set([...positives, ...previousIds])], 3, async videoId => ({
+            videoId, status: await this.confirmStream(videoId, verificationSignal)
+        }));
+        if (!isCurrent()) return this.getDetectedStreamIds();
+        const states = new Map(statuses.map(({ videoId, status }) => [videoId, status]));
+        const verificationUnavailable = positives.some(id => states.get(id) === 'unknown');
+        const complete = result.success === true && result.observationKind === 'complete'
+            && Array.isArray(result.videoIds) && result.videoIds.every(isYouTubeVideoId) && !verificationUnavailable;
+        this.reportDiscoveryHealth(complete, {
+            observationKind: verificationUnavailable && result.observationKind === 'complete' ? 'partial' : result.observationKind ?? 'unavailable',
+            reason: verificationUnavailable ? 'detection_unavailable' : result.qualityReason ??
+                (result.observationKind === 'complete' ? 'invalid_video_ids' : 'detection_unavailable'),
+            detectedStreams: positives.length
+        });
+        const added = positives.filter(id => !previousIds.includes(id) && states.get(id) === 'live');
+        const ended = previousIds.filter(id => states.get(id) === 'ended');
+        const members = [...previousIds.filter(id => !ended.includes(id)), ...added];
+        this.setMembership(members, members.length ? 'live' : complete ? 'offline' : 'unknown', complete);
         if (added.length > 0) this._emitPlatformEvent(PlatformEvents.STREAM_DETECTED, {
             platform: 'youtube', eventType: 'stream-detected', newStreamIds: added,
             allStreamIds: members, detectionTime: this.now(), connectionCount: this.connectionManager.getConnectionCount()
         });
-        if (!isCurrent()) return [];
-        const generation = this.membership.generation;
-        const omitted = previousIds.filter(id => !positives.includes(id));
-        const statuses = await Promise.all(omitted.map(async videoId => ({ videoId,
-            status: await this.confirmStream(videoId, lifetime.signal) })));
-        if (!isCurrent() || generation !== this.membership.generation) return this.getDetectedStreamIds();
-        const ended = statuses.filter(result => result.status === 'ended').map(result => result.videoId);
+        if (!isCurrent()) return this.getDetectedStreamIds();
         const retirements = ended.map(videoId => ({ videoId, attemptId: this.connectionManager.getConnectionStatus(videoId)?.attemptId }));
-        if (ended.length > 0) {
-            const remaining = this.getDetectedStreamIds().filter(id => !ended.includes(id));
-            this.setMembership(remaining, remaining.length ? 'live' : complete ? 'offline' : 'unknown', complete);
-        }
         await Promise.all(retirements.map(({ videoId, attemptId }) => attemptId === undefined ? undefined
             : this.disconnectFromYouTubeStream(videoId, 'confirmed stream end', { expectedAttemptId: attemptId })));
         return isCurrent() ? this.getDetectedStreamIds() : [];
     }
 
-    private async confirmStream(videoId: string, signal: AbortSignal): Promise<'live' | 'ended' | 'unknown'> {
-        if (!this.metadataOwner) return 'unknown';
+    private classifyStreamInfo(videoId: string, info: unknown): 'live' | 'ended' | 'upcoming' | 'unknown' {
+        const basic = toUnknownMap(toUnknownMap(info).basic_info);
+        if (!isYouTubeVideoId(videoId) || basic.id !== videoId) return 'unknown';
+        for (const flag of ['is_live', 'is_upcoming', 'is_live_content', 'is_post_live_dvr']) {
+            if (basic[flag] !== undefined && typeof basic[flag] !== 'boolean') return 'unknown';
+        }
+        const end = basic.end_timestamp;
+        const start = basic.start_timestamp;
+        if (end != null) {
+            if (!(end instanceof Date) || !Number.isFinite(end.getTime()) || end.getTime() > this.now()
+                || basic.is_live === true || basic.is_upcoming === true) return 'unknown';
+            if (start != null && (!(start instanceof Date) || !Number.isFinite(start.getTime()) || start.getTime() > end.getTime())) return 'unknown';
+            return 'ended';
+        }
+        if (basic.is_upcoming === true) return 'upcoming';
+        if (basic.is_live !== true || basic.is_live_content === false || basic.is_post_live_dvr === true
+            || (start != null && (!(start instanceof Date) || !Number.isFinite(start.getTime()) || start.getTime() > this.now()))
+            || (basic.live_status !== undefined && (typeof basic.live_status !== 'string' || basic.live_status.toLowerCase() !== 'live'))) return 'unknown';
+        return 'live';
+    }
+
+    private async confirmStream(videoId: string, signal: AbortSignal): Promise<'live' | 'ended' | 'upcoming' | 'unknown'> {
+        if (!this.metadataOwner || !/^[A-Za-z0-9_-]{11}$/.test(videoId) || signal.aborted) return 'unknown';
         try {
             return await this.metadataOwner.withMetadataOperation({ signal }, async client => {
-                const info = toUnknownMap(await client.getInfo(videoId, { client: 'WEB' }));
+                const info = await client.getInfo(videoId, { client: 'WEB' });
                 signal.throwIfAborted();
-                const playability = toUnknownMap(info.playability_status);
-                if (playability.status !== undefined && playability.status !== 'OK') return 'unknown';
-                const basic = toUnknownMap(info.basic_info);
-                if (basic.id !== videoId) return 'unknown';
-                if ((basic.is_live !== undefined && typeof basic.is_live !== 'boolean')
-                    || (basic.is_upcoming !== undefined && typeof basic.is_upcoming !== 'boolean')) return 'unknown';
-                const end = basic.end_timestamp;
-                const start = basic.start_timestamp;
-                if (end !== null && end !== undefined) {
-                    if (!(end instanceof Date) || !Number.isFinite(end.getTime()) || end.getTime() > this.now()
-                        || basic.is_live === true || basic.is_upcoming === true) return 'unknown';
-                    if (start !== null && start !== undefined && (!(start instanceof Date)
-                        || !Number.isFinite(start.getTime()) || start.getTime() > end.getTime())) return 'unknown';
-                    return 'ended';
-                }
-                return basic.is_live === true ? 'live' : 'unknown';
+                return this.classifyStreamInfo(videoId, info);
             });
         } catch {
             return 'unknown';
         }
     }
 
-    private reportDiscoveryHealth(complete: boolean): void {
+    private reportDiscoveryHealth(complete: boolean, diagnostic: {
+        observationKind: 'complete' | 'partial' | 'unavailable'; reason: DiscoveryQualityReason; detectedStreams: number;
+    }): void {
         if (complete) {
             if (this.lastDiscoveryWarningAt !== null) this.logger.info('YouTube stream discovery recovered', 'youtube');
             this.lastDiscoveryWarningAt = null;
@@ -732,10 +746,10 @@ class YouTubePlatform extends EventEmitter {
         const observedAt = this.monotonicNow();
         const reminderInterval = validateTimeout(this.config.fullCheckInterval, 300000, 'fullCheckInterval');
         if (this.lastDiscoveryWarningAt === null || observedAt - this.lastDiscoveryWarningAt >= reminderInterval) {
-            this.logger.warn('YouTube stream discovery incomplete or unavailable; preserving last known streams', 'youtube');
+            this.logger.warn('YouTube stream discovery incomplete or unavailable; preserving last known streams', 'youtube', diagnostic);
             this.lastDiscoveryWarningAt = observedAt;
         } else {
-            this.logger.debug('YouTube stream discovery remains degraded', 'youtube');
+            this.logger.debug('YouTube stream discovery remains degraded', 'youtube', diagnostic);
         }
     }
 
@@ -1335,23 +1349,18 @@ class YouTubePlatform extends EventEmitter {
         const playabilityStatus = toUnknownMap(infoRecord.playability_status);
         const liveStatus = basicInfo.live_status;
         const isUpcoming = basicInfo.is_upcoming === true;
-        const end = basicInfo.end_timestamp;
-        const start = basicInfo.start_timestamp;
-        const malformedState = (basicInfo.is_live !== undefined && typeof basicInfo.is_live !== 'boolean')
-            || (basicInfo.is_upcoming !== undefined && typeof basicInfo.is_upcoming !== 'boolean');
-        // Parsed SDK live state is authoritative; DVR, HLS and live-content flags
-        // also survive on archived streams and cannot establish current liveness.
-        const isLive = isYouTubeVideoId(videoId) && basicInfo.id === videoId
-            && !malformedState && basicInfo.is_live === true && !isUpcoming
-            && basicInfo.is_live_content !== false && basicInfo.is_post_live_dvr !== true && end == null
-            && (start == null || (start instanceof Date && Number.isFinite(start.getTime()) && start.getTime() <= this.now()))
-            && (playabilityStatus.status === undefined || playabilityStatus.status === 'OK')
-            && (liveStatus === undefined || (typeof liveStatus === 'string' && liveStatus.toLowerCase() === 'live'));
+        // Playback admission is separate from current-broadcast identity/state.
+        const isLive = this.classifyStreamInfo(videoId, info) === 'live'
+            && (playabilityStatus.status === undefined || playabilityStatus.status === 'OK');
         if (isLive) {
             return { shouldConnect: true, isLive, isUpcoming, liveStatus, reason: 'Stream is live' };
         }
         if (isUpcoming) {
             return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Stream is upcoming but not yet live' };
+        }
+        if (basicInfo.is_live === true && playabilityStatus.status !== undefined && playabilityStatus.status !== 'OK') {
+            return { shouldConnect: false, isLive, isUpcoming, liveStatus,
+                reason: 'Video playback is unavailable; live chat connection cannot be validated' };
         }
         return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Video is not live content (replay/VOD)' };
     }

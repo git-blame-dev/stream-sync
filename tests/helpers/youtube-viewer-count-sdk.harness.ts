@@ -53,6 +53,39 @@ const service = new ViewerCountExtractionService(owner, { logger });
 let checks = 0;
 try {
     const channelId = `UC${'q'.repeat(22)}`;
+    const lockup = (videoId: string, ownerId: string) => ({ lockupViewModel: {
+        contentId: videoId, contentType: 'LOCKUP_CONTENT_TYPE_VIDEO',
+        contentImage: { thumbnailViewModel: { image: { sources: [] }, overlays: [{ thumbnailOverlayBadgeViewModel: {
+            thumbnailBadges: [{ thumbnailBadgeViewModel: { text: 'LIVE', badgeStyle: 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE' } }]
+        } }] } },
+        metadata: { lockupMetadataViewModel: {
+            title: { content: 'Synthetic shelf broadcast' },
+            metadata: { contentMetadataViewModel: { metadataRows: [{ metadataParts: [{ text: {
+                content: 'Synthetic channel', commandRuns: [{ startIndex: 0, length: 17,
+                    onTap: { innertubeCommand: { browseEndpoint: { browseId: ownerId } } } }]
+            } }] }] } }
+        } }
+    } });
+    const homeContent = new sdk.YTNodes.SectionList({ contents: [{ itemSectionRenderer: { contents: [
+        { shelfRenderer: { title: { simpleText: 'Shorts' }, content: { horizontalListRenderer: {
+            items: [lockup('test0000008', channelId)]
+        } } } },
+        { shelfRenderer: { title: { simpleText: 'Live now' }, content: { horizontalListRenderer: {
+            visibleItemCount: 4, items: [lockup('test0000004', channelId), lockup('test0000005', `UC${'r'.repeat(22)}`)]
+        } } } }
+    ] } }] });
+    let continuationCalls = 0;
+    const shelfDiscovery = await YouTubeLiveStreamService.getLiveStreams({ getChannel: async () => ({
+        current_tab: { content: homeContent },
+        get videos(): never { throw new Error('flattened homepage must not be read when the Live now shelf exists'); },
+        getLiveStreams: async () => ({ videos: [], has_continuation: true,
+            getContinuation: async () => { continuationCalls++; return { videos: [] }; } })
+    }) }, channelId, { logger });
+    assert.deepEqual(shelfDiscovery.videoIds, ['test0000004']);
+    assert.equal(shelfDiscovery.streams[0]?.title, 'Synthetic shelf broadcast');
+    assert.equal(shelfDiscovery.observationKind, 'partial');
+    assert.equal(shelfDiscovery.qualityReason, 'pagination_incomplete');
+    assert.equal(continuationCalls, 0);
     const upcoming = new sdk.YTNodes.Video({
         videoId: 'test0000003', title: { simpleText: 'Synthetic upcoming stream' },
         thumbnail: { thumbnails: [] }, thumbnailOverlays: [],
@@ -61,6 +94,13 @@ try {
     });
     assert.equal(upcoming.is_live, true, 'native SDK infers live without a duration overlay');
     assert.equal(upcoming.is_upcoming, true);
+    const inferredLive = new sdk.YTNodes.Video({
+        videoId: 'test0000006', title: { simpleText: 'Synthetic current broadcast' },
+        thumbnail: { thumbnails: [] }, thumbnailOverlays: [],
+        ownerText: { runs: [{ text: 'Synthetic channel', navigationEndpoint: { browseEndpoint: { browseId: channelId } } }] }
+    });
+    assert.equal(inferredLive.is_live, true, 'SDK current-live getter needs no explicit overlay');
+    assert.equal(YouTubeLiveStreamService.isVideoLive(inferredLive), true);
     const discovered = await YouTubeLiveStreamService.getLiveStreams({
         getChannel: async () => ({ videos: [upcoming], getLiveStreams: async () => ({ videos: [upcoming] }) })
     }, channelId, { logger });

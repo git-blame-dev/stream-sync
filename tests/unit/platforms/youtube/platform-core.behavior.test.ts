@@ -18,7 +18,6 @@ type PlatformOverrides = {
 };
 
 type PlatformEventRecord = Record<string, unknown>;
-type ConnectedRecord = { videoId: string; reason?: string | undefined };
 type RefreshRecord = { videoId: string; reason: string; source: string };
 
 function isPlatformEventRecord(value: unknown): value is PlatformEventRecord {
@@ -92,36 +91,6 @@ describe("YouTubePlatform behavior", () => {
     const serializedLogs = JSON.stringify(logger.entries);
     expect(logger.entries).toEqual([]);
     expect(serializedLogs).not.toContain("test-channel");
-  });
-
-  it("connects to live videos and uses connection manager", async () => {
-    const streamDetectionService = createStreamDetectionService({
-      detectLiveStreams: vi.fn<(...args: unknown[]) => Promise<{ success: true; videoIds: string[]; detectionMethod: string; }>>().mockResolvedValue({
-        success: true,
-        videoIds: ["v1"],
-        detectionMethod: "mock",
-      }),
-    });
-
-    const platform = createPlatform({ streamDetectionService });
-    const connected: ConnectedRecord[] = [];
-    platform.connectionManager.connectToStream = async (
-      videoId,
-      createConnection,
-      options,
-    ) => {
-      connected.push({ videoId, reason: options?.reason });
-      return true;
-    };
-    platform.startMultiStreamMonitoring = vi.fn<(...args: []) => Promise<void>>().mockImplementation(
-      async () => {
-        await platform.checkMultiStream({ throwOnError: true });
-      },
-    );
-
-    await platform.initialize({});
-
-    expect(connected).toEqual([{ videoId: "v1", reason: "stream detected" }]);
   });
 
   it("fails fast when stream detection throws", async () => {

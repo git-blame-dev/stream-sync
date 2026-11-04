@@ -10,7 +10,6 @@ import {
 } from './youtube-channel-resolver';
 
 const MAX_CHANNEL_CACHE_ENTRIES = 64;
-const MAX_STREAM_PAGES = 10;
 
 type LoggerLike = Pick<AppLogger<string>, 'error'> & Partial<Pick<AppLogger<string>, 'debug' | 'warn'>>;
 
@@ -67,6 +66,7 @@ type StreamsPage = {
 
 type ChannelLike = {
     videos?: ChannelVideo[];
+    current_tab?: { content?: unknown } | null;
     getLiveStreams?: () => Promise<StreamsPage>;
 };
 
@@ -140,7 +140,6 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
 
         return !!(
             video.is_live
-            || video.is_live_content
             || (video.badges && video.badges.some((badge) =>
                 badge.label === 'LIVE'
                 || badge.text === 'LIVE'
@@ -206,7 +205,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             let observed = channelVideos.observed;
             let qualityReason = channelVideos.qualityReason;
             let parserError = qualityReason === 'parser_error';
-            let authoritativeStreams = false;
+            let recentPageObserved = false;
             detectionMeta.hasContent = channelVideos.hasContent;
 
             if (typeof channel.getLiveStreams === 'function') {
@@ -215,11 +214,13 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                     ? Math.max(1, Math.floor(remainingTimeout / 2))
                     : remainingTimeout;
                 const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
+                const streamIds = new Set(liveStreams.map(stream => stream.videoId));
+                const additionalApiStreams = apiStreams.streams.filter(stream => !streamIds.has(stream.videoId));
+                liveStreams = liveStreams.concat(additionalApiStreams);
                 if (!apiStreams.qualityReason && apiStreams.observed) {
-                    // A complete target streams tab owns membership, including an
-                    // empty result; homepage recommendations cannot extend it.
-                    authoritativeStreams = true;
-                    liveStreams = apiStreams.streams;
+                    // Both bounded sources supply candidates; metadata verification
+                    // decides membership even when a recent page is empty.
+                    recentPageObserved = true;
                     observed = true;
                     qualityReason = undefined;
                     parserError = false;
@@ -228,18 +229,15 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 } else {
                     parserError ||= apiStreams.qualityReason === 'parser_error';
                     observed = observed || apiStreams.observed;
-                    qualityReason ??= apiStreams.qualityReason;
+                    qualityReason = apiStreams.observed ? apiStreams.qualityReason : qualityReason ?? apiStreams.qualityReason;
                     detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
-                    const streamIds = new Set(liveStreams.map((stream) => stream.videoId));
-                    const additionalApiStreams = apiStreams.streams.filter((stream) => !streamIds.has(stream.videoId));
-                    liveStreams = liveStreams.concat(additionalApiStreams);
                     if (additionalApiStreams.length) detectionMeta.detectionMethod = 'channel_api';
                 }
             } else {
                 qualityReason ??= 'missing_capability';
             }
 
-            if (!liveStreams.length && !authoritativeStreams) {
+            if (!liveStreams.length && !recentPageObserved) {
                 const searchOptions: {
                     channelId: string;
                     channelHandle: string;
@@ -346,36 +344,45 @@ static _isChannelNotFoundError(error: unknown): boolean {
     }
 
 static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, channelId: string, normalizedHandle: string, logger?: LoggerLike): VideoObservation {
+        const content = channel.current_tab?.content;
+        // Read only the named shelf, never the memo's flattened recommendations.
+        const node = (value: unknown): Record<string, unknown> | undefined =>
+            value && typeof value === 'object' ? value as Record<string, unknown> : undefined;
+        const sections = node(content);
+        if (sections?.type === 'SectionList' && Array.isArray(sections.contents)) {
+            for (const section of sections.contents) {
+                const itemSection = node(section);
+                if (itemSection?.type !== 'ItemSection' || !Array.isArray(itemSection.contents)) continue;
+                for (const entry of itemSection.contents) {
+                    const shelf = node(entry);
+                    if (shelf?.type !== 'Shelf') continue;
+                    const title = node(shelf.title);
+                    const titleText = typeof title?.text === 'string' ? title.text : title?.toString?.();
+                    if (titleText !== 'Live now') continue;
+                    const list = node(shelf.content);
+                    return this._mapLiveVideos(list?.type === 'HorizontalList' ? list.items : undefined,
+                        logger, 'channel_live_now',
+                        video => this._videoBelongsToChannel(video, channelId, normalizedHandle));
+                }
+            }
+        }
         return this._mapLiveVideos(channel?.videos, logger, 'channel_videos',
             video => this._videoBelongsToChannel(video, channelId, normalizedHandle));
     }
 
 static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<VideoObservation> {
         const result: VideoObservation = { streams: [], hasContent: false, observed: false };
-        const deadline = performance.now() + timeout;
-        const remainingTime = () => Math.max(1, Math.ceil(deadline - performance.now()));
         try {
             if (typeof channel.getLiveStreams !== 'function') {
                 return { ...result, qualityReason: 'missing_capability' };
             }
-            let page = await withTimeout(channel.getLiveStreams(), remainingTime(), 'YouTube getLiveStreams operation');
-            const streams = new Map<string, LiveStreamRecord>();
-            for (let pageIndex = 0; pageIndex < MAX_STREAM_PAGES; pageIndex++) {
-                const observation = this._mapLiveVideos(page?.videos, logger, 'channel_api');
-                for (const stream of observation.streams) streams.set(stream.videoId, stream);
-                result.streams = [...streams.values()];
-                result.observed ||= observation.observed;
-                result.hasContent ||= observation.hasContent;
-                if (observation.qualityReason) result.qualityReason ??= observation.qualityReason;
-                if (page?.has_continuation === false || page?.has_continuation === undefined) return result;
-                if (page.has_continuation !== true || typeof page.getContinuation !== 'function'
-                    || pageIndex + 1 === MAX_STREAM_PAGES || performance.now() >= deadline) {
-                    return { ...result, qualityReason: result.qualityReason ?? 'pagination_incomplete' };
-                }
-                // Leave time to return acquired positives before the enclosing owner deadline.
-                page = await withTimeout(page.getContinuation(), Math.max(1, Math.floor(remainingTime() * 0.9)), 'YouTube streams continuation operation');
-            }
-            return { ...result, qualityReason: result.qualityReason ?? 'pagination_incomplete' };
+            const page = await withTimeout(channel.getLiveStreams(), timeout, 'YouTube getLiveStreams operation');
+            const observation = this._mapLiveVideos(page?.videos, logger, 'channel_api');
+            // The streams tab mixes current broadcasts with the archive. Its
+            // continuation is diagnostic evidence, never more discovery work.
+            return page?.has_continuation !== false && page?.has_continuation !== undefined
+                ? { ...observation, qualityReason: observation.qualityReason ?? 'pagination_incomplete' }
+                : observation;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this._log(logger, 'debug', `[YouTube] channel.getLiveStreams failed: ${errorMessage}`);

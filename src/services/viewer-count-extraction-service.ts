@@ -1,6 +1,7 @@
 import { YouTubeViewerExtractor, type ViewerExtractionResult } from '../extractors/youtube-viewer-extractor';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { validateTimeout } from '../utils/timeout-validator';
+import { mapConcurrent } from '../utils/map-concurrent';
 import type { InnertubeService } from './innertube-service';
 
 type ServiceDependencies = {
@@ -171,24 +172,16 @@ class ViewerCountExtractionService {
     async extractViewerCountsBatch(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse[]> {
         const requested = resolveNonNegativeInteger(options.maxConcurrency, 3);
         const maxConcurrency = requested === 0 ? 3 : Math.min(5, requested);
-        const results = new Array<ExtractionResponse>(videoIds.length);
-        let next = 0;
-        // Refill each available slot without waiting for unrelated slower requests.
-        await Promise.all(Array.from({ length: Math.min(maxConcurrency, videoIds.length) }, async () => {
-            while (next < videoIds.length) {
-                const index = next++;
-                const videoId = videoIds[index]!;
-                try {
-                    results[index] = await this.extractViewerCount(videoId, options);
-                } catch {
-                    results[index] = { success: false, count: 0, videoId, error: EXTRACTION_FAILURE, errorType: 'Promise' };
-                }
+        return mapConcurrent(videoIds, maxConcurrency, async videoId => {
+            try {
+                return await this.extractViewerCount(videoId, options);
+            } catch {
+                return { success: false, count: 0, videoId, error: EXTRACTION_FAILURE, errorType: 'Promise' };
             }
-        }));
-        
-        return results;
+        });
     }
     
+
     async getAggregatedViewerCount(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<{
         success: boolean;
         totalCount: number;

@@ -1,7 +1,9 @@
+/** Verified broadcasts observed by Stream Sync; anonymous discovery may miss others. */
 export type ViewerMembershipSnapshot = {
     generation: number;
     videoIds: readonly string[];
     availability: 'unknown' | 'live' | 'offline';
+    /** Coverage of the bounded discovery sources, separate from count validity. */
     discoveryComplete: boolean;
 };
 

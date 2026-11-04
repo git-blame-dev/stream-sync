@@ -29,7 +29,7 @@ it('complete membership reaches the actual provider and metadata owner', async (
   try {
     await h.platform.getLiveVideoIds();
     expect(await h.platform.getViewerCount()).toBe(321);
-    expect(h.requests).toEqual(['test0000001']);
+    expect(h.requests).toEqual(['test0000001', 'test0000001']);
   } finally { await h.dispose(); }
 });
 
@@ -52,6 +52,6 @@ it('external metadata failure is unavailable and the following actual request re
     expect(await h.platform.getViewerCount()).toBeNull();
     h.fail(false);
     expect(await h.platform.getViewerCount()).toBe(321);
-    expect(h.requests).toEqual(['test0000001', 'test0000001']);
+    expect(h.requests).toEqual(['test0000001', 'test0000001', 'test0000001']);
   } finally { await h.dispose(); }
 });

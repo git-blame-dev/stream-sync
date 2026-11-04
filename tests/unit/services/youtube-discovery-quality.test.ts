@@ -21,17 +21,32 @@ function setup(channel: unknown, search?: () => Promise<unknown>) {
 
 describe('discovery observation quality through real metadata ownership and detection', () => {
     for (const tabIds of [[], ['synthetic_target']]) {
-        it(`reconciles foreign and stale owned homepage entries against complete target tab: ${tabIds.length}`, async () => {
+        it(`unions owned homepage candidates with a closed recent page: ${tabIds.length}`, async () => {
             const { owner, detection } = setup({
                 videos: [{ ...live, id: 'synthetic_foreign', author: { id: `UC${'r'.repeat(22)}` } },
                     { ...live, id: 'synthetic_stale' }],
                 getLiveStreams: async () => ({ videos: tabIds.map(id => ({ ...live, id })) })
             });
             try {
-                expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: tabIds });
+                expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: ['synthetic_stale', ...tabIds] });
             } finally { await owner.dispose(); }
         });
     }
+    for (const tabVideos of [[], [{ ...live, id: 'synthetic_tab' }]]) {
+        it(`retains owned Live now candidates alongside a closed recent page: ${tabVideos.length}`, async () => {
+            const { owner, detection } = setup({
+                videos: [], current_tab: { content: { type: 'SectionList', contents: [{ type: 'ItemSection', contents: [
+                    { type: 'Shelf', title: { text: 'Live now' }, content: { type: 'HorizontalList', items: [live] } }
+                ] }] } },
+                getLiveStreams: async () => ({ videos: tabVideos, has_continuation: false })
+            });
+            try {
+                expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true,
+                    videoIds: ['synthetic_live', ...tabVideos.map(video => video.id)] });
+            } finally { await owner.dispose(); }
+        });
+    }
+
     it('validates homepage ownership while retaining only owned positives on tab failure', async () => {
         const { owner, detection } = setup({ videos: [live, { ...live, id: 'synthetic_foreign', author: { id: `UC${'r'.repeat(22)}` } },
             { id: 'synthetic_unattributed', is_live: true }],
@@ -49,71 +64,93 @@ describe('discovery observation quality through real metadata ownership and dete
         });
     }
 
-    it('traverses continuation pages before declaring complete discovery', async () => {
-        let continuations = 0;
-        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
-            videos: [live], has_continuation: true,
-            getContinuation: async () => { continuations++; return { videos: [{ ...live, id: 'synthetic_next' }], has_continuation: false }; }
-        }) });
+    it('reports streams-tab pagination instead of unrelated malformed homepage cards', async () => {
+        const { owner, detection } = setup({ videos: [null, live],
+            getLiveStreams: async () => ({ videos: [live], has_continuation: true }) });
         try {
-            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'complete', videoIds: ['synthetic_live', 'synthetic_next'] });
-            expect(continuations).toBe(1);
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({
+                success: true, observationKind: 'partial', qualityReason: 'pagination_incomplete', videoIds: ['synthetic_live']
+            });
         } finally { await owner.dispose(); }
     });
 
-    it('bounds endless pagination and retains positives as partial membership', async () => {
-        let pages = 0;
-        const page = { videos: [live], has_continuation: true, getContinuation: async () => { pages++; return page; } };
+    it('never follows an infinite archive even when later pages contain live broadcasts', async () => {
+        let continuations = 0;
+        const page = { videos: [{ ...live, is_live: false }], has_continuation: true,
+            getContinuation: async () => { continuations++; return { ...page, videos: [live] }; } };
         const { owner, detection } = setup({ videos: [], getLiveStreams: async () => page });
         try {
-            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'partial', videoIds: ['synthetic_live'] });
-            expect(pages).toBeGreaterThan(0);
-            expect(pages).toBeLessThan(20);
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({
+                success: false, observationKind: 'partial', qualityReason: 'pagination_incomplete', videoIds: []
+            });
+            expect(continuations).toBe(0);
         } finally { await owner.dispose(); }
     });
 
-    it('uses complete streams-tab membership over contaminated homepage positives', async () => {
-        const { owner, detection } = setup({ videos: [null, { ...live, id: 'synthetic_home' }],
-            getLiveStreams: async () => ({ videos: [live], has_continuation: false }) });
+    it('merges homepage and initial recent-page positives without following continuations', async () => {
+        let continuations = 0;
+        const { owner, detection } = setup({ videos: [{ ...live, id: 'synthetic_home' }], getLiveStreams: async () => ({
+            videos: [live], has_continuation: true,
+            getContinuation: async () => { continuations++; return { videos: [], has_continuation: false }; }
+        }) });
         try {
-            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'complete', videoIds: ['synthetic_live'] });
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({
+                success: true, observationKind: 'partial', qualityReason: 'pagination_incomplete',
+                videoIds: ['synthetic_home', 'synthetic_live']
+            });
+            expect(continuations).toBe(0);
         } finally { await owner.dispose(); }
     });
 
-    it('returns acquired positives before a stalled continuation exceeds the operation budget', async () => {
+    for (const title of [{ text: 'Live now' }, { toString: () => 'Live now' }]) {
+        it(`selects only the structured Live now shelf using ${'text' in title ? 'text' : 'toString'}`, async () => {
+            const foreign = { ...live, id: 'synthetic_foreign', author: { id: `UC${'r'.repeat(22)}` } };
+            const { owner, detection } = setup({
+                videos: [null, { ...live, id: 'synthetic_unrelated' }],
+                current_tab: { content: { type: 'SectionList', contents: [{ type: 'ItemSection', contents: [
+                    { type: 'Shelf', title: { text: 'Shorts' }, content: { type: 'HorizontalList', items: [null] } },
+                    { type: 'Shelf', title, content: { type: 'HorizontalList', items: [live, foreign] } }
+                ] }] } },
+                getLiveStreams: async () => ({ videos: [], has_continuation: true })
+            });
+            try {
+                expect(await detection.detectLiveStreams(channelId)).toMatchObject({
+                    success: true, observationKind: 'partial', qualityReason: 'pagination_incomplete', videoIds: ['synthetic_live']
+                });
+            } finally { await owner.dispose(); }
+        });
+    }
+
+    it('returns homepage positives within the budget when the initial recent-page request stalls', async () => {
         useFakeTimers();
         let entered!: () => void;
         let release!: () => void;
         const started = new Promise<void>(resolve => { entered = resolve; });
         const gate = new Promise<void>(resolve => { release = resolve; });
-        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
-            videos: [live], has_continuation: true,
-            getContinuation: async () => { entered(); await gate; return { videos: [{ ...live, id: 'synthetic_late' }], has_continuation: false }; }
-        }) });
+        const { owner, detection } = setup({ videos: [live], getLiveStreams: async () => {
+            entered(); await gate; return { videos: [] };
+        } });
         try {
             const pending = detection.detectLiveStreams(channelId);
             await started;
-            advanceTimersByTime(2000);
-            expect(await pending).toMatchObject({ success: true, observationKind: 'partial', videoIds: ['synthetic_live'] });
+            advanceTimersByTime(1000);
+            expect(await pending).toMatchObject({ success: true, observationKind: 'partial',
+                qualityReason: 'acquisition_failed', videoIds: ['synthetic_live'] });
         } finally { release(); await owner.dispose(); useRealTimers(); }
     });
 
-    it('keeps earlier pages when a continuation fails', async () => {
-        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({
-            videos: [live], has_continuation: true,
-            getContinuation: async () => { throw new Error('synthetic continuation failure'); }
-        }) });
+    it('retains owned candidates from both sources despite malformed unrelated homepage entries', async () => {
+        const { owner, detection } = setup({ videos: [null, { ...live, id: 'synthetic_home' }],
+            getLiveStreams: async () => ({ videos: [live], has_continuation: false }) });
         try {
-            expect(await detection.detectLiveStreams(channelId)).toMatchObject({
-                success: true, observationKind: 'partial', qualityReason: 'acquisition_failed', videoIds: ['synthetic_live']
-            });
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ observationKind: 'complete', videoIds: ['synthetic_home', 'synthetic_live'] });
         } finally { await owner.dispose(); }
     });
 
-    it('allows a complete empty streams tab to supersede a malformed homepage', async () => {
+    it('preserves an attributed homepage candidate when the closed recent page is empty', async () => {
         const { owner, detection } = setup({ videos: [null, live], getLiveStreams: async () => ({ videos: [], has_continuation: false }) });
         try {
-            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: [] });
+            expect(await detection.detectLiveStreams(channelId)).toMatchObject({ success: true, observationKind: 'complete', videoIds: ['synthetic_live'] });
         } finally { await owner.dispose(); }
     });
 

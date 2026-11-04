@@ -221,9 +221,8 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         const unavailable = (reason: Extract<ViewerCountObservation, { kind: 'unavailable' }>['reason']): ViewerCountObservation =>
             ({ kind: 'unavailable', membershipGeneration, reason });
         if (!membership) return unavailable('capability_missing');
-        if (!membership.discoveryComplete) return unavailable('membership_unknown');
         if (membership.videoIds.length === 0) {
-            if (membership.availability !== 'offline') return unavailable('membership_unknown');
+            if (membership.availability !== 'offline' || !membership.discoveryComplete) return unavailable('membership_unknown');
             this.stats.successfulRequests++;
             this._resetErrorCount();
             return { kind: 'complete', count: 0, membershipGeneration };

@@ -13,7 +13,7 @@ function fixture(streams: Stream[]) {
     const chats = new Map<string, EventEmitter>();
     const owner = new InnertubeService({ createWithTimeout: async () => ({
         getChannel: async () => ({ videos: streams.map(s => ({ id: s.id,
-            ...(s.premiere ? { is_live_content: true } : { is_live: true }) })), getLiveStreams: async () => ({ videos: streams.map(s => ({ id: s.id, ...(s.premiere ? { is_live_content: true } : { is_live: true }) })) }) }),
+            ...(s.premiere ? { is_live_content: true, badges: [{ label: 'LIVE' }] } : { is_live: true }) })), getLiveStreams: async () => ({ videos: streams.map(s => ({ id: s.id, ...(s.premiere ? { is_live_content: true, badges: [{ label: 'LIVE' }] } : { is_live: true }) })) }) }),
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');

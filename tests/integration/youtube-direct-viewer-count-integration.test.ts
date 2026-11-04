@@ -43,13 +43,14 @@ describe('YouTube direct viewer count through detection and metadata extraction'
         const f = fixture();
         try {
             await f.platform.getLiveVideoIds();
+            const baseline = f.requests();
             const results: Array<number | null> = [];
             for (const count of [888, 0, 1234]) {
                 f.setCount(count);
                 results.push(await f.platform.getViewerCount());
             }
             expect(results).toEqual([888, 0, 1234]);
-            expect(f.requests()).toBe(3);
+            expect(f.requests() - baseline).toBe(3);
         } finally { await f.close(); }
     });
 
@@ -57,12 +58,13 @@ describe('YouTube direct viewer count through detection and metadata extraction'
         const f = fixture();
         try {
             await f.platform.getLiveVideoIds();
+            const baseline = f.requests();
             f.setUnavailable(true);
             expect(await f.platform.getViewerCount()).toBeNull();
             f.setUnavailable(false);
             f.setCount(777);
             expect(await f.platform.getViewerCount()).toBe(777);
-            expect(f.requests()).toBe(2);
+            expect(f.requests() - baseline).toBe(2);
         } finally { await f.close(); }
     });
 
@@ -75,17 +77,18 @@ describe('YouTube direct viewer count through detection and metadata extraction'
         const started: Array<Promise<number | null>> = [];
         try {
             await f.platform.getLiveVideoIds();
+            const baseline = f.requests();
             f.setCount(888);
             f.holdMetadata(async () => {
-                if (f.requests() === 3) allEntered();
+                if (f.requests() - baseline === 3) allEntered();
                 await gate;
             });
             started.push(f.platform.getViewerCount(), f.platform.getViewerCount(), f.platform.getViewerCount());
             await withTimeout(entered, 5000, 'three synthetic metadata requests');
-            expect(f.requests()).toBe(3);
+            expect(f.requests() - baseline).toBe(3);
             release();
             expect(await Promise.all(started)).toEqual([888, 888, 888]);
-            expect(f.requests()).toBe(3);
+            expect(f.requests() - baseline).toBe(3);
         } finally {
             release();
             await Promise.allSettled(started);

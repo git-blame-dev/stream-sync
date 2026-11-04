@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 function platform(overrides: Record<string, unknown> = {}, logger = noOpLogger) {
   const metadata = new InnertubeService({ createWithTimeout: async () => ({
-    getInfo: async () => ({}),
+    getInfo: async (id: string) => ({ basic_info: { id, is_live: true } }),
     getChannel: async () => ({ videos: [], getLiveStreams: async () => ({ videos: [] }) }),
   }) }, { logger });
   const detector = new YouTubeStreamDetectionService(metadata, { logger });
@@ -53,12 +53,12 @@ test('forced stream-detection validation rejects absence before constructing a u
     streamDetectionService: null, forceStreamDetectionValidation: true })).toThrow(/stream detection/i);
 });
 test('actual detector and metadata owner discover the synthetic SDK live stream', async () => {
-  const id = 'synthetic-live-video';
+  const id = 'synthetic_A';
   const video = { id, video_id: id, title: { text: 'Synthetic stream' }, is_live: true,
     author: { name: 'Synthetic Channel' } };
   const sdk = {
     resolveURL: async () => ({ payload: { browseId: `UC${'s'.repeat(22)}` } }),
-    getInfo: async () => ({}),
+    getInfo: async (id: string) => ({ basic_info: { id, is_live: true } }),
     getChannel: async () => ({ videos: [], getLiveStreams: async () => ({ videos: [video] }) }),
   };
   const metadata = new InnertubeService({ createWithTimeout: async () => sdk }, { logger: noOpLogger });

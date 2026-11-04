@@ -159,6 +159,13 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(JSON.stringify(warnings)).toContain("parser error; discovery is incomplete");
     });
   });
+  it("rejects historical live content without a current-live signal", () => {
+    expect(YouTubeLiveStreamService.isVideoLive({ is_live_content: true })).toBe(false);
+    expect(YouTubeLiveStreamService.isVideoLive({ is_live: true })).toBe(true);
+    expect(YouTubeLiveStreamService.isVideoLive({ is_live: true, is_upcoming: true })).toBe(false);
+    expect(YouTubeLiveStreamService.isVideoLive({ is_live: true, end_timestamp: "synthetic-ended" })).toBe(false);
+  });
+
   let mockInnertubeClient: MockInnertubeClient;
 
   beforeEach(() => {

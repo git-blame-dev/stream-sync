@@ -79,7 +79,7 @@ describe("YouTubePlatform live validation (modern signals)", () => {
     it(`rejects live metadata with playability ${status}`, () => {
       expect(createPlatform()._validateVideoForConnection('synthetic_A', {
         basic_info: { id: 'synthetic_A', is_live: true }, playability_status: { status }
-      }).shouldConnect).toBe(false);
+      })).toMatchObject({ shouldConnect: false, reason: 'Video playback is unavailable; live chat connection cannot be validated' });
     });
   }
 
