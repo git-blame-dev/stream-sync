@@ -2,6 +2,7 @@ import type { AppLogger } from '../core/logger/types';
 import { EventEmitter } from 'node:events';
 import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 import type { InnertubeService } from '../services/innertube-service';
+import { isChannelId } from '../services/youtube-channel-resolver';
 import { isYouTubeVideoId, type DiscoveryQualityReason } from '../services/youtube-live-stream-service';
 
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
@@ -94,6 +95,7 @@ type StreamDetectionServiceLike = {
   cleanup?: () => void | Promise<void>;
   detectLiveStreams: (channelHandle: unknown, options?: { signal?: AbortSignal }) => Promise<{
     success?: boolean;
+    channelId?: string;
     observationKind?: 'complete' | 'partial' | 'unavailable';
     qualityReason?: DiscoveryQualityReason;
     videoIds?: unknown;
@@ -673,7 +675,7 @@ class YouTubePlatform extends EventEmitter {
         const previousIds = this.getDetectedStreamIds();
         const verificationSignal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(8000)]);
         const statuses = await mapConcurrent([...new Set([...positives, ...previousIds])], 3, async videoId => ({
-            videoId, status: await this.confirmStream(videoId, verificationSignal)
+            videoId, status: await this.confirmStream(videoId, verificationSignal, result.channelId ?? channelHandle, !previousIds.includes(videoId))
         }));
         if (!isCurrent()) return this.getDetectedStreamIds();
         const states = new Map(statuses.map(({ videoId, status }) => [videoId, status]));
@@ -722,12 +724,14 @@ class YouTubePlatform extends EventEmitter {
         return 'live';
     }
 
-    private async confirmStream(videoId: string, signal: AbortSignal): Promise<'live' | 'ended' | 'upcoming' | 'unknown'> {
+    private async confirmStream(videoId: string, signal: AbortSignal, channelId: unknown, requireOwnership: boolean): Promise<'live' | 'ended' | 'upcoming' | 'unknown'> {
         if (!this.metadataOwner || !/^[A-Za-z0-9_-]{11}$/.test(videoId) || signal.aborted) return 'unknown';
         try {
             return await this.metadataOwner.withMetadataOperation({ signal }, async client => {
                 const info = await client.getInfo(videoId, { client: 'WEB' });
                 signal.throwIfAborted();
+                const basic = toUnknownMap(toUnknownMap(info).basic_info);
+                if (requireOwnership && (!isChannelId(channelId) || basic.channel_id !== channelId)) return 'unknown';
                 return this.classifyStreamInfo(videoId, info);
             });
         } catch {

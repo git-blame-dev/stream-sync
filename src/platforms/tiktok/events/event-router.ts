@@ -4,11 +4,13 @@ import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/
 import { getValidMessageParts } from '../../../utils/message-parts';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
 import { parseNotificationCount } from '../../../utils/notification-count';
+import { getSystemTimestampISO } from '../../../utils/timestamp';
 import { extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
     VIEWER_COUNT: 'platform:viewer-count',
+    STREAM_STATUS: 'platform:stream-status',
     ENVELOPE: 'platform:envelope',
     PAYPIGGY: 'platform:paypiggy'
 } as const;
@@ -647,7 +649,15 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
         if (!isCurrentRegistration()) return;
         const data = asTikTokRawEvent(payload);
         const incomingLog = platform._logIncomingEvent('roomUser', data);
+        const markUnavailable = () => {
+            if (!isCurrentRegistration()) return;
+            platform._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
+                platform: 'tiktok', isLive: platform.connectionActive, status: 'unavailable',
+                timestamp: getSystemTimestampISO()
+            });
+        };
         try {
+            if (!isCurrentRegistration()) return;
             const viewerCount = parseNotificationCount(data.viewerCount);
             if (viewerCount === null) {
                 platform.logger.warn('[TikTok Viewer Count] Invalid viewer count in room user payload', 'tiktok', {
@@ -655,6 +665,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined,
                     eventKeys: Object.keys(data).sort()
                 });
+                markUnavailable();
                 return;
             }
 
@@ -666,9 +677,11 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     eventKeys: Object.keys(data).sort(),
                     hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined
                 });
+                markUnavailable();
                 return;
             }
 
+            if (!isCurrentRegistration()) return;
             platform.cachedViewerCount = viewerCount;
             platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
                 platform: 'tiktok',

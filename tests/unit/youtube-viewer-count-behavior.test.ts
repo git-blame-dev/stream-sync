@@ -14,7 +14,7 @@ function fixture() {
     getInfo: async (id: string) => {
     requests.push(id);
     if (failed) throw new Error('Synthetic metadata failure');
-    return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 321 } } };
+    return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, channel_id: `UC${'s'.repeat(22)}`, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 321 } } };
   } }) }, { logger: noOpLogger });
   const platform = new YouTubePlatform({ username: `UC${'s'.repeat(22)}`, enabled: false, enableAPI: false, dataLoggingEnabled: false,
     envFileReadEnabled: false, envFileWriteEnabled: false }, { logger: noOpLogger, innertubeService: owner,

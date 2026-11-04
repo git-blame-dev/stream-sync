@@ -28,7 +28,7 @@ class SyntheticObsSocket extends EventEmitter {
 }
 
 async function realViewerFixture() {
-  let response: unknown = { page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 1500 } } };
+  let response: unknown = { page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", channel_id: `UC${"q".repeat(22)}`, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 1500 } } };
   let requests = 0;
   const metadata = new InnertubeService({ createWithTimeout: async () => ({
     getChannel: async () => ({ videos: [{ id: "test0000001", is_live: true }], getLiveStreams: async () => ({ videos: [{ id: "test0000001", is_live: true }] }) }),
@@ -195,7 +195,7 @@ describe("System Resilience and Error Recovery Integration", () => {
           expect(h.counts).toEqual([1500]);
         }
         expect(h.requests - baseline).toBe(5);
-        h.setResponse({ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 25 } } });
+        h.setResponse({ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", channel_id: `UC${"q".repeat(22)}`, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 25 } } });
         await h.store.pollPlatform("youtube");
         expect(h.counts).toEqual([1500, 25]);
       } finally { await h.close(); }
@@ -374,9 +374,9 @@ describe("System Resilience and Error Recovery Integration", () => {
         const baseline = h.requests;
         for (const [response, expected, outcome] of [
           [new Error("Synthetic first failure"), 0, "unavailable"],
-          [{ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 1500 } } }, 1500, "complete"],
+          [{ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", channel_id: `UC${"q".repeat(22)}`, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 1500 } } }, 1500, "complete"],
           [new Error("Synthetic second failure"), 1500, "unavailable"],
-          [{ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 0 } } }, 0, "complete"],
+          [{ page: [{}, { current_video_endpoint: { payload: { videoId: "test0000001" } } }], basic_info: { id: "test0000001", channel_id: `UC${"q".repeat(22)}`, is_live: true }, primary_info: { view_count: { is_live: true, original_view_count: 0 } } }, 0, "complete"],
         ] as const) {
           h.setResponse(response); await h.store.pollPlatform("youtube");
           expect(h.store.getViewerCountSnapshot("youtube")).toMatchObject({ count: expected, latestOutcome: outcome });

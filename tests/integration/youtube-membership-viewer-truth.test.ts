@@ -15,7 +15,7 @@ const channelId = `UC${'q'.repeat(22)}`;
 const a = 'synthetic_A';
 const b = 'synthetic_B';
 const epoch = 1900000000000;
-function fixture(maxStreams = 2, extractionEnabled = true) {
+function fixture(maxStreams = 2, extractionEnabled = true, username = channelId) {
     const logger = createRecordingLogger();
     let now = epoch;
     let discovered = [a, b];
@@ -35,9 +35,10 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
             if (discoveryUnavailable) throw new Error('synthetic discovery unavailable');
             return { videos: discovered.map(id => ({ id, is_live: true })), getLiveStreams: async () => ({ videos: discovered.map(id => ({ id, is_live: true })), has_continuation: discoveryPartial }) };
         },
+        resolveURL: async () => ({ payload: { browseId: channelId } }),
         search: async () => ({ videos: [] }),
         getInfo: async (id: string) => {
-            const basic = infoOverrides.get(id) ?? { id, is_live: true, is_live_content: true };
+            const basic = infoOverrides.get(id) ?? { id, channel_id: channelId, is_live: true, is_live_content: true };
             await heldInfo?.(id);
             if (infoErrors.has(id)) throw infoErrors.get(id)!;
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');
@@ -62,7 +63,7 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     }) }, { logger: noOpLogger });
     const detector = new YouTubeStreamDetectionService(owner, { logger: noOpLogger });
     const extraction = new ViewerCountExtractionService(owner, { logger: noOpLogger });
-    const platform = new YouTubePlatform({ username: channelId, enabled: true, maxStreams,
+    const platform = new YouTubePlatform({ username, enabled: true, maxStreams,
         fullCheckInterval: 1, streamPollingInterval: 60, dataLoggingEnabled: false,
         envFileReadEnabled: false, envFileWriteEnabled: false }, {
         logger, innertubeService: owner, streamDetectionService: detector,
@@ -98,6 +99,29 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
+    it('admits authorless tab candidates using the resolved channel behind a handle', async () => {
+        const f = fixture(2, true, '@synthetic');
+        try {
+            f.infoOverrides.set(b, { id: b, channel_id: `UC${'r'.repeat(22)}`, is_live: true });
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getDetectedStreamIds()).toEqual([a]);
+            expect(f.platform.getViewerMembershipSnapshot().discoveryComplete).toBe(false);
+        } finally { await f.close(); }
+    });
+
+    for (const metadataChannel of [`UC${'r'.repeat(22)}`, undefined, 'malformed', 12]) {
+        it(`requires candidate metadata ownership before admission: ${String(metadataChannel)}`, async () => {
+            const f = fixture();
+            try {
+                f.infoOverrides.set(b, { id: b, is_live: true, channel_id: metadataChannel });
+                await f.platform.getLiveVideoIds();
+                expect(f.platform.getDetectedStreamIds()).toEqual([a]);
+                await f.store.pollPlatform('youtube');
+                expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '10' });
+            } finally { await f.close(); }
+        });
+    }
+
     it('counts verified observed broadcasts without exhausting archive pagination or waiting for chat', async () => {
         const f = fixture();
         try {

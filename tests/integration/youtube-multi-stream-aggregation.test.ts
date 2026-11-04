@@ -18,7 +18,7 @@ function fixture(streams: Stream[]) {
         getInfo: async (id: string) => {
             if (failures.has(id)) throw new Error('synthetic metadata unavailable');
             const stream = streams.find(s => s.id === id)!;
-            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true, is_live_content: true, view_count: stream.count },
+            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, channel_id: `UC${'q'.repeat(22)}`, is_live: true, is_live_content: true, view_count: stream.count },
                 primary_info: { view_count: { is_live: true, original_view_count: stream.count } },
                 getLiveChat: () => {
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');

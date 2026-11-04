@@ -503,7 +503,9 @@ describe("TikTok event router", () => {
 
     await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 12 });
 
-    expect(emitted).toHaveLength(0);
+    expect(emitted).toEqual([{ type: "platform:stream-status", payload: {
+      platform: "tiktok", isLive: platform.connectionActive, status: "unavailable", timestamp: expect.any(String)
+    } }]);
     expect(platform.cachedViewerCount).toBe(0);
   });
 
@@ -695,20 +697,24 @@ describe("TikTok event router", () => {
     expect(logCall[1]).toBe(payload);
   });
 
-  test.each([null, true, false, {}, [], -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("retains viewer state for invalid count %p", async (viewerCount) => {
+  test.each([undefined, null, "", true, false, {}, [], -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("preserves cached count and publishes unavailable for invalid count %p", async (viewerCount) => {
     const { platform, listeners, emitted } = createPlatformHarness({ cachedViewerCount: 17 });
     setupTikTokEventListeners(platform);
     await listeners.roomUser({ viewerCount });
     expect(platform.cachedViewerCount).toBe(17);
-    expect(emitted).toEqual([]);
+    expect(emitted).toEqual([{ type: "platform:stream-status", payload: {
+      platform: "tiktok", isLive: platform.connectionActive, status: "unavailable", timestamp: expect.any(String)
+    } }]);
   });
 
-  test.each([null, "", " ", "not-a-timestamp"])("retains viewer state for invalid timestamp %p", async (timestamp) => {
+  test.each([null, "", " ", "not-a-timestamp"])("preserves cached count and publishes unavailable for invalid timestamp %p", async (timestamp) => {
     const { platform, listeners, emitted } = createPlatformHarness({ cachedViewerCount: 17, _getTimestamp: () => timestamp });
     setupTikTokEventListeners(platform);
     await listeners.roomUser({ viewerCount: 25 });
     expect(platform.cachedViewerCount).toBe(17);
-    expect(emitted).toEqual([]);
+    expect(emitted).toEqual([{ type: "platform:stream-status", payload: {
+      platform: "tiktok", isLive: platform.connectionActive, status: "unavailable", timestamp: expect.any(String)
+    } }]);
   });
 
   test("accepts a measured zero", async () => {

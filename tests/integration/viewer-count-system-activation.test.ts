@@ -72,12 +72,13 @@ describe("ViewerCount runtime activation integration", () => {
 
   test("runtime stream-status input starts late polling and resets a confirmed offline platform", async () => {
     const { app, platforms, emitStatus, observeCounts } = createRuntime();
+    platforms.twitch.getViewerCount.mockResolvedValue(0);
     emitStatus("youtube", false);
     emitStatus("twitch", false);
     emitStatus("tiktok", false);
     await app.start();
     expect(app.viewerCountSystem.isPolling).toBe(true);
-    expect(platforms.twitch.getViewerCount).not.toHaveBeenCalled();
+    expect(platforms.twitch.getViewerCount).toHaveBeenCalled();
     expect(platforms.tiktok.getViewerCount).not.toHaveBeenCalled();
     expect(app.viewerCountSystem.getViewerCount("twitch")).toBe(0);
     expect(app.viewerCountSystem.getViewerCount("tiktok")).toBe(0);

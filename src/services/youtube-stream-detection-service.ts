@@ -25,6 +25,7 @@ type DetectionStream = {
 
 type DetectionResult = {
     streams: DetectionStream[];
+    channelId?: string;
     observationKind: DiscoveryObservationKind;
     qualityReason?: DiscoveryQualityReason;
     error?: string;
@@ -44,6 +45,7 @@ function hasDetectionCapability(client: object): client is DetectionClient {
 
 type DetectionServiceResponse = {
     success: boolean;
+    channelId?: string;
     observationKind: DiscoveryObservationKind;
     qualityReason?: DiscoveryQualityReason;
     videoIds: string[];
@@ -338,6 +340,7 @@ channelHandle,
             : 'unknown';
         return {
             streams: result.streams,
+            ...(result.channelId ? { channelId: result.channelId } : {}),
             observationKind: result.observationKind,
             ...(result.qualityReason ? { qualityReason: result.qualityReason } : {}),
             ...(result.error ? { error: result.error } : {}),
@@ -396,6 +399,7 @@ _isValidVideoId(videoId: unknown): videoId is string {
             observationKind: detectionResult.observationKind,
             ...(detectionResult.qualityReason ? { qualityReason: detectionResult.qualityReason } : {}),
             videoIds,
+            ...(detectionResult.channelId ? { channelId: detectionResult.channelId } : {}),
             message,
             responseTime,
             detectionMethod: detectionResult.detectionMethod ?? null,

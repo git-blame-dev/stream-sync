@@ -634,9 +634,11 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       expect(system.getViewerCountSnapshot("twitch")).toMatchObject({ count: 0, hasCompleteObservation: true, latestOutcome: "complete" });
       h.respond(async () => 9); await system.pollPlatform("twitch");
       expect(h.attempts).toHaveLength(5); expect(system.getViewerCount("twitch")).toBe(9);
-      await system.updateStreamStatus("twitch", false); await system.pollPlatform("twitch");
-      expect(h.attempts).toHaveLength(5); expect(system.getViewerCount("twitch")).toBe(0);
-      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[42, 0], [0, 42], [9, 0], [0, 9]]);
+      await system.updateStreamStatus("twitch", false);
+      expect(system.getViewerCount("twitch")).toBe(0);
+      await system.pollPlatform("twitch");
+      expect(h.attempts).toHaveLength(6); expect(system.getViewerCount("twitch")).toBe(9);
+      expect(observer.receivedUpdates.map(u => [u.count, u.previousCount])).toEqual([[42, 0], [0, 42], [9, 0], [0, 9], [9, 0]]);
     });
 
     test("all failed HTTP slots preserve distinct last good counts", async () => {

@@ -114,7 +114,13 @@ const isTransientStartupError = (error: unknown): boolean => {
         return false;
     }
 
-    return closeCode === 1006
+    if (/CERT|TLS|SSL|SIGNATURE|SELF_SIGNED/.test(code)
+        || /certificat|self.signed|issuer|hostname|altname/.test(message)) return false;
+
+    const genericTlsHandshakeFailure = !code && message.includes('tls handshake failed');
+
+    return genericTlsHandshakeFailure
+        || closeCode === 1006
         || closeCode === 4005
         || closeCode === 4006
         || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)

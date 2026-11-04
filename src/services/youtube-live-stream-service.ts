@@ -95,6 +95,7 @@ qualityReason?: DiscoveryQualityReason;
 streams: LiveStreamRecord[];
 videoIds: string[];
 count: number;
+channelId?: string;
 hasContent: boolean;
 detectionMethod?: string;
 parserError?: boolean;
@@ -213,7 +214,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 const apiTimeout = liveStreams.length
                     ? Math.max(1, Math.floor(remainingTimeout / 2))
                     : remainingTimeout;
-                const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
+                const apiStreams = await this._getLiveStreamsFromChannelApi(channel, channelId, normalizedHandle.replace(/^@/, '').toLowerCase(), apiTimeout, logger);
                 const streamIds = new Set(liveStreams.map(stream => stream.videoId));
                 const additionalApiStreams = apiStreams.streams.filter(stream => !streamIds.has(stream.videoId));
                 liveStreams = liveStreams.concat(additionalApiStreams);
@@ -272,6 +273,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 streams: liveStreams,
                 videoIds: liveStreams.map((stream) => stream.videoId),
                 count: liveStreams.length,
+                channelId,
                 hasContent: detectionMeta.hasContent,
                 detectionMethod: detectionMeta.detectionMethod
             };
@@ -370,14 +372,17 @@ static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, channelId: str
             video => this._videoBelongsToChannel(video, channelId, normalizedHandle));
     }
 
-static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<VideoObservation> {
+static async _getLiveStreamsFromChannelApi(channel: ChannelLike, channelId: string, normalizedHandle: string, timeout: number, logger?: LoggerLike): Promise<VideoObservation> {
         const result: VideoObservation = { streams: [], hasContent: false, observed: false };
         try {
             if (typeof channel.getLiveStreams !== 'function') {
                 return { ...result, qualityReason: 'missing_capability' };
             }
             const page = await withTimeout(channel.getLiveStreams(), timeout, 'YouTube getLiveStreams operation');
-            const observation = this._mapLiveVideos(page?.videos, logger, 'channel_api');
+            // Native tab videos also flatten secondary recommendations. Absent
+            // ownership is tolerable here; metadata verifies candidate admission.
+            const observation = this._mapLiveVideos(page?.videos, logger, 'channel_api',
+                video => this._videoBelongsToChannel(video, channelId, normalizedHandle, true));
             // The streams tab mixes current broadcasts with the archive. Its
             // continuation is diagnostic evidence, never more discovery work.
             return page?.has_continuation !== false && page?.has_continuation !== undefined
@@ -446,7 +451,7 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
         return title?.text || title?.content || 'Live Stream';
     }
 
-    static _videoBelongsToChannel(video: ChannelVideo, channelId: string, normalizedHandle: string): boolean | undefined {
+    static _videoBelongsToChannel(video: ChannelVideo, channelId: string, normalizedHandle: string, allowAuthorless = false): boolean | undefined {
         const channelIds = new Set<string>();
         const authorId = video.author?.id;
         if (authorId !== undefined) {
@@ -475,7 +480,7 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
         const handleMatches = hasTargetHandle && authorHandle === normalizedHandle;
         if (channelIds.has(channelId)) return true; // Stable identity survives a renamed handle.
         if (channelIds.size === 1) return handleMatches ? undefined : false;
-        return authorHandle !== undefined && hasTargetHandle ? handleMatches : undefined;
+        return authorHandle !== undefined ? (hasTargetHandle ? handleMatches : undefined) : (allowAuthorless ? true : undefined);
     }
 
 static async _getOrResolveChannelId(

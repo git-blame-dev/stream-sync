@@ -200,7 +200,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       expect(expectUserSeesViewerCount(system, "youtube", 300)).toBe(true);
     });
 
-    test("should stop polling when platform goes offline", async () => {
+    test("should retain Twitch reconciliation polling when the stream goes offline", async () => {
       const { system } = createViewerCountSystemWithBehaviors({
         twitch: { viewerCount: 100 },
       });
@@ -211,7 +211,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await simulatePlatformReadiness(system, "twitch", false);
 
       const status = system.getSystemStatus();
-      expect(status.activePollingPlatforms).not.toContain("twitch");
+      expect(status.activePollingPlatforms).toContain("twitch");
       expect(expectUserSeesViewerCount(system, "twitch", 0)).toBe(true);
     });
 

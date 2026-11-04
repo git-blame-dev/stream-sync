@@ -211,3 +211,19 @@ index e2d7e16e7f718f2547cbfa280fa20128d6e7d7eb..d1d7d375616f2d8db80dad167c74b9f2
  }
  //# sourceMappingURL=LiveChat.js.map
 \ No newline at end of file
+
+diff --git a/dist/src/parser/classes/VideoViewCount.js b/dist/src/parser/classes/VideoViewCount.js
+--- a/dist/src/parser/classes/VideoViewCount.js
++++ b/dist/src/parser/classes/VideoViewCount.js
+@@ -11,7 +11,10 @@
+     constructor(data) {
+         super();
+         if ('originalViewCount' in data) {
+-            this.original_view_count = parseInt(data.originalViewCount);
++            const original = data.originalViewCount;
++            const count = typeof original === 'number' || (typeof original === 'string' && /^\d+$/.test(original))
++                ? Number(original) : NaN;
++            this.original_view_count = Number.isSafeInteger(count) && count >= 0 ? count : NaN;
+         }
+         if ('unlabeledViewCountValue' in data) {
+             this.unlabeled_view_count_value = new Text(data.unlabeledViewCountValue);

@@ -13,7 +13,7 @@ test('installed SDK HTTP responses reach real concurrent extraction and service 
         await writeFile(config, '');
         const result = await runYouTubeSdkChild(['run', '--no-env-file', `--config=${config}`, harness]);
         expect({ exit: result.exit, output: result.exit ? result.stdout + result.stderr : '' }).toEqual({ exit: 0, output: '' });
-        expect(result.stdout.trim()).toBe('YOUTUBE_VIEWER_COUNT_SDK_OK checks=17');
+        expect(result.stdout.trim()).toBe('YOUTUBE_VIEWER_COUNT_SDK_OK checks=31');
         expect(result.stderr).toBe('');
     } finally { await rm(configDir, { recursive: true, force: true }); }
 }, 30000);

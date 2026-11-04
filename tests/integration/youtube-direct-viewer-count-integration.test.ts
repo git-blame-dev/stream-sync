@@ -23,7 +23,7 @@ function fixture() {
             metadataRequests++;
             await holdMetadata?.();
             if (unavailable) throw new Error('synthetic metadata unavailable');
-            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, is_live: true, is_live_content: true }, primary_info: { view_count: { is_live: true, original_view_count: count } } };
+            return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, channel_id: `UC${'q'.repeat(22)}`, is_live: true, is_live_content: true }, primary_info: { view_count: { is_live: true, original_view_count: count } } };
         }
     }) }, { logger: noOpLogger });
     const platform = new YouTubePlatform({ username: `UC${'q'.repeat(22)}`, dataLoggingEnabled: false,

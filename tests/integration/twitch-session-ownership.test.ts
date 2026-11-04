@@ -59,6 +59,71 @@ beforeEach(() => { useFakeTimers(); setSystemTime(new Date('2026-01-01T00:00:00.
 afterEach(async () => { await Promise.all(instances.splice(0).map(instance => instance.cleanup())); secrets.twitch.accessToken = originalToken; useRealTimers(); });
 
 describe('Twitch session ownership through real EventSub and subscription manager', () => {
+    test('generic startup TLS failure retries in a fresh session', async () => {
+        const eventSub = fixture();
+        const starting = eventSub.initialize();
+        void starting.catch(() => {});
+        await flush();
+        const failed = TestSocket.sockets[0]!;
+        failed.emit('error', new Error('WebSocket connection failed: TLS handshake failed'));
+        await flush();
+        await advance(1000);
+        expect(TestSocket.sockets).toHaveLength(2);
+        expect(failed.readyState).toBe(3);
+        TestSocket.sockets[1]!.welcome('test-retried-tls-session');
+        await starting;
+        expect(eventSub.isActive()).toBe(true);
+    });
+    test('repeated generic TLS failures exhaust the startup attempt budget', async () => {
+        const eventSub = fixture();
+        let failure: unknown;
+        const starting = eventSub.initialize().catch(error => { failure = error; });
+        await flush();
+        for (let attempt = 0; attempt < 3; attempt++) {
+            expect(TestSocket.sockets).toHaveLength(attempt + 1);
+            TestSocket.sockets[attempt]!.emit('error', new Error('TLS handshake failed'));
+            await flush();
+            await advance(1000);
+        }
+        await starting;
+        expect(failure).toBeInstanceOf(Error);
+        expect(TestSocket.sockets).toHaveLength(3);
+        expect(eventSub.isActive()).toBe(false);
+    });
+    test('certificate detail without an error code does not retry', async () => {
+        const eventSub = fixture();
+        const starting = eventSub.initialize().catch(error => error);
+        await flush();
+        TestSocket.sockets[0]!.emit('error', Object.assign(new Error('TLS handshake failed: certificate verification failed'), { closeCode: 1006 }));
+        await flush();
+        await advance(3000);
+        expect(TestSocket.sockets).toHaveLength(1);
+        expect(await starting).toBeInstanceOf(Error);
+    });
+    test('cleanup cancels a pending startup TLS retry', async () => {
+        const eventSub = fixture();
+        const starting = eventSub.initialize().catch(error => error);
+        await flush();
+        TestSocket.sockets[0]!.emit('error', new Error('TLS handshake failed'));
+        await flush();
+        await eventSub.cleanup();
+        await advance(3000);
+        expect(await starting).toBeInstanceOf(Error);
+        expect(TestSocket.sockets).toHaveLength(1);
+        expect(getTimerCount()).toBe(0);
+    });
+    for (const code of ['CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE']) {
+        test(`explicit ${code} TLS failure does not retry`, async () => {
+            const eventSub = fixture();
+            const starting = eventSub.initialize().catch(error => error);
+            await flush();
+            TestSocket.sockets[0]!.emit('error', Object.assign(new Error('TLS handshake failed'), { code, closeCode: 1006 }));
+            await flush();
+            await advance(3000);
+            expect(TestSocket.sockets).toHaveLength(1);
+            expect(await starting).toMatchObject({ code });
+        });
+    }
     test('constructed EventSub capture is joined by the shared raw writer close', async () => {
         const root = await fs.mkdtemp(join(tmpdir(), 'synthetic-twitch-raw-owner-'));
         const writer = new RawEventLogWriter({ directories: [root] });

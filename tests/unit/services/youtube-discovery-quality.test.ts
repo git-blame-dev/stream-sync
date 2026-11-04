@@ -20,6 +20,22 @@ function setup(channel: unknown, search?: () => Promise<unknown>) {
 }
 
 describe('discovery observation quality through real metadata ownership and detection', () => {
+    it('filters foreign and conflicting streams-tab ownership while retaining authorless candidates', async () => {
+        const foreign = `UC${'r'.repeat(22)}`;
+        const { owner, detection } = setup({ videos: [], getLiveStreams: async () => ({ videos: [
+            { id: 'test0000001', is_live: true },
+            { id: 'test0000002', is_live: true, author: { id: foreign } },
+            { id: 'test0000003', is_live: true, author: { id: channelId }, metadata: { metadata: {
+                metadata_rows: [{ metadata_parts: [{ text: { endpoint: { payload: { browseId: foreign } } } }] }]
+            } } }
+        ] }) });
+        try {
+            expect(await detection.detectLiveStreams('@synthetic')).toMatchObject({
+                channelId, videoIds: ['test0000001'], observationKind: 'partial', qualityReason: 'malformed_collection'
+            });
+        } finally { await owner.dispose(); }
+    });
+
     for (const tabIds of [[], ['synthetic_target']]) {
         it(`unions owned homepage candidates with a closed recent page: ${tabIds.length}`, async () => {
             const { owner, detection } = setup({

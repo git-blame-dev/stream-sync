@@ -301,7 +301,7 @@ class ViewerCountSystem {
         this.statusRevisions.set(platformKey, revision);
         // Retire pre-transition polls before observers can yield to a newer status.
         // YouTube observations remain authoritative even while chat is offline.
-        if (wasLive !== isLive && !(platformKey === 'youtube'
+        if ((wasLive !== isLive || (platformKey === 'twitch' && options.countUnavailable)) && !(platformKey === 'youtube'
             && this._hasObservationCapability(this._getPlatforms()[platformKey]))) {
             this._invalidatePlatformPoll(platformKey);
         }
@@ -312,7 +312,7 @@ class ViewerCountSystem {
         // Invalidate the old observation before status observers can yield to a
         // fresh room-user event. The later status continuation must not erase it.
         const invalidation = countUnavailable ? this._markUnavailable(platformKey) : undefined;
-        if (options.countUnavailable) this.stopPlatformPolling(platformKey);
+        if (options.countUnavailable && platformKey !== 'twitch') this.stopPlatformPolling(platformKey);
 
         if (wasLive !== isLive) {
             this.logger.info(`Stream status changed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -323,6 +323,9 @@ class ViewerCountSystem {
         if (this.statusRevisions.get(platformKey) !== revision) return;
         if (invalidation) {
             await invalidation;
+            if (platformKey === 'twitch' && this.isPolling && this.statusRevisions.get(platformKey) === revision) {
+                this.startPlatformPolling(platformKey);
+            }
             return;
         }
         await this._optimizePollingForStatusChange(platformKey, isLive, !wasLive && isLive);
@@ -336,6 +339,13 @@ class ViewerCountSystem {
             void this.pollPlatform(platformKey);
         }
         if (platformKey === 'youtube' && this._hasObservationCapability(this._getPlatforms()[platformKey])) {
+            if (this.isPolling) this.startPlatformPolling(platformKey);
+            return;
+        }
+        if (platformKey === 'twitch') {
+            // EventSub can miss stream.online while disconnected. Keep the same
+            // bounded Helix cadence offline so viewer observations can recover.
+            if (!isLive) await this.updateViewerCount(platformKey, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
             if (this.isPolling) this.startPlatformPolling(platformKey);
             return;
         }
@@ -434,7 +444,7 @@ class ViewerCountSystem {
         for (const platformName of platformNames) {
             const isLive = this.isStreamLive(platformName);
 
-            if (isLive || (platformName === 'youtube' && this._hasObservationCapability(platforms[platformName]))) {
+            if (isLive || platformName === 'twitch' || (platformName === 'youtube' && this._hasObservationCapability(platforms[platformName]))) {
                 this.startPlatformPolling(platformName);
             }
         }
@@ -631,7 +641,7 @@ class ViewerCountSystem {
             return { valid: false, reason: `No getViewerCount method for ${platformKey}` };
         }
 
-        if (!this.isStreamLive(platformKey)) {
+        if (platformKey !== 'twitch' && !this.isStreamLive(platformKey)) {
             return { valid: false, reason: `Stream offline for ${platformKey}` };
         }
 
@@ -694,13 +704,13 @@ class ViewerCountSystem {
 
             const count = await platform.getViewerCount();
 
-            if (!isSamePoll() || !this.isStreamLive(platformKey)) {
+            if (!isSamePoll() || (platformKey !== 'twitch' && !this.isStreamLive(platformKey))) {
                 this.logger.debug(`Discarding stale viewer count poll for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 return;
             }
 
             if (count !== null && count !== undefined) {
-                if (await this.updateViewerCount(platformKey, count, { isCurrent: () => isSamePoll() && this.isStreamLive(platformKey) })) {
+                if (await this.updateViewerCount(platformKey, count, { isCurrent: () => isSamePoll() && (platformKey === 'twitch' || this.isStreamLive(platformKey)) })) {
                     this.pollingStats.successfulPolls++;
                 } else if (isSamePoll()) await this._markUnavailable(platformKey);
             } else {

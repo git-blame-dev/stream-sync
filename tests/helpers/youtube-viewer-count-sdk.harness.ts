@@ -86,6 +86,24 @@ try {
     assert.equal(shelfDiscovery.observationKind, 'partial');
     assert.equal(shelfDiscovery.qualityReason, 'pagination_incomplete');
     assert.equal(continuationCalls, 0);
+    const rawCard = (id: string, ownerId?: string) => ({ videoRenderer: {
+        videoId: id, title: { simpleText: 'Synthetic tab broadcast' }, thumbnail: { thumbnails: [] },
+        thumbnailOverlays: [], ...(ownerId ? { ownerText: { runs: [{ text: 'Synthetic owner',
+            navigationEndpoint: { browseEndpoint: { browseId: ownerId } } }] } } : {})
+    } });
+    const nativeTab = new sdk.YT.Channel({} as never, { data: { contents: { twoColumnBrowseResultsRenderer: {
+        tabs: [{ tabRenderer: { title: 'Live', selected: true, content: { richGridRenderer: {
+            contents: [{ richItemRenderer: { content: rawCard('test0000007') } }]
+        } } } }],
+        secondaryContents: { sectionListRenderer: { contents: [{ itemSectionRenderer: {
+            contents: [rawCard('test0000008', `UC${'r'.repeat(22)}`)]
+        } }] } }
+    } } } });
+    assert.equal(nativeTab.videos.length, 2, 'SDK flattens foreign secondaryContents into videos');
+    const nativeDiscovery = await YouTubeLiveStreamService.getLiveStreams({ getChannel: async () => ({
+        videos: [], getLiveStreams: async () => nativeTab
+    }) }, channelId, { logger });
+    assert.deepEqual(nativeDiscovery.videoIds, ['test0000007'], 'authorless tab candidate survives; foreign secondary card does not');
     const upcoming = new sdk.YTNodes.Video({
         videoId: 'test0000003', title: { simpleText: 'Synthetic upcoming stream' },
         thumbnail: { thumbnails: [] }, thumbnailOverlays: [],
@@ -121,6 +139,15 @@ try {
         [{ count: '12', nextIdentity: {} }, null],
         [{ count: '12', nextIdentity: '' }, null],
         [{ count: '12', omitNextIdentity: true }, null],
+        [{ count: '12junk', text: '12 watching now' }, null],
+        [{ count: '1.9', text: '1 watching now' }, null],
+        [{ count: '1e3', text: '1 watching now' }, null],
+        [{ count: '-0.7', text: '0 watching now' }, null],
+        [{ count: 1.9, text: '1 watching now' }, null],
+        [{ count: -0.7, text: '0 watching now' }, null],
+        ...['', ' 12', '12\n', null, true, {}].map(count => [{ count, text: '12 watching now' }, null] as [Scenario, null]),
+        [{ count: 12, text: '12 watching now' }, 12],
+        [{ count: '9007199254740991' }, Number.MAX_SAFE_INTEGER],
         [{ count: '9007199254740992' }, null],
         [{ count: '12', unlabeled: '13' }, null],
         [{ unlabeled: '12junk', text: '12 watching now' }, null]
