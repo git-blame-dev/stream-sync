@@ -20,9 +20,16 @@ import { noOpLogger } from '../helpers/mock-factories';
 import type { DisplayQueueItem } from '../../src/interfaces/DisplayQueue';
 
 const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+afterEach(async () => {
+    const errors: unknown[] = [];
+    for (const cleanup of cleanups.splice(0).reverse()) {
+        try { await cleanup(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Synthetic membership fixture cleanup failed');
+});
 async function fixture() {
     const dir = await mkdtemp(join(tmpdir(), 'synthetic-membership-'));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const bus = new EventBus();
     const values = { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005,
         tiktokMembershipUsd: 2.1, twitchMembershipUsd: 3.5, youtubeMembershipUsd: 3.89 };
@@ -39,6 +46,7 @@ async function fixture() {
     await goals.initializeGoalDisplay();
     const funding = await createFundingGoalService({ config: { enabled: true, id: 'synthetic-goal', label: 'Synthetic goal', targetUsd: 1000 },
         monetizationValuesConfig: values, filePath: join(dir, 'funding.json') });
+    cleanups.push(() => funding.dispose());
     const controls = await OperatorControlService.create({ filePath: join(dir, 'controls.json'),
         defaults: Object.fromEntries(OPERATOR_CONTROL_KEYS.map(key => [key, true])) as Record<typeof OPERATOR_CONTROL_KEYS[number], boolean> });
     const presented: DisplayQueueItem[] = [];
@@ -52,6 +60,7 @@ async function fixture() {
             presented.push(item);
             await funding.processPresentedContributions(Array.isArray(item.data.contributions) ? item.data.contributions : []);
         } });
+    cleanups.push(() => queue.stop());
     const tracking = new UserTrackingService();
     const manager = new NotificationManager({ config, logger: noOpLogger, constants, eventBus: bus, displayQueue: queue });
     const { runtime } = createTestAppRuntime(configOverrides, { eventBus: { emit: (name, data) => { bus.emit(name, data); }, subscribe: (name, handler) => bus.subscribe(name, data => handler(data as Record<string, unknown>)) }, displayQueue: queue, notificationManager: manager, userTrackingService: {
@@ -59,6 +68,7 @@ async function fixture() {
         markStreamSupporter: (platform, id) => tracking.markStreamSupporter(platform, id),
         isStreamSupporter: (platform, id) => tracking.isStreamSupporter(platform, id)
     }, logger: noOpLogger });
+    cleanups.push(() => runtime.shutdown());
     const factory = createTwitchEventFactory();
     const pending: Promise<void>[] = [];
     const raw = createTwitchEventSubEventRouter({ logger: noOpLogger, emit: (name, payload) => {
@@ -68,7 +78,6 @@ async function fixture() {
         raw.handleNotificationEvent('channel.subscription.gift', { is_anonymous: true, total: 5, tier: '1000', timestamp: '2026-01-01T00:00:00.000Z', ...data }, { message_timestamp: data.timestamp ?? '2026-01-01T00:00:00.000Z' });
         await Promise.all(pending.splice(0));
     };
-    cleanups.push(async () => { runtime.platformEventRouter.dispose(); manager.donationSpamDetector?.destroy?.(); await queue.stop(); await funding.dispose(); await rm(dir, { recursive: true, force: true }); });
     return { send, runtime, queue, tracker, funding, tracking, controls, presented };
 }
 

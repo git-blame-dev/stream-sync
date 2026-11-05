@@ -5,11 +5,11 @@ import testClock from "../helpers/test-clock";
 describe("farewell routing smoke E2E", () => {
   afterEach(() => { testClock.useRealTime(); });
   test("suppresses repeated same-platform farewell and keeps cross-platform farewell + VFX mapping", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness({
+    const harness = createFarewellRoutingHarness({
       farewell: { command: "!bye, bye", timeout: 300 },
     });
     try {
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -20,7 +20,7 @@ describe("farewell routing smoke E2E", () => {
         },
       });
 
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -31,7 +31,7 @@ describe("farewell routing smoke E2E", () => {
         },
       });
 
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "tiktok",
         type: "platform:chat-message",
         data: {
@@ -42,10 +42,10 @@ describe("farewell routing smoke E2E", () => {
         },
       });
 
-      const queuedTypes = queuedItems.map((item) => item.type);
+      const queuedTypes = harness.queuedItems.map((item) => item.type);
       expect(queuedTypes).toEqual(["farewell", "farewell"]);
 
-      const farewellRows = queuedItems.filter((item) => item.type === "farewell");
+      const farewellRows = harness.queuedItems.filter((item) => item.type === "farewell");
       expect(farewellRows.length).toBe(2);
 
       const farewellPlatforms = farewellRows.map((item) => item.platform);
@@ -57,11 +57,13 @@ describe("farewell routing smoke E2E", () => {
 
       farewellRows.forEach((row) => {
         expect(row.vfxConfig).toBeDefined();
-        expect(["!bye", "!bye2", "!bye3"]).toContain(row.vfxConfig?.command);
+        const command = row.vfxConfig?.command;
+        if (typeof command !== "string") throw new Error("Expected a resolved farewell command");
+        expect(["!bye", "!bye2", "!bye3"]).toContain(command);
         expect(row.vfxConfig?.command).toBe("!bye");
       });
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 });

@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'bun:test';
-import { createAppRuntimeTestDependencies } from './runtime-test-harness';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createTestAppRuntime } from './runtime-test-harness';
 import { EventBus, createEventBus } from '../../src/core/EventBus';
 import { UserTrackingService } from '../../src/services/UserTrackingService';
+import { AppRuntime } from '../../src/runtime/AppRuntime';
+import { useFakeTimers, useRealTimers, getTimerCount } from './bun-timers';
 import { isRecord } from '../../src/utils/record-contracts';
 
 describe('runtime test dependency injection', () => {
+    const runtimes: AppRuntime[] = [];
+    afterEach(async () => { await Promise.all(runtimes.splice(0).map(runtime => runtime.shutdown())); });
+    const createHarness = (options: Parameters<typeof createTestAppRuntime>[1] = {}) => {
+        const harness = createTestAppRuntime({}, options);
+        runtimes.push(harness.runtime);
+        return harness;
+    };
     it('forwards runtime lifecycle options and exposes the final injected owners', async () => {
         const owner = createEventBus();
         const bus = {
@@ -17,7 +26,7 @@ describe('runtime test dependency injection', () => {
         };
         const neural = { ensureStarted: async () => {}, stop: async () => {} };
         const onShutdownComplete = () => {};
-        const harness = createAppRuntimeTestDependencies({
+        const harness = createHarness({
             neuralTtsProcessManager: neural,
             onShutdownComplete,
             gracefulExitService: undefined,
@@ -38,7 +47,7 @@ describe('runtime test dependency injection', () => {
     });
 
     it('uses real event delivery and first-message state by default', () => {
-        const harness = createAppRuntimeTestDependencies();
+        const harness = createHarness();
         const tracking = harness.dependencies.userTrackingService;
         if (!(tracking instanceof UserTrackingService)) throw new TypeError('Expected real first-message owner');
         expect(tracking.isFirstMessage('synthetic-viewer', { platform: 'twitch' })).toBe(true);
@@ -47,8 +56,19 @@ describe('runtime test dependency injection', () => {
         harness.dependencies.commandCooldownService.dispose();
     });
 
+    it('retires acquired cooldown resources when the runtime rejects invalid required input', () => {
+        useFakeTimers();
+        const baseline = getTimerCount();
+        try {
+            expect(() => createTestAppRuntime({}, { overrides: {
+                eventBus: null as unknown as ConstructorParameters<typeof AppRuntime>[1]['eventBus'],
+            } })).toThrow('AppRuntime missing required dependencies: eventBus');
+            expect(getTimerCount()).toBe(baseline);
+        } finally { useRealTimers(); }
+    });
+
     it('preserves an explicitly unavailable optional runtime owner', () => {
-        const harness = createAppRuntimeTestDependencies({ twitchAuth: null, dependencyFactory: null });
+        const harness = createHarness({ twitchAuth: null, dependencyFactory: null });
         expect(harness.dependencies.twitchAuth).toBeNull();
         expect(harness.dependencies.dependencyFactory).toBeNull();
     });

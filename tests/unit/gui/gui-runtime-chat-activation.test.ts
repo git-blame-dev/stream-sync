@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { AppRuntime } from '../../../src/runtime/AppRuntime'
+import { createTestAppRuntime } from '../../helpers/runtime-test-harness'
 import { createGuiTransportService } from '../../../src/services/gui/gui-transport-service'
 import { createConfigFixture } from '../../helpers/config-fixture'
 import { EventBus } from '../../../src/core/EventBus'
@@ -18,11 +18,11 @@ for (const enabled of [false, true]) {
         address: () => null, close: callback => callback?.(),
       }),
     })
-    // Invoke the production runtime entry without constructing unrelated platform owners.
+    const { runtime } = createTestAppRuntime({ gui: config.gui }, { guiTransportService: transport })
     try {
-      await AppRuntime.prototype._startGuiTransport.call({ config, guiTransportService: transport } as unknown as AppRuntime)
+      await runtime._startGuiTransport()
       expect(listens).toBe(enabled ? 1 : 0)
       expect(transport.isActive()).toBe(enabled)
-    } finally { await transport.stop() }
+    } finally { await runtime.shutdown() }
   })
 }

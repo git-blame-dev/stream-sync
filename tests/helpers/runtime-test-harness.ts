@@ -1,149 +1,114 @@
-import { vi } from 'bun:test';
+import { EventEmitter } from 'node:events';
 import { createEventBus } from '../../src/core/EventBus';
+import * as constants from '../../src/core/constants';
 import { UserTrackingService } from '../../src/services/UserTrackingService';
+import { PlatformLifecycleService } from '../../src/services/PlatformLifecycleService';
+import { CommandCooldownService } from '../../src/services/CommandCooldownService';
+import { VFXCommandService } from '../../src/services/VFXCommandService';
+import { CommandParser } from '../../src/chat/commands';
+import NotificationManager from '../../src/notifications/NotificationManager';
+import { DisplayQueue } from '../../src/obs/display-queue';
+import { createOBSSourcesManager } from '../../src/obs/sources';
+import { createOBSGoalsManager } from '../../src/obs/goals';
+import { OBSEffectsManager } from '../../src/obs/effects';
+import { createOBSEventService } from '../../src/obs/obs-event-service';
+import { createGracefulExitService } from '../../src/services/GracefulExitService';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
-
-
 import { createConfigFixture } from './config-fixture';
-import {
-    createMockDisplayQueue,
-    createMockNotificationManager,
-    noOpLogger
-} from './mock-factories';
-import testClock from './test-clock';
+import { noOpLogger } from './mock-factories';
 
-type RuntimeConfigForTest = ConstructorParameters<typeof AppRuntime>[0];
-type RuntimeDependenciesForTest = ConstructorParameters<typeof AppRuntime>[1];
-type ConfigFixtureOverrides = Parameters<typeof createConfigFixture>[0];
-type ConfigFixture = ReturnType<typeof createConfigFixture>;
-type NotificationManagerOverrides = Parameters<typeof createMockNotificationManager>[0];
-type PlatformLifecycleStub = RuntimeDependenciesForTest['platformLifecycleService'] & Record<string, unknown>;
-type AppRuntimeDependencyOverrides = Partial<RuntimeDependenciesForTest> & Record<string, unknown>;
-
-type AppRuntimeTestOptions = {
-    [Key in keyof RuntimeDependenciesForTest]?: RuntimeDependenciesForTest[Key] | undefined;
-} & {
-    configOverrides?: ConfigFixtureOverrides;
-    notificationManagerOverrides?: NotificationManagerOverrides;
-    overrides?: AppRuntimeDependencyOverrides;
-    logger?: RuntimeDependenciesForTest['logging'];
+type RuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
+type ConfigOverrides = Parameters<typeof createConfigFixture>[0];
+type AppRuntimeTestOptions = { [K in keyof RuntimeDependencies]?: RuntimeDependencies[K] | undefined } & {
+    configOverrides?: ConfigOverrides;
+    logger?: RuntimeDependencies['logging'];
+    overrides?: Partial<RuntimeDependencies>;
 };
 
-const asRuntimeConfig = (config: ConfigFixture): RuntimeConfigForTest => {
-    return config as unknown as RuntimeConfigForTest;
-};
-
-const createPlatformLifecycleStub = (overrides: Partial<PlatformLifecycleStub> = {}): PlatformLifecycleStub => ({
-    initializePlatforms: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue({}),
-    initializeAllPlatforms: vi.fn<(...args: [Record<string, unknown>]) => Promise<unknown>>().mockResolvedValue({}),
-    initializePlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    waitForBackgroundInits: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    shutdownPlatforms: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    disconnectAll: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(true),
-    getAllPlatforms: vi.fn<(...args: []) => Record<string, never>>().mockReturnValue({}),
-    getPlatforms: vi.fn<(...args: []) => Record<string, never>>().mockReturnValue({}),
-    getPlatform: vi.fn<(...args: []) => null>().mockReturnValue(null),
-    getPlatformConnectionTime: vi.fn<(...args: [string]) => null>().mockReturnValue(null),
-    isPlatformAvailable: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
-    recordPlatformConnection: vi.fn<(...args: [string]) => void>(),
-    startPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    stopPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    refreshPlatform: vi.fn<(...args: []) => Promise<boolean>>().mockResolvedValue(true),
-    ...overrides
-});
-
-function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
-    const {
-        configOverrides = {},
-        notificationManagerOverrides = {},
-        overrides = {},
-        logger: loggerOption,
-        ...dependencyOptions
-    } = options;
-
-    const logger = loggerOption ?? noOpLogger;
-    const displayQueue = options.displayQueue === undefined ? createMockDisplayQueue() : options.displayQueue;
-    const notificationManager = options.notificationManager === undefined ?
-        createMockNotificationManager(notificationManagerOverrides) : options.notificationManager;
-    const eventBus = options.eventBus === undefined ? createEventBus() : options.eventBus;
-    const config = createConfigFixture(configOverrides);
-    const runtimeConfig = asRuntimeConfig(config);
-    const vfxCommandService = options.vfxCommandService === undefined ? {
-        executeCommand: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
-        executeCommandForKey: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
-        getVFXConfig: vi.fn<(...args: [string, string | null]) => Promise<Record<string, unknown>>>().mockResolvedValue({})
-    } : options.vfxCommandService;
-    const userTrackingService = options.userTrackingService === undefined ? new UserTrackingService() : options.userTrackingService;
-    const commandCooldownService: RuntimeDependenciesForTest['commandCooldownService'] = options.commandCooldownService === undefined ? {
-        getStatus: vi.fn<(...args: []) => Record<string, unknown>>().mockReturnValue({ commands: {} }),
-        checkUserCooldown: vi.fn<(...args: [unknown, number, number]) => boolean>().mockReturnValue(true),
-        updateUserCooldown: vi.fn<(...args: [unknown]) => void>(),
-        dispose: vi.fn<(...args: []) => void>()
-    } : options.commandCooldownService;
-    const platformLifecycleService = options.platformLifecycleService === undefined ?
-        createPlatformLifecycleStub() : options.platformLifecycleService;
-    const commandParser = options.commandParser === undefined ? {
-        getVFXConfig: vi.fn<(...args: [string?, string?]) => null>().mockReturnValue(null)
-    } : options.commandParser;
-    const dependencyFactory = options.dependencyFactory === undefined ? {
-        createYoutubeDependencies: vi.fn<(...args: []) => { streamDetectionService: { isLive: () => unknown } }>().mockReturnValue({
-            streamDetectionService: { isLive: vi.fn<(...args: unknown[]) => unknown>() }
-        })
-    } : options.dependencyFactory;
-
-    const dependencies = {
-        logging: logger,
-        logger,
-        displayQueue,
-        notificationManager,
-        eventBus,
-        config: runtimeConfig,
-        vfxCommandService,
-        userTrackingService,
-        commandCooldownService,
-        platformLifecycleService,
-        commandParser,
-        dependencyFactory,
-        timestampService: options.timestampService === undefined ? { now: vi.fn((): number => testClock.now()) } : options.timestampService,
-        obsManager: options.obsManager === undefined ? null : options.obsManager,
-        twitchAuth: options.twitchAuth === undefined ? null : options.twitchAuth,
-        obs: options.obs === undefined ? {} : options.obs,
-        obsEventService: options.obsEventService === undefined ? { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() } : options.obsEventService,
-        sceneManagementService: options.sceneManagementService === undefined ? { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() } : options.sceneManagementService,
-        gracefulExitService: options.gracefulExitService === undefined ? {
-            isEnabled: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
-            getTargetMessageCount: vi.fn<(...args: []) => number>().mockReturnValue(0),
-            incrementMessageCount: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
-            triggerExit: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined)
-        } : options.gracefulExitService,
-        ...Object.fromEntries(Object.entries(dependencyOptions).filter(([, value]) => value !== undefined)),
-        ...overrides
-    } as RuntimeDependenciesForTest;
-
-    return {
-        dependencies,
-        eventBus: dependencies.eventBus,
-        notificationManager: dependencies.notificationManager,
-        configFixture: config,
-        runtimeConfig
-    };
+// Synthetic remote OBS responses only. Policy, queues, parsing, cooldowns and
+// lifecycle state are production owners; no provider connections are enabled.
+class SyntheticRuntimeObs extends EventEmitter {
+    [key: string]: unknown;
+    readonly calls: Array<{ method: string; data: Record<string, unknown> }> = [];
+    failure: Error | undefined;
+    connected = false;
+    async connect() { this.connected = true; }
+    async disconnect() { this.connected = false; }
+    async ensureConnected() { await this.connect(); }
+    isConnected() { return this.connected; }
+    async isReady() { return this.connected; }
+    addEventListener(name: string, handler: (data?: Record<string, unknown>) => void) { this.on(name, handler); }
+    removeEventListener(name: string, handler: (data?: Record<string, unknown>) => void) { this.off(name, handler); }
+    async call(method: string, data: Record<string, unknown> = {}) {
+        this.calls.push({ method, data });
+        if (this.failure) throw this.failure;
+        if (method === 'GetInputSettings') return { inputSettings: { font: { face: 'Synthetic font' }, color: 123 } };
+        if (method === 'GetSceneList') return { scenes: [] };
+        if (method === 'GetSceneItemList') return { sceneItems: [] };
+        if (method === 'TriggerMediaInputAction') this.emit('MediaInputPlaybackEnded', { inputName: data.inputName });
+        if (['SetInputSettings', 'TriggerMediaInputAction'].includes(method)) return {};
+        throw new Error(`Unexpected synthetic OBS request: ${method}`);
+    }
 }
 
-const createTestAppRuntime = (configOverrides: ConfigFixtureOverrides = {}, options: AppRuntimeTestOptions = {}) => {
-    const harness = createAppRuntimeTestDependencies({
-        configOverrides,
-        ...options
+function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
+    const { configOverrides = {}, overrides = {}, logger: loggerOption, ...supplied } = options;
+    const config = createConfigFixture({
+        general: { viewerCountPollingIntervalMs: 0, filterOldMessages: false },
+        obs: { enabled: false, ttsChatEnabled: false, ttsNotificationsEnabled: false },
+        gui: { enableDock: false, enableOverlay: false, enableOperator: false, enableNotifications: false, enableChatFeed: false },
+        twitch: { enabled: false }, youtube: { enabled: false }, tiktok: { enabled: false }, streamelements: { enabled: false },
+        displayQueue: { autoProcess: false, rowIntervalMs: 0 },
+        ...configOverrides,
     });
+    const effective = { ...Object.fromEntries(Object.entries(supplied).filter(([, value]) => value !== undefined)), ...overrides } as Partial<RuntimeDependencies>;
+    const logger = effective.logging ?? loggerOption ?? noOpLogger;
+    const eventBus = effective.eventBus ?? createEventBus();
+    const remoteObs = new SyntheticRuntimeObs();
+    const sourcesManager = createOBSSourcesManager(remoteObs, { logger });
+    const goalsManager = createOBSGoalsManager(remoteObs, { config, updateTextSource: sourcesManager.updateTextSource });
+    const effectsManager = new OBSEffectsManager(remoteObs, { logger, sourcesManager });
+    const vfxCommandService = effective.vfxCommandService ?? new VFXCommandService(config as unknown as ConstructorParameters<typeof VFXCommandService>[0], eventBus as ConstructorParameters<typeof VFXCommandService>[1], { effectsManager });
+    const displayQueue = effective.displayQueue ?? new DisplayQueue(remoteObs, { ...config.displayQueue, ...config.obs }, constants,
+        eventBus, { sourcesManager, goalsManager });
+    const userTrackingService = effective.userTrackingService ?? new UserTrackingService();
+    const notificationManager = effective.notificationManager ?? new NotificationManager({ config, displayQueue, eventBus, vfxCommandService, userTrackingService, logger, constants } as unknown as ConstructorParameters<typeof NotificationManager>[0]);
+    const obsEventService = effective.obsEventService ?? createOBSEventService({ eventBus, obsConnection: remoteObs, obsSources: sourcesManager, logger } as Parameters<typeof createOBSEventService>[0]);
+    const commandCooldownService = effective.commandCooldownService ?? new CommandCooldownService({ config, logger, eventBus: eventBus as NonNullable<ConstructorParameters<typeof CommandCooldownService>[0]>['eventBus'] & {} });
+    const platformLifecycleService = effective.platformLifecycleService ?? new PlatformLifecycleService({ config, logger, eventBus: eventBus as NonNullable<NonNullable<ConstructorParameters<typeof PlatformLifecycleService>[0]>['eventBus']> });
+    const dependencies = {
+        logging: logger, displayQueue, notificationManager, eventBus, vfxCommandService,
+        userTrackingService, obsEventService, commandCooldownService, platformLifecycleService,
+        commandParser: new CommandParser(config as unknown as ConstructorParameters<typeof CommandParser>[0]),
+        twitchAuth: null, dependencyFactory: null,
+        obs: { connectionManager: remoteObs, sourcesManager, goalsManager, effectsManager },
+        onShutdownComplete: () => {},
+        ...effective,
+    } as RuntimeDependencies;
+    return { dependencies, eventBus: dependencies.eventBus, notificationManager: dependencies.notificationManager,
+        configFixture: config, runtimeConfig: config as unknown as ConstructorParameters<typeof AppRuntime>[0], remoteObs };
+}
 
-    const runtime = new AppRuntime(harness.runtimeConfig, harness.dependencies);
-
-    return {
-        runtime,
-        dependencies: harness.dependencies
-    };
+const createTestAppRuntime = (configOverrides: ConfigOverrides = {}, options: AppRuntimeTestOptions = {}) => {
+    const harness = createAppRuntimeTestDependencies({ configOverrides, ...options });
+    try {
+        const runtime = new AppRuntime(harness.runtimeConfig, harness.dependencies);
+        harness.dependencies.gracefulExitService ??= createGracefulExitService(runtime, null);
+        return { ...harness, runtime };
+    } catch (error) {
+        // Construction has not adopted these fixture-owned resources yet.
+        // Queue admission retires synchronously; no runner starts in this fixture.
+        const releases = [
+            () => harness.dependencies.commandCooldownService.dispose(),
+            () => harness.dependencies.obsEventService.destroy?.(),
+            () => harness.dependencies.obs?.effectsManager?.dispose(),
+            () => { void Promise.resolve(harness.dependencies.displayQueue.stop?.()).catch(() => {}); },
+        ];
+        for (const release of releases) {
+            try { release(); } catch { /* Preserve the construction error after attempting every release. */ }
+        }
+        throw error;
+    }
 };
 
-export {
-    createAppRuntimeTestDependencies,
-    createTestAppRuntime
-};
+export { createTestAppRuntime };

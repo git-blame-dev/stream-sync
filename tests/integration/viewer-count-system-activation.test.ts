@@ -1,6 +1,8 @@
 import { vi, afterEach, describe, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService";
 import { AppRuntime } from "../../src/main";
-import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
+import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 
 describe("ViewerCount runtime activation integration", () => {
@@ -14,25 +16,34 @@ describe("ViewerCount runtime activation integration", () => {
     }
   });
 
-  function createRuntime() {
+  async function createRuntime() {
     const platforms = {
       youtube: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(150) },
       twitch: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(75) },
       tiktok: { getViewerCount: vi.fn<() => Promise<number>>().mockResolvedValue(200) },
     };
-    const harness = createAppRuntimeTestDependencies({
-      configOverrides: {
+    const harness = createTestAppRuntime({
         general: { viewerCountPollingIntervalMs: 60_000 },
         youtube: { enabled: true, viewerCountEnabled: true },
         twitch: { enabled: true, viewerCountEnabled: true },
         tiktok: { enabled: true, viewerCountEnabled: true },
         obs: { enabled: false },
-      },
     });
-    const lifecycle = harness.dependencies.platformLifecycleService;
-    lifecycle.getAllPlatforms = () => platforms;
-    const app = new AppRuntime(harness.runtimeConfig, harness.dependencies);
+    const app = harness.runtime;
     apps.add(app);
+    const lifecycle = harness.dependencies.platformLifecycleService as PlatformLifecycleService;
+    // Acquire synthetic provider adapters through the real lifecycle. Runtime
+    // startup keeps provider initialization disabled; polling sees these existing sessions.
+    lifecycle.config = { youtube: { enabled: true, username: 'synthetic-youtube' }, twitch: { enabled: true }, tiktok: { enabled: true } };
+    for (const [name, provider] of Object.entries(platforms)) {
+      await lifecycle.initializePlatform(name, class extends EventEmitter {
+        constructor() { super(); }
+        async initialize() { return { state: 'ready' as const }; }
+        async cleanup() { this.removeAllListeners(); }
+        getViewerCount() { return provider.getViewerCount(); }
+      });
+    }
+    lifecycle.config = { youtube: { enabled: false }, twitch: { enabled: false }, tiktok: { enabled: false } };
     const emitStatus = (platform: string, isLive: boolean) => {
       harness.eventBus.emit?.("platform:event", {
         type: "platform:stream-status", platform, data: { isLive },
@@ -54,7 +65,7 @@ describe("ViewerCount runtime activation integration", () => {
   }
 
   test("app.start activates its original viewer owner and publishes all live platform counts", async () => {
-    const { app, platforms, lifecycle, emitStatus, observeCounts } = createRuntime();
+    const { app, platforms, lifecycle, emitStatus, observeCounts } = await createRuntime();
     const originalOwner = app.viewerCountSystem;
     const counts = observeCounts({ youtube: 150, twitch: 75, tiktok: 200 });
     emitStatus("youtube", true);
@@ -63,7 +74,7 @@ describe("ViewerCount runtime activation integration", () => {
     await app.start();
     await counts;
     expect(app.viewerCountSystem).toBe(originalOwner);
-    expect(lifecycle.initializeAllPlatforms).toHaveBeenCalledTimes(1);
+    expect(Object.keys(lifecycle.getAllPlatforms()).sort()).toEqual(["tiktok", "twitch", "youtube"]);
     expect(app.viewerCountSystem.isPolling).toBe(true);
     expect(app.viewerCountSystem.isStreamLive("youtube")).toBe(true);
     expect(app.viewerCountSystem.getViewerCounts()).toEqual({ youtube: 150, twitch: 75, tiktok: 200 });
@@ -71,7 +82,7 @@ describe("ViewerCount runtime activation integration", () => {
   }, TEST_TIMEOUTS.FAST);
 
   test("runtime stream-status input starts late polling and resets a confirmed offline platform", async () => {
-    const { app, platforms, emitStatus, observeCounts } = createRuntime();
+    const { app, platforms, emitStatus, observeCounts } = await createRuntime();
     platforms.twitch.getViewerCount.mockResolvedValue(0);
     emitStatus("youtube", false);
     emitStatus("twitch", false);

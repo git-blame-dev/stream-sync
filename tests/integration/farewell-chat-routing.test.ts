@@ -8,9 +8,9 @@ describe("farewell chat routing integration", () => {
   afterEach(() => { testClock.useRealTime(); });
 
   it("admits the same valid farewell at exact expiry and starts a fresh platform cooldown", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness({ farewell: { command: "!bye, bye", timeout: 2 } });
+    const harness = createFarewellRoutingHarness({ farewell: { command: "!bye, bye", timeout: 2 } });
     try {
-      const route = (platform: string, username: string) => platformEventRouter.routeEvent({
+      const route = (platform: string, username: string) => harness.platformEventRouter.routeEvent({
         platform, type: "platform:chat-message",
         data: { username, userId: `${username}-id`, message: { text: "!bye everyone" }, timestamp: new Date(testClock.now()).toISOString() },
       });
@@ -18,29 +18,29 @@ describe("farewell chat routing integration", () => {
       testClock.advance(1999);
       await route("twitch", "synthetic-blocked");
       await route("tiktok", "synthetic-cross-platform");
-      expect(queuedItems).toHaveLength(2);
+      expect(harness.queuedItems).toHaveLength(2);
       testClock.advance(1);
       await route("twitch", "synthetic-expired");
-      expect(queuedItems).toHaveLength(3);
+      expect(harness.queuedItems).toHaveLength(3);
       await route("twitch", "synthetic-blocked-again");
-      expect(queuedItems).toHaveLength(3);
-      expect(queuedItems.map((item) => ({ platform: item.platform, data: item.data }))).toMatchObject([
+      expect(harness.queuedItems).toHaveLength(3);
+      expect(harness.queuedItems.map((item) => ({ platform: item.platform, data: item.data }))).toMatchObject([
         { platform: "twitch", data: { username: "synthetic-first", userId: "synthetic-first-id", displayMessage: "Goodbye, synthetic-first! 👋" } },
         { platform: "tiktok", data: { username: "synthetic-cross-platform", userId: "synthetic-cross-platform-id" } },
         { platform: "twitch", data: { username: "synthetic-expired", userId: "synthetic-expired-id" } },
       ]);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
   it("prepares and queues source chat with farewell as one sequence", async () => {
-    const { platformEventRouter, queuedSequences, cleanup } = createFarewellRoutingHarness({
+    const harness = createFarewellRoutingHarness({
       general: { messagesEnabled: true, logChatMessages: false },
       twitch: { messagesEnabled: true, farewellsEnabled: true },
     });
     try {
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -51,21 +51,21 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      expect(queuedSequences).toHaveLength(1);
-      expect(queuedSequences[0]?.map((item) => item.type)).toEqual(["chat", "farewell"]);
-      expect(queuedSequences[0]).toMatchObject([
+      expect(harness.queuedSequences).toHaveLength(1);
+      expect(harness.queuedSequences[0]?.map((item) => item.type)).toEqual(["chat", "farewell"]);
+      expect(harness.queuedSequences[0]).toMatchObject([
         { type: "chat", platform: "twitch", data: { username: "test-user", userId: "test-user-id" } },
         { type: "farewell", platform: "twitch", data: { username: "test-user", userId: "test-user-id", displayMessage: "Goodbye, test-user! 👋" } },
       ]);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
   it("routes farewell notification rows even when messages are disabled", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness();
+    const harness = createFarewellRoutingHarness();
     try {
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -76,15 +76,15 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      const queuedTypes = queuedItems.map((item) => item.type);
+      const queuedTypes = harness.queuedItems.map((item) => item.type);
       expect(queuedTypes).toEqual(["farewell"]);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
   it("suppresses repeated farewells per platform while allowing other platforms", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness({
+    const harness = createFarewellRoutingHarness({
       general: {
         messagesEnabled: false,
         logChatMessages: false,
@@ -103,7 +103,7 @@ describe("farewell chat routing integration", () => {
       },
     });
     try {
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -114,7 +114,7 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -125,7 +125,7 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "tiktok",
         type: "platform:chat-message",
         data: {
@@ -136,18 +136,18 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      const farewellRows = queuedItems.filter((item) => item.type === "farewell");
+      const farewellRows = harness.queuedItems.filter((item) => item.type === "farewell");
       expect(farewellRows.length).toBe(2);
 
       const farewellPlatforms = farewellRows.map((item) => item.platform);
       expect(farewellPlatforms).toEqual(["twitch", "tiktok"]);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
   it("maps farewell trigger configuration through command-based VFX lookup", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness({
+    const harness = createFarewellRoutingHarness({
       general: {
         messagesEnabled: false,
         logChatMessages: false,
@@ -162,7 +162,7 @@ describe("farewell chat routing integration", () => {
       },
     });
     try {
-      await platformEventRouter.routeEvent({
+      await harness.platformEventRouter.routeEvent({
         platform: "twitch",
         type: "platform:chat-message",
         data: {
@@ -173,7 +173,7 @@ describe("farewell chat routing integration", () => {
         },
       });
 
-      const farewellRows = queuedItems.filter((item) => item.type === "farewell");
+      const farewellRows = harness.queuedItems.filter((item) => item.type === "farewell");
       expect(farewellRows.length).toBe(1);
 
       const farewellRow = farewellRows[0];
@@ -183,28 +183,29 @@ describe("farewell chat routing integration", () => {
       expect(farewellRow.vfxConfig).toBeDefined();
       const selectedCommand = farewellRow.vfxConfig?.command;
       expect(typeof selectedCommand).toBe("string");
+      if (typeof selectedCommand !== "string") throw new Error("Expected a resolved farewell command");
       expect(["!bye", "!bye2", "!bye3"]).toContain(selectedCommand);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
   it("does not invent a cooldown when the configured farewell timeout is zero", async () => {
-    const { platformEventRouter, queuedItems, cleanup } = createFarewellRoutingHarness({ farewell: { command: "!bye, bye", timeout: 0 } });
+    const harness = createFarewellRoutingHarness({ farewell: { command: "!bye, bye", timeout: 0 } });
     try {
       for (const username of ["synthetic-zero-first", "synthetic-zero-second"]) {
-        await platformEventRouter.routeEvent({
+        await harness.platformEventRouter.routeEvent({
           platform: "twitch", type: "platform:chat-message",
           data: { username, userId: `${username}-id`, message: { text: "!bye everyone" }, timestamp: new Date(testClock.now()).toISOString() },
         });
       }
-      expect(queuedItems.map((item) => item.type)).toEqual(["farewell", "farewell"]);
+      expect(harness.queuedItems.map((item) => item.type)).toEqual(["farewell", "farewell"]);
     } finally {
-      cleanup();
+      await harness.cleanup();
     }
   });
 
-  it("retires its owned cooldown interval and supports repeated cleanup", () => {
+  it("retires its owned cooldown interval and supports repeated cleanup", async () => {
     useFakeTimers();
     const baseline = getTimerCount();
     let harness: ReturnType<typeof createFarewellRoutingHarness> | undefined;
@@ -212,14 +213,14 @@ describe("farewell chat routing integration", () => {
       harness = createFarewellRoutingHarness();
       expect(getTimerCount()).toBe(baseline + 1);
       expect(harness.platformEventRouter.subscription).toEqual(expect.any(Function));
-      harness.cleanup();
+      await harness.cleanup();
       expect(getTimerCount()).toBe(baseline);
       expect(harness.platformEventRouter.subscription).toBeNull();
-      harness.cleanup();
+      await harness.cleanup();
       expect(getTimerCount()).toBe(baseline);
     } finally {
       try {
-        harness?.cleanup();
+        await harness?.cleanup();
       } finally {
         useRealTimers();
       }

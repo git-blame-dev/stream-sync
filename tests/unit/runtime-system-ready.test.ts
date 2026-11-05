@@ -1,155 +1,93 @@
-import { vi, describe, expect, it, afterEach } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createTestAppRuntime } from '../helpers/runtime-test-harness';
+import { PlatformLifecycleService } from '../../src/services/PlatformLifecycleService';
+import { noOpLogger } from '../helpers/mock-factories';
+import { getTimerCount, useFakeTimers, useRealTimers } from '../helpers/bun-timers';
 
-import {
-  useFakeTimers,
-  useRealTimers,
-  getTimerCount,
-} from "../helpers/bun-timers";
-import { noOpLogger } from "../helpers/mock-factories";
-import { AppRuntime } from "../../src/runtime/AppRuntime";
+const fixtures: ReturnType<typeof createTestAppRuntime>[] = [];
+const fixture = (options: Parameters<typeof createTestAppRuntime>[1] = {}) => {
+  const owner = createTestAppRuntime({}, options);
+  fixtures.push(owner);
+  return owner;
+};
+afterEach(async () => {
+  try { await Promise.all(fixtures.splice(0).map(owner => owner.runtime.shutdown())); }
+  finally { useRealTimers(); }
+});
 
-describe("AppRuntime system readiness payload", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    useRealTimers();
+describe('AppRuntime system readiness payload', () => {
+  it('publishes actual owner status and omits monitoring metrics', () => {
+    const { runtime, eventBus } = fixture();
+    runtime.commandCooldownService.updateUserCooldown('synthetic-ready-viewer');
+    const emitted: unknown[] = [];
+    const unsubscribe = eventBus.subscribe('system:ready', value => { emitted.push(value); });
+    try {
+      const payload = runtime.emitSystemReady({ correlationId: 'synthetic-ready' });
+      expect(payload.services).toEqual(expect.arrayContaining(['notificationManager', 'platformLifecycleService']));
+      expect(payload.platforms).toEqual(runtime.platformLifecycleService.getStatus?.());
+      expect(payload.cooldowns).toEqual(runtime.commandCooldownService.getStatus?.());
+      expect(payload.cooldowns).toMatchObject({ activeUsers: 1 });
+      expect(payload.correlationId).toBe('synthetic-ready');
+      expect(payload.monitoring).toBeUndefined();
+      expect(emitted).toEqual([payload]);
+    } finally { if (typeof unsubscribe === 'function') unsubscribe(); }
   });
 
-  const createAppRuntimeDouble = () => {
-    const bot = Object.create(AppRuntime.prototype);
-    bot.eventBus = null;
-    bot.getReadyServices = vi.fn<(...args: unknown[]) => string[]>().mockReturnValue([
-      "notificationManager",
-      "platformLifecycleService",
-    ]);
-    bot.logger = noOpLogger;
-    return bot;
-  };
-
-  it("omits monitoring metrics when building system readiness payload", () => {
-    const runtime = createAppRuntimeDouble();
-    runtime.platformLifecycleService = {
-      getStatus: vi.fn<(...args: unknown[]) => { initializedPlatforms: string[]; }>().mockReturnValue({
-        initializedPlatforms: ["twitch"],
-      }),
-    };
-    runtime.commandCooldownService = {
-      getStatus: vi.fn<(...args: unknown[]) => { activeUsers: number; }>().mockReturnValue({ activeUsers: 3 }),
-    };
-
-    const payload = runtime.emitSystemReady({
-      correlationId: "test-startup-1",
+  it('reports degradation from actual lifecycle initialization failure', async () => {
+    const { runtime } = fixture();
+    const lifecycle = runtime.platformLifecycleService as PlatformLifecycleService;
+    lifecycle.config = { youtube: { enabled: true, username: '' } };
+    // Validation fails before constructing or connecting a provider.
+    await lifecycle.initializePlatform('youtube', class {
+      constructor() { throw new Error('Missing username must reject before construction'); }
+      async initialize() {} on() {} async cleanup() {}
     });
-
-    expect(payload).toEqual(
-      expect.objectContaining({
-        services: ["notificationManager", "platformLifecycleService"],
-        platforms: { initializedPlatforms: ["twitch"] },
-        cooldowns: { activeUsers: 3 },
-        correlationId: "test-startup-1",
-      }),
-    );
-    expect(payload.monitoring).toBeUndefined();
-  });
-
-  it("builds readiness payload without EventBus", () => {
-    const runtime = createAppRuntimeDouble();
-    runtime.eventBus = null;
-
-    const payload = runtime.emitSystemReady({ correlationId: "test-noop" });
-    expect(payload).toEqual(
-      expect.objectContaining({
-        services: ["notificationManager", "platformLifecycleService"],
-        correlationId: "test-noop",
-      }),
-    );
-  });
-
-  it("marks readiness as degraded when platform lifecycle status reports failures", () => {
-    const runtime = createAppRuntimeDouble();
-    const emitCalls: unknown[][] = [];
-    runtime.eventBus = {
-      emit: (...args: unknown[]) => emitCalls.push(args),
-    };
-    runtime.platformLifecycleService = {
-      getStatus: vi.fn<(...args: unknown[]) => { failedPlatforms: { name: string; lastError: string; }[]; platformHealth: { twitch: { state: string; lastError: string; }; }; }>().mockReturnValue({
-        failedPlatforms: [{ name: "twitch", lastError: "auth failed" }],
-        platformHealth: {
-          twitch: { state: "failed", lastError: "auth failed" },
-        },
-      }),
-    };
-
-    const payload = runtime.emitSystemReady({
-      correlationId: "test-degraded-ready",
-    });
-
-    expect(payload).toEqual(
-      expect.objectContaining({
-        correlationId: "test-degraded-ready",
-        degraded: true,
-        degradationReasons: expect.arrayContaining([
-          "platform-initialization-failed",
-        ]),
-      }),
-    );
-    expect(emitCalls).toEqual([["system:ready", payload]]);
+    const payload = runtime.emitSystemReady({ correlationId: 'synthetic-degraded-ready' });
+    expect(payload).toMatchObject({ degraded: true, degradationReasons: ['platform-initialization-failed'] });
+    expect(payload.platforms).toMatchObject({ failedPlatforms: [{ name: 'youtube', lastError: 'Missing username' }] });
   });
 });
 
-describe("AppRuntime shutdown lifecycle", () => {
-  const createAppRuntimeDouble = () => {
-    const bot = Object.create(AppRuntime.prototype);
-    bot.eventBus = { emit: vi.fn<(...args: unknown[]) => unknown>() };
-    bot.logger = noOpLogger;
-    bot.dependencies = { onShutdownComplete: vi.fn<(...args: unknown[]) => unknown>() };
-    return bot;
-  };
-
+describe('AppRuntime shutdown lifecycle', () => {
   for (const restartRequested of [false, true]) {
-    it(`emits shutdown before notifying composition with restart ${restartRequested}`, async () => {
+    it(`emits shutdown before composition completion with restart ${restartRequested}`, async () => {
       useFakeTimers();
-      const runtime = createAppRuntimeDouble();
-      const events: unknown[][] = [];
-      runtime.eventBus.emit = (...args: unknown[]) => events.push(args);
-      runtime.dependencies.onShutdownComplete = () => events.push(["complete"]);
+      const events: unknown[] = [];
+      const { runtime, eventBus } = fixture({ onShutdownComplete: () => events.push('complete') });
+      const unsubscribe = eventBus.subscribe('system:shutdown', value => { events.push(value); });
+      const timers = getTimerCount();
       const exitCode = process.exitCode;
       try {
-        await runtime.emitSystemShutdown({ reason: "synthetic-shutdown", restartRequested });
-        expect(events).toEqual([
-          ["system:shutdown", { reason: "synthetic-shutdown", mode: restartRequested ? "restart" : "exit" }],
-          ["complete"],
-        ]);
-        expect(getTimerCount()).toBe(0);
+        await runtime.emitSystemShutdown({ reason: 'synthetic-shutdown', restartRequested });
+        expect(events).toEqual([{ reason: 'synthetic-shutdown', mode: restartRequested ? 'restart' : 'exit' }, 'complete']);
+        expect(getTimerCount()).toBe(timers);
         expect(process.exitCode).toBe(exitCode);
-      } finally {
-        process.exitCode = exitCode;
-        useRealTimers();
-      }
+      } finally { if (typeof unsubscribe === 'function') unsubscribe(); }
     });
   }
 
-  it("notifies composition only after the log flush settles", async () => {
-    const runtime = createAppRuntimeDouble();
+  it('notifies composition after the external log sink flush settles', async () => {
     const flush = Promise.withResolvers<void>();
-    runtime.logger = { ...noOpLogger, flush: () => flush.promise };
-    const pending = runtime.emitSystemShutdown({ reason: "synthetic-flush" });
-    expect(runtime.dependencies.onShutdownComplete).not.toHaveBeenCalled();
+    let completed = false;
+    const { runtime } = fixture({ logger: { ...noOpLogger, flush: () => flush.promise }, onShutdownComplete: () => { completed = true; } });
+    const pending = runtime.emitSystemShutdown({ reason: 'synthetic-flush' });
+    expect(completed).toBe(false);
     flush.resolve();
     await pending;
-    expect(runtime.dependencies.onShutdownComplete).toHaveBeenCalledTimes(1);
+    expect(completed).toBe(true);
   });
 
-  it("invokes viewer count status cleanup during shutdown", async () => {
-    const runtime = createAppRuntimeDouble();
-    const cleanupCalls: string[] = [];
-    runtime.platformLifecycleService = { disconnectAll: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) };
-    runtime.obsEventService = { disconnect: vi.fn<(...args: unknown[]) => Promise<undefined>>().mockResolvedValue(undefined) };
-    runtime.platformEventRouter = { dispose: vi.fn<(...args: unknown[]) => unknown>() };
-    runtime.viewerCountSystem = { stopPolling: vi.fn<(...args: unknown[]) => unknown>() };
-    runtime.notificationManager = { stopSuppressionCleanup: vi.fn<(...args: unknown[]) => unknown>() };
-    runtime.viewerCountStatusCleanup = () => cleanupCalls.push("cleanup");
+  it('retires actual viewer status subscriptions, polling and cooldown resources', async () => {
+    useFakeTimers();
+    const baseline = getTimerCount();
+    const { runtime } = fixture();
+    expect(runtime.viewerCountStatusCleanup).toEqual(expect.any(Function));
+    expect(getTimerCount()).toBe(baseline + 1);
     await runtime.shutdown();
-    expect(cleanupCalls).toEqual(["cleanup"]);
-    expect(runtime.dependencies.onShutdownComplete).toHaveBeenCalledTimes(1);
+    expect(runtime.viewerCountStatusCleanup).toBeNull();
+    expect(runtime.viewerCountSystem.isPolling).toBe(false);
+    expect(getTimerCount()).toBe(baseline);
+    await runtime.shutdown();
+    expect(getTimerCount()).toBe(baseline);
   });
 });

@@ -2,20 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import testClock from './test-clock';
 import {
-    createMockNotificationDispatcher,
     createMockNotificationBuilder,
-    createMockNotificationManager,
-    createMockYouTubeServices,
-    createMockTikTokServices,
-    createMockTwitchServices,
     createMockPlatformConnection,
-    createMockDisplayQueue,
     createMockOBSManager,
     createMockSourcesManager,
     createMockRetrySystem,
     createMockFileSystem,
-    noOpLogger,
-    createTestApp,
     createMockOBSConnection,
     createMockSpamDetector,
     createMockAuthManager,
@@ -48,11 +40,6 @@ describe('mock-factories helper behavior', () => {
         const connection = createMockOBSConnection();
         expect(connection.processSourceEvent({ eventData: { inputSettings: { text: '', font_size: 0 } } })).toMatchObject({ newText: '', fontSize: 0 });
         expect(connection.displayNotification({ displayMessage: '', message: 'synthetic fallback' }).finalText).toBe('');
-    });
-
-    it('reports explicitly configured zero queue capacity without inventing capacity behavior', () => {
-        expect(createMockDisplayQueue({ maxSize: 0 }).getMaxQueueSize()).toBe(0);
-        expect(createMockDisplayQueue().getMaxQueueSize()).toBe(100);
     });
 
     it('preserves zero counts and explicit user levels in raw TikTok fixtures', () => {
@@ -95,45 +82,7 @@ describe('mock-factories helper behavior', () => {
         expect(gift.id).toContain('test-notification');
     });
 
-    it('creates notification manager workflows with validation and normalization', async () => {
-        const manager = createMockNotificationManager();
-
-        expect(() => manager.createNotification()).toThrow('type is required');
-        const notification = manager.createNotification({
-            type: 'platform:follow',
-            platform: 'twitch',
-            username: 'test-user'
-        });
-        expect(notification.type).toBe('platform:follow');
-
-        const giftResult = await manager.processGift({
-            platform: 'tiktok',
-            username: 'test-user',
-            giftType: 'Rose',
-            giftCount: 3,
-            amount: 3,
-            currency: 'coins'
-        });
-        expect(giftResult.processed).toBe(true);
-        expect(giftResult.notification.type).toBe('platform:gift');
-
-        const normalized = manager.normalizeMessage({
-            displayMessage: 'Pokémon '.repeat(80)
-        });
-        expect(normalized.preservesUnicode).toBe(true);
-        expect(normalized.displayMessage.endsWith('...')).toBe(true);
-
-        await expect(manager.processSubscription({ platform: 'twitch', username: 'test-user' })).rejects.toThrow('tier is required');
-    });
-
-    it('supports display queue, obs manager, retry system, and lifecycle reset helpers', async () => {
-        const queue = createMockDisplayQueue({ shouldThrowError: true, errorMessage: 'queue-failure' });
-        expect(() => queue.addItem({ type: "chat", platform: "twitch", data: {} })).toThrow('queue-failure');
-
-        const healthyQueue = createMockDisplayQueue();
-        const item = { type: 'chat', platform: 'twitch', data: { id: 'synthetic-item-1' } };
-        expect(healthyQueue.addItem(item)).toEqual([item]);
-
+    it('supports OBS transport, retry and mock-call reset helpers', async () => {
         const obsManager = createMockOBSManager('disconnected');
         expect(obsManager.isConnected()).toBe(false);
         await expect(obsManager.setTextSource('source', 'message')).resolves.toBe(true);
@@ -142,16 +91,16 @@ describe('mock-factories helper behavior', () => {
         await expect(retrySystem.executeWithRetry('youtube', async () => 'ok')).rejects.toThrow('Simulated failure');
         expect(retrySystem.incrementRetryCount()).toBeGreaterThan(0);
 
-        const lifecycleTarget = createMockDisplayQueue();
-        lifecycleTarget.addToQueue('first');
+        const lifecycleTarget = createMockOBSConnection();
+        await lifecycleTarget.connect();
         clearMockCalls(lifecycleTarget);
-        expect(lifecycleTarget.addToQueue.mock.calls.length).toBe(0);
+        expect(lifecycleTarget.connect.mock.calls.length).toBe(0);
 
-        lifecycleTarget.addToQueue('second');
+        await lifecycleTarget.connect();
         resetMock(lifecycleTarget);
-        expect(lifecycleTarget.addToQueue.mock.calls.length).toBe(0);
+        expect(lifecycleTarget.connect.mock.calls.length).toBe(0);
 
-        expect(validateMockAPI(lifecycleTarget, ['addItem', 'clearQueue'])).toBe(true);
+        expect(validateMockAPI(lifecycleTarget, ['connect', 'disconnect'])).toBe(true);
     });
 
     it('creates websocket payloads and simulators across supported platforms', () => {
@@ -236,26 +185,6 @@ describe('mock-factories helper behavior', () => {
     });
 
     it('executes broad factory surfaces used across platform test suites', async () => {
-        const dispatcher = createMockNotificationDispatcher();
-        await dispatcher.dispatchMessage('event', {});
-        await dispatcher.dispatchSuperChat({});
-
-        const youtubeServices = createMockYouTubeServices();
-        const ytConn = youtubeServices.ConnectionService();
-        await ytConn.connect();
-        await ytConn.getActiveChatId();
-        await youtubeServices.StreamManager().detectActiveStreams();
-
-        const tiktokServices = createMockTikTokServices();
-        const ttClient = tiktokServices.TikTokWebSocketClient();
-        await ttClient.connect();
-        await ttClient.getRoomInfo();
-        await tiktokServices.mockConnection.connect();
-
-        const twitchServices = createMockTwitchServices();
-        await twitchServices.TwitchEventSub().initialize();
-        await twitchServices.ApiClient().users.getUserByName();
-
         const sources = createMockSourcesManager();
         await sources.updateTextSource('source', 'text');
         await sources.hideAllDisplays();
@@ -269,9 +198,6 @@ describe('mock-factories helper behavior', () => {
         await expect(fileSystemFailure.writeFile('path', '{}')).rejects.toThrow('Write failed');
         expect(() => fileSystemFailure.writeFileSync('path', '{}')).toThrow('Write failed');
         await expect(fileSystemFailure.access('path')).rejects.toThrow('File not found');
-
-        const app = createTestApp({ logger: noOpLogger });
-        await app.handlePlatformConnection('youtube');
 
         const obsConnection = createMockOBSConnection('connected');
         await obsConnection.connect();
