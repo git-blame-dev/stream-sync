@@ -1177,7 +1177,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 if (generation !== stopGeneration) return;
             }
 
-            if (!demoOnly && !isGuiActive(config) && !chatFeedEnabled) {
+            if (!demoOnly && !isGuiActive(config)) {
                 active = false;
                 return;
             }
@@ -1212,13 +1212,16 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 subscribeToDisplayLifecycle();
 
                 serverRuntimeErrorHandler = (error: Error) => {
-                    active = false;
-                    errorHandler.handleEventProcessingError(
-                        error,
-                        'server-runtime',
-                        null,
-                        'GUI transport server runtime error'
-                    );
+                    if (startupEpoch !== dispatchEpoch) return;
+                    void beginRetirement();
+                    try {
+                        errorHandler.handleEventProcessingError(
+                            error,
+                            'server-runtime',
+                            null,
+                            'GUI transport server runtime error'
+                        );
+                    } catch { /* Diagnostics must not interrupt retirement. */ }
                 };
 
                 await new Promise<void>((resolve, reject) => {
@@ -1269,16 +1272,8 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         for (const client of closingClients) retireResource(() => { client.end(); });
         const closingMedia = [...mediaTransfers];
         for (const transfer of closingMedia) retireResource(transfer.cancel);
-        await dispatchChain.catch(reportRetirementError);
-        await Promise.all(closingMedia.map(transfer => transfer.closed));
-        runtimeAssetRegistry.clear();
-        giftPlaybackRegistry.clear();
-        await pendingStart?.catch(() => undefined);
-        if (!closingServer) return;
-        if (runtimeErrorHandler && typeof closingServer.removeListener === 'function') {
-            retireResource(() => { closingServer.removeListener?.('error', runtimeErrorHandler); });
-        }
-        await new Promise<void>((resolve) => {
+        if (pendingStart) await pendingStart.catch(() => undefined);
+        const closed = closingServer ? new Promise<void>((resolve) => {
             try {
                 closingServer.close((error) => {
                     if (error) reportRetirementError(error);
@@ -1288,7 +1283,15 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 reportRetirementError(error);
                 resolve();
             }
-        });
+        }) : Promise.resolve();
+        await dispatchChain.catch(reportRetirementError);
+        await Promise.all(closingMedia.map(transfer => transfer.closed));
+        runtimeAssetRegistry.clear();
+        giftPlaybackRegistry.clear();
+        await closed;
+        if (closingServer && runtimeErrorHandler && typeof closingServer.removeListener === 'function') {
+            retireResource(() => { closingServer.removeListener?.('error', runtimeErrorHandler); });
+        }
     };
 
     const beginRetirement = (pendingStart?: Promise<void> | null): Promise<void> => {

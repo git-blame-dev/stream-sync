@@ -693,6 +693,54 @@ describe("GUI transport routes and SSE integration", () => {
     expect(bus.eventNames()).toEqual([]);
   });
 
+  it("fences runtime errors before throwing diagnostics and closes before held dispatch drains", async () => {
+    const bus = new EventBus();
+    let handler: ((req: any, res: any) => void) | undefined;
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const mapping = new Promise<void>(resolve => { entered = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let closed = 0;
+    let diagnostics = 0;
+    const admission: number[] = [];
+    const server = Object.assign(new EventEmitter(), {
+      listen: (_port: number, _host: string, callback?: () => void) => callback?.(),
+      address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45684 }),
+      close: (callback?: () => void) => { closed++; callback?.(); },
+    });
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: bus,
+      mapper: { mapDisplayRow: async () => { entered!(); await held; return null; } },
+      logger: { warn: () => undefined, error: () => {
+        diagnostics++;
+        let status = 0;
+        handler!({ method: "GET", url: "/gui/events", headers: {} }, {
+          writeHead: (code: number) => { status = code; }, end: () => undefined,
+        });
+        admission.push(status);
+        throw new Error("synthetic diagnostic failure");
+      } },
+      createServer: listener => { handler = listener; return server; },
+    });
+    await service.start();
+    bus.emit("display:row", { type: "chat", platform: "twitch", username: "test-viewer", message: "test" });
+    await mapping;
+    const fail = () => server.emit("error", new Error("synthetic runtime failure"));
+    try {
+      expect(fail).not.toThrow();
+      expect(fail).not.toThrow();
+      expect(diagnostics).toBe(1);
+      expect(admission).toEqual([503]);
+      expect(service.isActive()).toBe(false);
+      await Promise.resolve();
+      expect(closed).toBe(1);
+      expect(bus.eventNames()).toEqual([]);
+    } finally {
+      release!();
+      await service.stop();
+    }
+  });
+
   it("marks transport inactive when server emits runtime error after start", async () => {
     const config = buildConfig({
       enableDock: true,
@@ -734,13 +782,16 @@ describe("GUI transport routes and SSE integration", () => {
 
     await service.start();
     expect(service.isActive()).toBe(true);
-    requireRuntimeErrorListener(runtimeErrorListener)(
+    const retiredError = requireRuntimeErrorListener(runtimeErrorListener);
+    retiredError(
       new Error("runtime transport error"),
     );
     expect(service.isActive()).toBe(false);
     expect(service.getAddress()).toBe(null);
 
     await service.start();
+    expect(service.isActive()).toBe(true);
+    retiredError(new Error("synthetic retained error after restart"));
     expect(service.isActive()).toBe(true);
     await service.stop();
   });

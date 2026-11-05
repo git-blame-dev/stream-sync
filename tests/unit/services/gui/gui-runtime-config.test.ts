@@ -19,6 +19,11 @@ describe('GUI runtime config', () => {
         expect(buildGuiRuntimeConfig({ dockMaxMessages: 2001 }).dockMaxMessages).toBe(200);
     });
 
+    it('activates chat alone and preserves disabled-all', () => {
+        expect(isGuiActive({ gui: { enableChatFeed: true } })).toBe(true);
+        expect(isGuiActive({ gui: { enableChatFeed: false } })).toBe(false);
+    });
+
     it('treats notifications as GUI activation', () => {
         expect(isGuiActive({ gui: { enableNotifications: true } })).toBe(true);
     });

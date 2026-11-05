@@ -198,7 +198,7 @@ function isGuiActive(config: unknown = {}): boolean {
     const gui = toTransportRecord(root.gui);
     const fundingGoal = toTransportRecord(root.fundingGoal);
     return gui.enableDock === true || gui.enableOverlay === true || gui.enableNotifications === true ||
-        gui.enableOperator === true || fundingGoal.enabled === true;
+        gui.enableOperator === true || gui.enableChatFeed === true || fundingGoal.enabled === true;
 }
 
 export {
