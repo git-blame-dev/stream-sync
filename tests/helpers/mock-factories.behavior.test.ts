@@ -3,15 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import testClock from './test-clock';
 import {
     createMockNotificationBuilder,
-    createMockPlatformConnection,
-    createMockOBSManager,
-    createMockSourcesManager,
-    createMockRetrySystem,
     createMockFileSystem,
-    createMockOBSConnection,
-    createMockSpamDetector,
-    createMockAuthManager,
-    createMockTikTokPlatformDependencies,
     createMockWebSocketMessage,
     createTwitchWebSocketMessage,
     createYouTubeWebSocketMessage,
@@ -34,12 +26,6 @@ describe('mock-factories helper behavior', () => {
 
     afterEach(() => {
         testClock.useRealTime();
-    });
-
-    it('preserves cleared OBS text and explicitly supplied zero style values', () => {
-        const connection = createMockOBSConnection();
-        expect(connection.processSourceEvent({ eventData: { inputSettings: { text: '', font_size: 0 } } })).toMatchObject({ newText: '', fontSize: 0 });
-        expect(connection.displayNotification({ displayMessage: '', message: 'synthetic fallback' }).finalText).toBe('');
     });
 
     it('preserves zero counts and explicit user levels in raw TikTok fixtures', () => {
@@ -82,25 +68,17 @@ describe('mock-factories helper behavior', () => {
         expect(gift.id).toContain('test-notification');
     });
 
-    it('supports OBS transport, retry and mock-call reset helpers', async () => {
-        const obsManager = createMockOBSManager('disconnected');
-        expect(obsManager.isConnected()).toBe(false);
-        await expect(obsManager.setTextSource('source', 'message')).resolves.toBe(true);
-
-        const retrySystem = createMockRetrySystem({ successRate: 0 });
-        await expect(retrySystem.executeWithRetry('youtube', async () => 'ok')).rejects.toThrow('Simulated failure');
-        expect(retrySystem.incrementRetryCount()).toBeGreaterThan(0);
-
-        const lifecycleTarget = createMockOBSConnection();
-        await lifecycleTarget.connect();
+    it('supports mock-call reset helpers', async () => {
+        const lifecycleTarget = createMockFileSystem();
+        await lifecycleTarget.readFile('synthetic-fixture-path');
         clearMockCalls(lifecycleTarget);
-        expect(lifecycleTarget.connect.mock.calls.length).toBe(0);
+        expect(lifecycleTarget.readFile.mock.calls.length).toBe(0);
 
-        await lifecycleTarget.connect();
+        await lifecycleTarget.readFile('synthetic-fixture-path');
         resetMock(lifecycleTarget);
-        expect(lifecycleTarget.connect.mock.calls.length).toBe(0);
+        expect(lifecycleTarget.readFile.mock.calls.length).toBe(0);
 
-        expect(validateMockAPI(lifecycleTarget, ['connect', 'disconnect'])).toBe(true);
+        expect(validateMockAPI(lifecycleTarget, ['readFile', 'writeFile'])).toBe(true);
     });
 
     it('creates websocket payloads and simulators across supported platforms', () => {
@@ -164,31 +142,7 @@ describe('mock-factories helper behavior', () => {
         expect(invalid.malformedData).toBe(true);
     });
 
-    it('provides active auth-manager fixture contracts', async () => {
-        const authReady = createMockAuthManager('READY');
-        expect(authReady.getUserId()).toBe('test-broadcaster-id');
-        await expect(authReady.getAccessToken()).resolves.toBe('test-access-token');
-        await expect(authReady.getScopes()).resolves.toContain('chat:edit');
-
-        const authError = createMockAuthManager('ERROR');
-        expect(() => authError.getUserId()).toThrow('Authentication not initialized');
-        await expect(authError.initialize()).rejects.toThrow('initialization failed');
-
-
-    });
-
-    it('builds TikTok dependency bundle for connection/event tests', async () => {
-        const deps = createMockTikTokPlatformDependencies();
-        const connection = deps.TikTokWebSocketClient();
-        await expect(connection.connect()).resolves.toBe(true);
-        expect(deps.constants.GRACE_PERIODS.TIKTOK).toBe(5000);
-    });
-
-    it('executes broad factory surfaces used across platform test suites', async () => {
-        const sources = createMockSourcesManager();
-        await sources.updateTextSource('source', 'text');
-        await sources.hideAllDisplays();
-
+    it('exercises filesystem doubles, raw event fixtures and elapsed-time data', async () => {
         const fileSystemSuccess = createMockFileSystem();
         await fileSystemSuccess.readFile('path');
         await fileSystemSuccess.writeFile('path', '{}');
@@ -198,15 +152,6 @@ describe('mock-factories helper behavior', () => {
         await expect(fileSystemFailure.writeFile('path', '{}')).rejects.toThrow('Write failed');
         expect(() => fileSystemFailure.writeFileSync('path', '{}')).toThrow('Write failed');
         await expect(fileSystemFailure.access('path')).rejects.toThrow('File not found');
-
-        const obsConnection = createMockOBSConnection('connected');
-        await obsConnection.connect();
-        await obsConnection.processSourceEvent({ eventData: { sourceName: 'Chat Display', inputSettings: { text: 'hello', font: { size: 20 } } } });
-        await obsConnection.processSceneEvent({ eventData: { toSceneName: 'BRB Scene' } });
-
-        const spamDetector = createMockSpamDetector({ shouldShow: false, isLowValue: true });
-        expect(spamDetector.handleDonationSpam().shouldShow).toBe(false);
-        expect(spamDetector.isLowValueDonation()).toBe(true);
 
         const websocketChat = createTwitchWebSocketMessage('channel.chat.message', { userId: 'u1', username: 'name', message: 'hello' });
         expect(websocketChat.metadata.message_type).toBe('notification');
@@ -254,27 +199,4 @@ describe('mock-factories helper behavior', () => {
         expect(tiktokRoomUserMessage.viewerCount).toBe(321);
     });
 
-    it('covers platform connection and auth HTTP helper variants', async () => {
-        const platformConnection = createMockPlatformConnection();
-        await platformConnection.processChatMessage({ id: 'chat-1' });
-        await platformConnection.sendChatMessage('hello');
-        await platformConnection.processGiftNotification({ id: 'gift-1' });
-        await platformConnection.processFollowNotification({ id: 'follow-1' });
-        await platformConnection.processSubscriptionNotification({ id: 'sub-1' });
-        await platformConnection.getViewerCount();
-        await platformConnection.updateViewerCount(100);
-        await platformConnection.connect();
-        await platformConnection.disconnect();
-        expect(platformConnection.isConnected()).toBe(true);
-        expect(platformConnection.getConnectionState()).toBe('connected');
-        await platformConnection.handleTikTokMessage({});
-        await platformConnection.handleTwitchMessage({});
-        await platformConnection.handleYouTubeMessage({});
-        expect(platformConnection.checkPermissions()).toBe(true);
-        expect(platformConnection.validateMessage({})).toBe(true);
-        expect(platformConnection.normalizeMessage({ text: 'ok' }).text).toBe('ok');
-        await platformConnection.handleRapidMessages([]);
-        await platformConnection.handleConcurrentOperations([]);
-        expect(platformConnection._validHandlers).toContain('connect');
-    });
 });

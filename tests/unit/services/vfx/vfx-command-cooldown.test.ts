@@ -1,4 +1,11 @@
-import { vi, type Mock, describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { EventEmitter } from "node:events";
+import { EventBus } from "../../../../src/core/EventBus";
+import { CommandParser } from "../../../../src/chat/commands";
 
 import { noOpLogger } from "../../../helpers/mock-factories";
 import {
@@ -12,78 +19,74 @@ import { createConfigFixture } from "../../../helpers/config-fixture";
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
 import { OBSEffectsManager } from "../../../../src/obs/effects.ts";
 
-type VFXConfig = NonNullable<
-  Awaited<ReturnType<VFXCommandService["selectVFXCommand"]>>
->;
-type CommandParserLike = NonNullable<VFXCommandService["commandParser"]>;
-type EffectsManagerLike = NonNullable<
-  NonNullable<ConstructorParameters<typeof VFXCommandService>[2]>["effectsManager"]
->;
-type PlayMediaInOBS = EffectsManagerLike["playMediaInOBS"];
-type MockEffectsManager = EffectsManagerLike & {
-  playMediaInOBS: Mock<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>;
-};
 type CooldownOverrides = {
   cmdCooldown?: number;
   globalCmdCooldownMs?: number;
 };
 
-const createMockEffectsManager = (): MockEffectsManager => {
-  const obsManager = {
-    ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
-    call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
-  };
-
-  return Object.assign(
-    new OBSEffectsManager(obsManager, {
-      logger: noOpLogger,
-      delay: async () => {},
-    }),
-    {
-      playMediaInOBS: vi.fn<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>()
-        .mockResolvedValue(undefined),
-    },
-  );
-};
-
 describe("VFXCommandService cooldown handling", () => {
-  let mockEffectsManager: MockEffectsManager;
+  let effectsManager: OBSEffectsManager;
+  let dir: string;
+  let remoteEvents: EventEmitter;
+  let remoteFailure: Error | undefined;
+  let calls: Array<{ method: string; payload: Record<string, unknown> | undefined }>;
 
   const createConfig = (commandValue: string, overrides: CooldownOverrides = {}) =>
     createConfigFixture({
+      commands: Object.fromEntries(["one", "two", "automatic", "spark", "boom"].map(name =>
+        [`!${name}`, `!${name}, Synthetic VFX Source`])),
       gifts: { command: commandValue },
       farewell: {},
-      vfx: { filePath: "/tmp" },
+      vfx: { filePath: dir },
       cooldowns: {
         cmdCooldown: overrides.cmdCooldown ?? 60,
         globalCmdCooldownMs: overrides.globalCmdCooldownMs ?? 60000,
       },
     });
 
-  const createMockCommandParser = (): CommandParserLike => ({
-    getVFXConfig: vi.fn((message: string): VFXConfig => ({
-      command: message,
-      commandKey: message,
-      filename: `${message}.mp4`,
-      mediaSource: "VFX Source",
-      vfxFilePath: `${message}.vfx`,
-      duration: 5000,
-    })),
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "synthetic-vfx-cooldown-"));
+    try {
+      const writes = await Promise.allSettled(["one", "two", "automatic", "spark", "boom"].map(name =>
+        writeFile(join(dir, `!${name}.mp4`), "synthetic media; remote OBS playback is simulated")));
+      const failedWrite = writes.find(result => result.status === "rejected");
+      if (failedWrite?.status === "rejected") throw failedWrite.reason;
+      remoteEvents = new EventEmitter();
+      remoteFailure = undefined;
+      calls = [];
+      effectsManager = new OBSEffectsManager({
+        ensureConnected: async () => {},
+        call: async (method, payload) => {
+          calls.push({ method, payload });
+          if (remoteFailure) throw remoteFailure;
+          if (method === "TriggerMediaInputAction") {
+            remoteEvents.emit("MediaInputPlaybackEnded", { inputName: payload?.inputName });
+          }
+          return {};
+        },
+        addEventListener: (event, listener) => { remoteEvents.on(event, listener); },
+        removeEventListener: (event, listener) => { remoteEvents.off(event, listener); },
+      }, { logger: noOpLogger });
+    } catch (error) {
+      await rm(dir, { recursive: true, force: true });
+      throw error;
+    }
   });
 
-  beforeEach(() => {
-    mockEffectsManager = createMockEffectsManager();
-  });
-
-  afterEach(() => {
-    useRealTimers();
+  afterEach(async () => {
+    try {
+      effectsManager?.dispose();
+      expect(remoteEvents?.listenerCount("MediaInputPlaybackEnded") ?? 0).toBe(0);
+    } finally {
+      useRealTimers();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("blocks repeat VFX command for same user during cooldown window", async () => {
     const service = new VFXCommandService(createConfig("!one | !two"), null, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const first = await service.executeCommand("!one", {
       username: "testUser1",
@@ -92,6 +95,14 @@ describe("VFXCommandService cooldown handling", () => {
       skipCooldown: false,
     });
     expect(first.success).toBe(true);
+    expect(service.commandParser).toBeInstanceOf(CommandParser);
+    expect(calls).toEqual([
+      { method: "SetInputSettings", payload: { inputName: "Synthetic VFX Source", inputSettings: {
+        local_file: join(dir, "!one.mp4"), looping: false,
+      }, overlay: false } },
+      { method: "TriggerMediaInputAction", payload: { inputName: "Synthetic VFX Source",
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART" } },
+    ]);
 
     const second = await service.executeCommand("!one", {
       username: "testUser1",
@@ -101,13 +112,13 @@ describe("VFXCommandService cooldown handling", () => {
     });
     expect(second.success).toBe(false);
     expect(second.error).toBe("Command on cooldown");
+    expect(calls).toHaveLength(2);
   });
 
   test("honors skipCooldown flag for notification-triggered executions", async () => {
     const service = new VFXCommandService(createConfig("!one | !two"), null, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const first = await service.executeCommand("!one", {
       username: "testUser1",
@@ -129,9 +140,8 @@ describe("VFXCommandService cooldown handling", () => {
 
   test("allows repeated automatic executions without userId and keeps cooldown maps empty", async () => {
     const service = new VFXCommandService(createConfig("!automatic"), null, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const context = {
       username: "Synthetic Automation",
@@ -150,9 +160,8 @@ describe("VFXCommandService cooldown handling", () => {
 
   test("rejects cooldown-enforced execution without userId", async () => {
     const service = new VFXCommandService(createConfig("!automatic"), null, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const result = await Reflect.apply(service.executeCommand, service, [
       "!automatic",
@@ -169,9 +178,8 @@ describe("VFXCommandService cooldown handling", () => {
 
   test("allows automatic command-key execution without userId", async () => {
     const service = new VFXCommandService(createConfig("!automatic"), null, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const result = await service.executeCommandForKey("gifts", {
       username: "Synthetic Automation",
@@ -186,12 +194,10 @@ describe("VFXCommandService cooldown handling", () => {
   });
 
   test("returns failure when VFX execution throws", async () => {
-    const failingEffectsManager = createMockEffectsManager();
-    failingEffectsManager.playMediaInOBS.mockRejectedValue(new Error("vfx failed"));
+    remoteFailure = new Error("synthetic OBS RPC failed");
     const service = new VFXCommandService(createConfig("!one | !two"), null, {
-      effectsManager: failingEffectsManager,
+      effectsManager,
     });
-    service.commandParser = createMockCommandParser();
 
     const result = await service.executeCommand("!boom", {
       username: "testUser1",
@@ -201,7 +207,14 @@ describe("VFXCommandService cooldown handling", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("vfx failed");
+    expect(result.error).toBe("synthetic OBS RPC failed");
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+    remoteFailure = undefined;
+    const recovered = await service.executeCommand("!boom", {
+      username: "SyntheticViewer", userId: "test-user-123", platform: "tiktok", skipCooldown: false,
+    });
+    expect(recovered.success).toBe(true);
   });
 
   test("allows disabling user and global cooldowns via zero config values", async () => {
@@ -212,10 +225,9 @@ describe("VFXCommandService cooldown handling", () => {
       }),
       null,
       {
-        effectsManager: mockEffectsManager,
+        effectsManager,
       },
     );
-    service.commandParser = createMockCommandParser();
 
     const first = await service.executeCommand("!one", {
       username: "testUser1",
@@ -245,10 +257,9 @@ describe("VFXCommandService cooldown handling", () => {
         }),
         null,
         {
-          effectsManager: mockEffectsManager,
+          effectsManager,
         },
       );
-      service.commandParser = createMockCommandParser();
 
       const first = await service.executeCommand("!spark", {
         username: "testUser1",
@@ -292,17 +303,9 @@ describe("VFXCommandService cooldown handling", () => {
         }),
         null,
         {
-          effectsManager: mockEffectsManager,
+          effectsManager,
         },
       );
-      service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<{ command: string; commandKey: string; filename: string; mediaSource: string; vfxFilePath: string; duration: number; }>>().mockResolvedValue({
-        command: "!one",
-        commandKey: "!one",
-        filename: "!one.mp4",
-        mediaSource: "VFX Source",
-        vfxFilePath: "!one.vfx",
-        duration: 5000,
-      });
 
       const first = await service.executeCommandForKey("gifts", {
         username: "testUser1",
@@ -353,10 +356,9 @@ describe("VFXCommandService cooldown handling", () => {
         }),
         null,
         {
-          effectsManager: mockEffectsManager,
+          effectsManager,
         },
       );
-      service.commandParser = createMockCommandParser();
 
       const first = await service.executeCommand("!spark", {
         username: "testUser1",
@@ -392,10 +394,9 @@ describe("VFXCommandService cooldown handling", () => {
         }),
         null,
         {
-          effectsManager: mockEffectsManager,
+          effectsManager,
         },
       );
-      service.commandParser = createMockCommandParser();
 
       const first = await service.executeCommand("!spark", {
         username: "testUser1",
@@ -419,6 +420,52 @@ describe("VFXCommandService cooldown handling", () => {
     }
   });
 
+  test("requires event correlation and publishes resolved key completion", async () => {
+    const bus = new EventBus();
+    const events: unknown[] = [];
+    const unsubscribe = bus.subscribe("vfx:effect-completed", event => { events.push(event); });
+    try {
+      const service = new VFXCommandService(createConfig("!automatic"), bus, { effectsManager });
+      const context = { username: "Synthetic Automation", platform: "twitch", skipCooldown: true as const };
+      const missingCorrelation = await service.executeCommandForKey("gifts", context);
+      expect(missingCorrelation).toMatchObject({ success: false,
+        error: "executeCommandForKey requires correlationId when events are enabled" });
+      expect(calls).toEqual([]);
+      expect(events).toEqual([]);
+
+      const result = await service.executeCommandForKey("gifts", { ...context,
+        correlationId: "synthetic-cooldown-key-correlation" });
+      expect(result.success).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ command: "!automatic", commandKey: "!automatic",
+        filename: "!automatic", mediaSource: "Synthetic VFX Source",
+        correlationId: "synthetic-cooldown-key-correlation",
+        context: { ...context, correlationId: "synthetic-cooldown-key-correlation" },
+      });
+      expect(events[0]).not.toHaveProperty("userId");
+      expect(calls.map(call => call.method)).toEqual(["SetInputSettings", "TriggerMediaInputAction"]);
+      expect(remoteEvents.listenerCount("MediaInputPlaybackEnded")).toBe(0);
+    } finally { unsubscribe(); }
+    expect(bus.listenerCount("vfx:effect-completed")).toBe(0);
+  });
+
+  test("unconfigured commands and disposed effects produce no playback or cooldown", async () => {
+    const service = new VFXCommandService(createConfig("!one"), null, { effectsManager });
+    const context = { username: "SyntheticViewer", userId: "synthetic-viewer-id",
+      platform: "twitch", skipCooldown: false as const };
+    expect(await service.executeCommand("!unconfigured", context)).toMatchObject({
+      success: false, error: "Command not found",
+    });
+    effectsManager.dispose();
+    expect(await service.executeCommand("!one", context)).toMatchObject({
+      success: false, error: "OBS effects manager is disposed",
+    });
+    expect(calls).toEqual([]);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.userCommandTimestamps.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+  });
+
   test("reports truthful status metrics without queue bookkeeping placeholders", async () => {
     const service = new VFXCommandService(
       createConfig("!spark", {
@@ -427,10 +474,9 @@ describe("VFXCommandService cooldown handling", () => {
       }),
       null,
       {
-        effectsManager: mockEffectsManager,
+        effectsManager,
       },
     );
-    service.commandParser = createMockCommandParser();
 
     const earlyReturnResult = await service.executeCommand("!spark", {
       username: "   ",
