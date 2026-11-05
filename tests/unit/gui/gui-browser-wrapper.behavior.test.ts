@@ -78,6 +78,14 @@ function createWrapperHarness(healthResponses: HealthResponse[], origin?: string
 }
 
 describe("OBS browser wrappers", () => {
+  test("preserves encoded structured route fields without decoding separators twice", async () => {
+    const route = '/overlay?appearance=minimal&maxMessages=5&name=a%26b&tag=x&tag=y';
+    const harness = createWrapperHarness([{ ok: true }], undefined, {
+      route: null, hash: `#route=${encodeURIComponent(route)}&origin=${encodeURIComponent('http://localhost:4400')}`,
+    });
+    await harness.flushMicrotasks();
+    expect(harness.frame.src).toBe(`http://localhost:4400${route}`);
+  });
   test.each([
     ["#/.//example.invalid/overlay", "/overlay"],
     ["#%2F.%2F%2Fexample.invalid%2Foverlay", "/overlay"],

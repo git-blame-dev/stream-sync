@@ -12,15 +12,13 @@
   const status = document.getElementById('status');
 
   function parseHashConfig() {
-    let hash = window.location.hash.slice(1);
-    try {
-      hash = decodeURIComponent(hash);
-    } catch {
-      hash = '';
-    }
-
-    if (!hash || hash.startsWith('/')) {
-      return { route: hash || DEFAULT_ROUTE, origin: DEFAULT_ORIGIN };
+    const hash = window.location.hash.slice(1);
+    if (!hash || hash.startsWith('/') || /^%2f/i.test(hash)) {
+      try {
+        return { route: decodeURIComponent(hash) || DEFAULT_ROUTE, origin: DEFAULT_ORIGIN };
+      } catch {
+        return { route: DEFAULT_ROUTE, origin: DEFAULT_ORIGIN };
+      }
     }
 
     const params = new URLSearchParams(hash);
