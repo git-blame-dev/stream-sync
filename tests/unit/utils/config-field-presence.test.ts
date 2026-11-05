@@ -53,22 +53,24 @@ describe("_parseInheritableFlags", () => {
   });
 });
 
-describe("_parseShareFlag", () => {
+describe("_parseSocialFlags", () => {
   it("returns sharesEnabled field", () => {
-    const result = ConfigValidator._parseShareFlag({});
+    const result = ConfigValidator._parseSocialFlags({});
 
     expect(result).toHaveProperty("sharesEnabled");
+    expect(result).toHaveProperty("repostsEnabled");
   });
 
   it("returns null when raw config is empty", () => {
-    const result = ConfigValidator._parseShareFlag({});
+    const result = ConfigValidator._parseSocialFlags({});
 
     expect(result.sharesEnabled).toBe(null);
+    expect(result.repostsEnabled).toBe(null);
   });
 
   it("parses boolean values from raw config", () => {
     const raw = { sharesEnabled: "true" };
-    const result = ConfigValidator._parseShareFlag(raw);
+    const result = ConfigValidator._parseSocialFlags(raw);
 
     expect(result.sharesEnabled).toBe(true);
   });

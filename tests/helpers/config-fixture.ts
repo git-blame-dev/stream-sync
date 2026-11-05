@@ -271,6 +271,9 @@ function applyInheritableOverrides<P extends ConfigSectionFixture>(
         }
     }
 
+    if (Object.prototype.hasOwnProperty.call(platformConfig, 'repostsEnabled') && generalOverrides.repostsEnabled !== undefined) {
+        Object.assign(propagated, { repostsEnabled: generalOverrides.repostsEnabled });
+    }
     if (Object.prototype.hasOwnProperty.call(platformConfig, 'sharesEnabled') && generalOverrides.sharesEnabled !== undefined) {
         Object.assign(propagated, { sharesEnabled: generalOverrides.sharesEnabled });
     }

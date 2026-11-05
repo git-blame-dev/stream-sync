@@ -523,6 +523,7 @@ class AppRuntime {
             handleGiftPaypiggyNotification: this.handleGiftPaypiggyNotification.bind(this),
             handleFollowNotification: this.handleFollowNotification.bind(this),
             handleShareNotification: this.handleShareNotification.bind(this),
+            handleRepostNotification: this.handleRepostNotification.bind(this),
             handleRaidNotification: this.handleRaidNotification.bind(this),
             handleStreamDetected: this.handleStreamDetected.bind(this),
             handleEnvelopeNotification: this.handleEnvelopeNotification.bind(this)
@@ -1137,6 +1138,13 @@ class AppRuntime {
             throw new Error('handleFollowNotification requires options');
         }
         return this.handleUnifiedNotification('platform:follow', platform, username, options);
+    }
+
+    async handleRepostNotification(platform: string, username: unknown, options: NotificationOptions) {
+        if (!options || typeof options !== 'object') {
+            throw new Error('handleRepostNotification requires options');
+        }
+        return this.handleUnifiedNotification('platform:repost', platform, username, options);
     }
 
     async handleShareNotification(platform: string, username: unknown, options: NotificationOptions) {

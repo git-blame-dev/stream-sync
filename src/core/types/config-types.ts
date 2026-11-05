@@ -57,6 +57,7 @@ export type ConfigSectionName =
     | 'farewell'
     | 'commands'
     | 'shares'
+    | 'reposts'
     | 'vfx'
     | 'follows'
     | 'raids'

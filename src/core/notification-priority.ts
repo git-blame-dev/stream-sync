@@ -10,6 +10,7 @@ const PRIORITY_KEY_BY_TYPE = {
     'platform:paypiggy': 'PAYPIGGY',
     'platform:raid': 'RAID',
     'platform:share': 'SHARE',
+    'platform:repost': 'REPOST',
     'platform:giftpaypiggy': 'GIFTPAYPIGGY',
     'platform:chat-message': 'CHAT',
     chat: 'CHAT',

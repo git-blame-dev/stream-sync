@@ -252,6 +252,7 @@ interface PreviewRuntime {
     gracefulExitService: null;
     isFirstMessage: (userId: unknown, context: unknown) => unknown;
     handleFollowNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleRepostNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleShareNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleRaidNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleGiftNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
@@ -326,7 +327,6 @@ interface RunGuiPreviewOptions {
     ) => PreviewNotificationExitWaiter;
 }
 
-const PREVIEW_DURATION_MS = 32000;
 const FUNDING_PREVIEW_DURATION_MS = 120000;
 const PREVIEW_INTERVAL_MS = 2000;
 const PREVIEW_NOTIFICATION_EXIT_TIMEOUT_MS = 41000;
@@ -467,10 +467,12 @@ const PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
     { type: 'raid', adapter: 'twitch' },
     { type: 'chat-member-hi', adapter: 'youtube' },
     { type: 'share', adapter: 'tiktok' },
+    { type: 'repost', adapter: 'tiktok' },
     { type: 'paypiggy', adapter: 'youtube' },
     { type: 'giftpaypiggy', adapter: 'youtube' },
     { type: 'envelope', adapter: 'tiktok' }
 ];
+const PREVIEW_DURATION_MS = PREVIEW_SCENARIO_TEMPLATE.length * PREVIEW_INTERVAL_MS;
 const FUNDING_PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
     { type: 'gift', adapter: 'tiktok' },
     { type: 'paypiggy', adapter: 'youtube' },
@@ -516,6 +518,7 @@ function getPreviewNotificationType(scenarioType: string): string | undefined {
         gift: PlatformEvents.GIFT,
         raid: PlatformEvents.RAID,
         share: PlatformEvents.SHARE,
+        repost: PlatformEvents.REPOST,
         paypiggy: PlatformEvents.PAYPIGGY,
         giftpaypiggy: PlatformEvents.GIFTPAYPIGGY,
         envelope: PlatformEvents.ENVELOPE
@@ -617,6 +620,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         giftsEnabled: true,
         raidsEnabled: true,
         sharesEnabled: true,
+        repostsEnabled: true,
         paypiggiesEnabled: true,
         filterOldMessages: false
     });
@@ -635,6 +639,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         giftsEnabled: true,
         raidsEnabled: true,
         sharesEnabled: true,
+        repostsEnabled: true,
         paypiggiesEnabled: true
     };
 
@@ -642,7 +647,8 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     merged.youtube = mergeSection(getPreviewRecord(sourceConfig, 'youtube'), getPreviewRecord(overrideConfig, 'youtube'), platformFlags);
     merged.tiktok = mergeSection(getPreviewRecord(sourceConfig, 'tiktok'), getPreviewRecord(overrideConfig, 'tiktok'), {
         ...platformFlags,
-        sharesEnabled: true
+        sharesEnabled: true,
+        repostsEnabled: true
     });
 
     merged.gui = mergeSection(getPreviewRecord(sourceConfig, 'gui'), getPreviewRecord(overrideConfig, 'gui'), {
@@ -662,6 +668,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         showFarewells: true,
         showFollows: true,
         showShares: true,
+        showReposts: true,
         showRaids: true,
         showGifts: true,
         showPaypiggies: true,
@@ -1173,7 +1180,7 @@ function buildPreviewScenarioEvents(
 
         const tiktokEventType = scenarioType === 'gift'
             ? 'GIFT'
-            : (scenarioType === 'follow' ? 'FOLLOW' : (scenarioType === 'share' ? 'SOCIAL' : (scenarioType === 'envelope' ? 'ENVELOPE' : 'CHAT')));
+            : (scenarioType === 'follow' ? 'FOLLOW' : ((scenarioType === 'share' || scenarioType === 'repost') ? 'SOCIAL' : (scenarioType === 'envelope' ? 'ENVELOPE' : 'CHAT')));
         const comment = scenarioType === 'chat-command'
             ? '!preview'
             : (scenarioType === 'chat-hi'
@@ -1240,7 +1247,7 @@ function buildPreviewScenarioEvents(
                         isSubscriberOfAnchor: scenarioType === 'chat' || scenarioType === 'chat-no'
                     },
                     emotes: tiktokEmotes,
-                    displayType: scenarioType === 'share' ? 'share' : undefined,
+                    displayType: scenarioType === 'share' || scenarioType === 'repost' ? scenarioType : undefined,
                     giftName: gift?.name || 'Rose',
                     repeatCount: scenarioType === 'gift' ? 1 : 5,
                     diamondCount: scenarioType === 'gift'
@@ -1471,10 +1478,18 @@ function createPreviewIngestAdapters(
             emitPlatformEvent({ type: PlatformEvents.SHARE, platform: 'tiktok', data: eventData });
         },
         async handleTikTokSocial(data: UnknownRecord) {
-            if (String(data.displayType || '').toLowerCase() !== 'share') {
-                return;
+            const action = String(data.displayType || '').toLowerCase();
+            if (action === 'share') {
+                await this.handleTikTokShare(data);
+            } else if (action === 'repost') {
+                const eventData = tiktokEventFactory.createRepost({
+                    ...extractTikTokUserData(data),
+                    avatarUrl: extractTikTokAvatarUrl(data),
+                    timestamp: resolveTikTokTimestampISO(data),
+                    metadata: { platform: 'tiktok' }
+                });
+                emitPlatformEvent({ type: PlatformEvents.REPOST, platform: 'tiktok', data: eventData });
             }
-            await this.handleTikTokShare(data);
         },
         async _handleStandardEvent(_eventType: string, data: UnknownRecord, options: UnknownRecord) {
             if (options.factoryMethod !== 'createEnvelope') {
@@ -1547,6 +1562,7 @@ function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
 
     runtime.handleFollowNotification = forwardNotification(PlatformEvents.FOLLOW);
     runtime.handleShareNotification = forwardNotification(PlatformEvents.SHARE);
+    runtime.handleRepostNotification = forwardNotification(PlatformEvents.REPOST);
     runtime.handleRaidNotification = forwardNotification(PlatformEvents.RAID);
     runtime.handleGiftNotification = forwardNotification(PlatformEvents.GIFT);
     runtime.handlePaypiggyNotification = forwardNotification(PlatformEvents.PAYPIGGY);

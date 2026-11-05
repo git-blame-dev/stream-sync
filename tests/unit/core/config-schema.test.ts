@@ -178,6 +178,7 @@ describe('buildDefaultsFromSchema()', () => {
             showFarewells: true,
             showFollows: true,
             showShares: true,
+            showReposts: true,
             showRaids: true,
             showGifts: true,
             showPaypiggies: true,

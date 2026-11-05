@@ -216,7 +216,11 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
 
 function buildOperatorControlDefaults(config: MainConfig): OperatorControls {
     const general = config.general as Record<string, unknown>;
-    return Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls;
+    return {
+        ...Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls,
+        // Reposts originate only on TikTok; preserve its resolved config override.
+        repostsEnabled: (config.tiktok.repostsEnabled ?? general.repostsEnabled) !== false
+    };
 }
 
 function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearanceSettings {

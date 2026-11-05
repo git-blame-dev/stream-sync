@@ -6,7 +6,7 @@ import { getAnonymousUsername } from './validation';
 import { allowsYouTubeJewelsMissingAmount } from './missing-fields';
 import { parseNotificationCount } from './notification-count';
 
-const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
+const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:repost', 'platform:raid', 'platform:envelope'];
 const VIRTUAL_GIFT_CURRENCIES = new Set(['coins', 'bits', 'jewels']);
 
 type NotificationInput = Record<string, unknown> & {
@@ -125,7 +125,7 @@ class NotificationBuilder {
         if (!resolvedUsername && !isError) {
             return null;
         }
-        const disallowedShortTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'envelope']);
+        const disallowedShortTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'repost', 'envelope']);
         if (disallowedShortTypes.has(type)) {
             throw new Error(`Notification requires canonical platform type: ${type}`);
         }
@@ -542,6 +542,10 @@ class NotificationBuilder {
             return `${this.getTruncatedUsername(username)} just followed!`;
         }
 
+        if (type === 'platform:repost') {
+            return `${this.getTruncatedUsername(username)} reposted the LIVE`;
+        }
+
         if (type === 'platform:share') {
             return `${this.getTruncatedUsername(username)} shared the stream`;
         }
@@ -644,6 +648,10 @@ class NotificationBuilder {
 
         if (type === 'platform:follow') {
             return `${this.sanitizeUsernameForTts(username)} just followed`;
+        }
+
+        if (type === 'platform:repost') {
+            return `${userName} reposted the LIVE`;
         }
 
         if (type === 'platform:share') {
@@ -750,6 +758,10 @@ class NotificationBuilder {
             return `New follower: ${userName}`;
         }
         
+        if (type === 'platform:repost') {
+            return `Repost from ${userName}`;
+        }
+
         if (type === 'platform:share') {
             return `Share from ${userName}`;
         }

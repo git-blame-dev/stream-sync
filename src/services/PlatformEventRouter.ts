@@ -24,6 +24,7 @@ const PlatformEvents = {
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     FOLLOW: 'platform:follow',
     SHARE: 'platform:share',
+    REPOST: 'platform:repost',
     RAID: 'platform:raid',
     STREAM_STATUS: 'platform:stream-status',
     STREAM_DETECTED: 'platform:stream-detected',
@@ -57,7 +58,7 @@ type RouterEventBus = {
 };
 
 type RuntimeNotificationHandlerName = 'handleGiftNotification' | 'handlePaypiggyNotification' |
-    'handleGiftPaypiggyNotification' | 'handleFollowNotification' | 'handleShareNotification' | 'handleRaidNotification';
+    'handleGiftPaypiggyNotification' | 'handleFollowNotification' | 'handleShareNotification' | 'handleRepostNotification' | 'handleRaidNotification';
 
 type RuntimeNotificationHandler = (platform: string, username: unknown, payload: RouterRecord) => Promise<unknown> | unknown;
 
@@ -69,6 +70,7 @@ type RouterRuntime = {
     handleGiftPaypiggyNotification?: RuntimeNotificationHandler;
     handleFollowNotification?: RuntimeNotificationHandler;
     handleShareNotification?: RuntimeNotificationHandler;
+    handleRepostNotification?: RuntimeNotificationHandler;
     handleRaidNotification?: RuntimeNotificationHandler;
     handleStreamDetected?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
     handleEnvelopeNotification?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
@@ -262,6 +264,10 @@ class PlatformEventRouter {
             }
             case PlatformEvents.SHARE: {
                 await this._routeRuntimeNotification('handleShareNotification', type, platform, payload);
+                return;
+            }
+            case PlatformEvents.REPOST: {
+                await this._routeRuntimeNotification('handleRepostNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.RAID: {

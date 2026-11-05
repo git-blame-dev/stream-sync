@@ -54,7 +54,8 @@ const CONTROL_LABELS: Record<OperatorControlKey, string> = {
     giftsEnabled: 'Gifts',
     paypiggiesEnabled: 'Paypiggies',
     raidsEnabled: 'Raids',
-    sharesEnabled: 'Shares'
+    sharesEnabled: 'Shares',
+    repostsEnabled: 'Reposts'
 };
 const OPERATOR_ROUTES = new Set([
     '/api/v1/operator/state',

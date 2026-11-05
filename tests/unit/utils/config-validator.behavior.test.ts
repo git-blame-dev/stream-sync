@@ -200,6 +200,7 @@ describe("ConfigValidator.normalize()", () => {
     "paypiggies",
     "greetings",
     "shares",
+    "reposts",
     "profiles",
   ];
 

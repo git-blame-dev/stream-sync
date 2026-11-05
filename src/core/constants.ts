@@ -10,6 +10,7 @@ const PRIORITY_LEVELS = {
     GREETING: 4,
     FOLLOW: 5,
     SHARE: 6,
+    REPOST: 6,
     RAID: 7,
     ENVELOPE: 8,
     GIFT: 9,
@@ -63,6 +64,11 @@ const NOTIFICATION_CONFIGS = {
         timing: 'sequential',
         settingKey: 'sharesEnabled',
         commandKey: 'shares'
+    },
+    'platform:repost': {
+        timing: 'sequential',
+        settingKey: 'repostsEnabled',
+        commandKey: 'reposts'
     },
     command: {
         timing: 'sequential',

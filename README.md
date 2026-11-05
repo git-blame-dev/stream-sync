@@ -144,7 +144,7 @@ The default GUI origin is `http://127.0.0.1:3399`.
 The `/notifications` route is enabled with `enableNotifications = true` in the
 `[gui]` section. `dockFeedMode` and `overlayFeedMode` accept `all`, `chat`, or
 `non-chat`. The `/notifications` OBS launcher is fixed to the `non-chat` feed:
-commands, greetings, farewells, follows, shares, raids, gifts,
+commands, greetings, farewells, follows, shares, reposts, raids, gifts,
 Paypiggies/memberships, gift-Paypiggies, and envelopes. Global `show*` settings
 remain the master gates for their corresponding notification types.
 
@@ -197,7 +197,7 @@ host = 127.0.0.1
 port = 3399
 ```
 
-Start Stream Sync, then open `http://127.0.0.1:3399/operator` on the same computer. The page shows the structured application output written to the console, provides live global controls for chat messages, commands, greetings, farewells, follows, gifts, Paypiggies, raids, and shares, and configures the minimal appearance used by opted-in browser sources.
+Start Stream Sync, then open `http://127.0.0.1:3399/operator` on the same computer. The page shows the structured application output written to the console, provides live global controls for chat messages, commands, greetings, farewells, follows, gifts, Paypiggies, raids, shares, and reposts, and configures the minimal appearance used by opted-in browser sources.
 
 Controls suppress viewer-facing rows, TTS, VFX, media, and animations while preserving platform ingestion, raw logging, and tracking. Native monetization goals and USD funding accounting advance only when the backend starts presenting a notification, not on ingestion or queue admission. This does not require a browser acknowledgement or prove physical OBS visibility. Turning a control off removes matching items still waiting in the display queue without crediting them; the active presentation finishes without retroactively undoing its credit. Existing saved funding balances remain unchanged, and manual funding adjustments remain separate operator actions. Changes are saved atomically in `data/operator-control-overrides.json`, survive restarts, and never rewrite `config.ini`. Use **Restore config defaults** to clear those overrides.
 

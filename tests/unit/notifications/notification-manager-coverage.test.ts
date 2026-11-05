@@ -56,7 +56,7 @@ describe("NotificationManager real runtime outcomes", () => {
   it("observes a real queue decline without output, then admits a healthy aggregate", async () => {
     const controls = await createOperatorControlService({ filePath: join(h.dir, "synthetic-decline-controls.json"), defaults: {
       messagesEnabled: true, commandsEnabled: true, greetingsEnabled: true, farewellsEnabled: true,
-      followsEnabled: true, giftsEnabled: true, paypiggiesEnabled: true, raidsEnabled: true, sharesEnabled: true,
+      followsEnabled: true, giftsEnabled: true, paypiggiesEnabled: true, raidsEnabled: true, sharesEnabled: true, repostsEnabled: true,
     } });
     h.queue.operatorControls = controls;
     await controls.setEnabled("giftsEnabled", false);

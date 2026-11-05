@@ -14,6 +14,7 @@ const PlatformEvents = {
     CHAT_DISCONNECTED: 'platform:chat-disconnected',
     FOLLOW: 'platform:follow',
     SHARE: 'platform:share',
+    REPOST: 'platform:repost',
     PAYPIGGY: 'platform:paypiggy',
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     GIFT: 'platform:gift',
@@ -258,6 +259,19 @@ const EVENT_SCHEMAS = {
         optional: ['avatarUrl', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:share'] },
+            platform: { type: 'string', enum: VALID_PLATFORMS },
+            username: { type: 'string' },
+            userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
+            timestamp: { type: 'string' },
+            metadata: { type: 'object' }
+        }
+    },
+    'platform:repost': {
+        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        optional: ['avatarUrl', 'metadata'],
+        properties: {
+            type: { type: 'string', enum: ['platform:repost'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
@@ -1360,6 +1374,7 @@ class EnhancedPlatformEvents {
             case 'platform:envelope':
             case 'platform:follow':
             case 'platform:share':
+            case 'platform:repost':
             case PlatformEvents.VFX_COMMAND_RECEIVED:
             case PlatformEvents.VFX_COMMAND_EXECUTED:
             case PlatformEvents.VFX_EFFECT_COMPLETED:

@@ -14,6 +14,7 @@ const PlatformEvents = {
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     FOLLOW: 'platform:follow',
     SHARE: 'platform:share',
+    REPOST: 'platform:repost',
     RAID: 'platform:raid',
     ENVELOPE: 'platform:envelope',
     STREAM_STATUS: 'platform:stream-status',
@@ -45,6 +46,7 @@ type PlatformEventHandlers = {
     onGiftPaypiggy: (data: unknown) => void;
     onFollow: (data: unknown) => void;
     onShare: (data: unknown) => void;
+    onRepost: (data: unknown) => void;
     onRaid: (data: unknown) => void;
     onEnvelope: (data: unknown) => void;
     onStreamStatus: (data: unknown) => void;
@@ -256,6 +258,7 @@ class PlatformLifecycleService {
             onGiftPaypiggy: (data) => this.emitPlatformEvent(platformName, PlatformEvents.GIFTPAYPIGGY, data),
             onFollow: (data) => this.emitPlatformEvent(platformName, PlatformEvents.FOLLOW, data),
             onShare: (data) => this.emitPlatformEvent(platformName, PlatformEvents.SHARE, data),
+            onRepost: (data) => this.emitPlatformEvent(platformName, PlatformEvents.REPOST, data),
             onRaid: (data) => this.emitPlatformEvent(platformName, PlatformEvents.RAID, data),
             onEnvelope: (data) => this.emitPlatformEvent(platformName, PlatformEvents.ENVELOPE, data),
             onStreamStatus: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, data),
@@ -373,6 +376,7 @@ class PlatformLifecycleService {
             PlatformEvents.CHAT_MESSAGE,
             PlatformEvents.FOLLOW,
             PlatformEvents.SHARE,
+            PlatformEvents.REPOST,
             PlatformEvents.PAYPIGGY,
             PlatformEvents.GIFTPAYPIGGY,
             PlatformEvents.GIFT,

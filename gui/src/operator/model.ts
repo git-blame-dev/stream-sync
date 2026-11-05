@@ -42,6 +42,7 @@ export const CONTROL_KEYS = [
   'paypiggiesEnabled',
   'raidsEnabled',
   'sharesEnabled',
+  'repostsEnabled',
 ] as const
 export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'] as const
 export const MAX_LOG_ROWS = 200

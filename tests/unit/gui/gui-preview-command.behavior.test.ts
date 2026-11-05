@@ -142,15 +142,15 @@ describe("GUI local preview command behavior", () => {
     expect(calls).toEqual([[25, 25, "gui-preview delay"]]);
   });
 
-  it("uses 32s duration and 2s message cadence constants", () => {
-    expect(PREVIEW_DURATION_MS).toBe(32000);
+  it("uses enough preview duration for every scenario at a 2s cadence", () => {
+    expect(PREVIEW_DURATION_MS).toBe(34000);
     expect(PREVIEW_INTERVAL_MS).toBe(2000);
   });
 
   it("builds deterministic ingest events for the full preview window", () => {
     const events = buildPreviewScenarioEvents();
 
-    expect(events.length).toBe(16);
+    expect(events.length).toBe(17);
     expect(events[0]).toEqual(
       expect.objectContaining({
         platform: "youtube",
@@ -522,7 +522,7 @@ describe("GUI local preview command behavior", () => {
         intervalMs: 2000,
         stdout: { write() {} },
       }),
-    ).rejects.toThrow("requires at least 14000ms");
+    ).rejects.toThrow("requires at least 16000ms");
   });
 
   it("rejects a malformed public pipeline factory result before acquiring transport", async () => {
@@ -543,7 +543,7 @@ describe("GUI local preview command behavior", () => {
       const run = runPreviewScenario({
         adapters: Object.fromEntries(["twitch", "youtube", "tiktok"].map(key =>
           [key, { ingest(rawEvent: UnknownRecord) { seen.push(rawEvent); } }])),
-        scenarioEvents: events, intervalMs: 2000, durationMs: 32000,
+        scenarioEvents: events, intervalMs: 2000, durationMs: PREVIEW_DURATION_MS,
         safeSetIntervalImpl: safeSetInterval, safeSetTimeoutImpl: safeSetTimeout,
         errorHandler: { handleEventProcessingError() { throw new Error("Unexpected scheduler error"); } },
       });
@@ -552,13 +552,13 @@ describe("GUI local preview command behavior", () => {
       expect(seen).toHaveLength(1);
       advanceTimersByTime(1);
       expect(seen).toHaveLength(2);
-      advanceTimersByTime(30000);
+      advanceTimersByTime(PREVIEW_DURATION_MS - 2000);
       expect((await run).dispatchedEvents).toEqual(events);
       expect(seen).toEqual(events.map(event => event.rawEvent));
       expect(seen.at(-1)?.eventType).toBe("ENVELOPE");
       expect(getTimerCount()).toBe(0);
       advanceTimersByTime(32000);
-      expect(seen).toHaveLength(16);
+      expect(seen).toHaveLength(events.length);
     } finally { useRealTimers(); }
   });
 

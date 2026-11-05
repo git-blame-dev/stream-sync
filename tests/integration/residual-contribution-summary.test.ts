@@ -96,7 +96,7 @@ async function createRealOwnerHarness(options: {
     const operatorControlService = await createOperatorControlService({
         defaults: {
             messagesEnabled: true, commandsEnabled: true, greetingsEnabled: true, farewellsEnabled: true,
-            followsEnabled: true, giftsEnabled: true, paypiggiesEnabled: true, raidsEnabled: true, sharesEnabled: true
+            followsEnabled: true, giftsEnabled: true, paypiggiesEnabled: true, raidsEnabled: true, sharesEnabled: true, repostsEnabled: true
         },
         fs
     });

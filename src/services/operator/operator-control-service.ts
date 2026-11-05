@@ -11,7 +11,8 @@ const OPERATOR_CONTROL_KEYS = [
     'giftsEnabled',
     'paypiggiesEnabled',
     'raidsEnabled',
-    'sharesEnabled'
+    'sharesEnabled',
+    'repostsEnabled'
 ] as const;
 const operatorControlKeys = new Set<string>(OPERATOR_CONTROL_KEYS);
 

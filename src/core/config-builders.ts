@@ -189,6 +189,7 @@ function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolea
         },
         profiles: structuredClone(normalized.profiles || {}),
         shares: { command: shares.command },
+        reposts: { ...normalized.reposts },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
         commands: { ...normalized.commands },

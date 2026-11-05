@@ -60,6 +60,7 @@ const createNoopHandlers = (): PlatformEventHandlers => ({
   onGiftPaypiggy: () => {},
   onFollow: () => {},
   onShare: () => {},
+  onRepost: () => {},
   onRaid: () => {},
   onEnvelope: () => {},
   onStreamStatus: () => {},
@@ -1362,6 +1363,7 @@ describe("PlatformLifecycleService", () => {
       "onGiftPaypiggy",
       "onFollow",
       "onShare",
+      "onRepost",
       "onRaid",
       "onEnvelope",
       "onStreamStatus",
@@ -1399,6 +1401,11 @@ describe("PlatformLifecycleService", () => {
       },
       onFollow: {
         eventType: PlatformEvents.FOLLOW,
+        requiresTimestamp: true,
+        dataKey: "username",
+      },
+      onRepost: {
+        eventType: PlatformEvents.REPOST,
         requiresTimestamp: true,
         dataKey: "username",
       },
@@ -1459,6 +1466,7 @@ describe("PlatformLifecycleService", () => {
           return { ...base, giftCount: 5, tier: "test-tier-1" };
         case "onFollow":
           return { ...base };
+        case "onRepost":
         case "onShare":
           return { ...base };
         case "onRaid":

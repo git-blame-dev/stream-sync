@@ -13,6 +13,7 @@ type GuiToggleKey =
     | 'showFarewells'
     | 'showFollows'
     | 'showShares'
+    | 'showReposts'
     | 'showRaids'
     | 'showGifts'
     | 'showPaypiggies'
@@ -72,6 +73,7 @@ const EVENT_RULES: Record<string, EventRule> = {
     'platform:chat-message': { kind: 'chat', toggleKey: 'showMessages' },
     'platform:follow': { kind: 'notification', toggleKey: 'showFollows' },
     'platform:share': { kind: 'notification', toggleKey: 'showShares' },
+    'platform:repost': { kind: 'notification', toggleKey: 'showReposts' },
     'platform:raid': { kind: 'notification', toggleKey: 'showRaids' },
     'platform:gift': { kind: 'notification', toggleKey: 'showGifts', presentationRole: 'monetization' },
     'platform:paypiggy': { kind: 'notification', toggleKey: 'showPaypiggies', presentationRole: 'monetization' },

@@ -256,7 +256,7 @@ describe('GUI preview actual owner boundary integration', () => {
         const off = h.bus.subscribe('display:gift-animation', value => { effects.push(value); });
         try {
             for (const event of buildPreviewScenarioEvents()) await h.adapters[event.adapter].ingest(event.rawEvent);
-            const required = ['chat', 'command', 'greeting', 'farewell', 'platform:follow', 'platform:gift', 'platform:raid', 'platform:share', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope'];
+            const required = ['chat', 'command', 'greeting', 'farewell', 'platform:follow', 'platform:gift', 'platform:raid', 'platform:share', 'platform:repost', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope'];
             await until(() => required.every(type => h.feed.packets.some(row => row.type === type)), 'all preview HTTP rows');
             h.feed.assertHealthy();
             const avatars = new Map(h.feed.packets.filter(row => row.type === 'chat').map(row => [row.platform, row.avatarUrl]));
@@ -482,11 +482,11 @@ describe('GUI preview actual owner boundary integration', () => {
                 feed = connectFeed(baseUrl); await command.waitFor(feed.ready(), 'GUI feed readiness');
                 await command.waitFor(command.keptOpen.promise, 'keep-open');
                 expect(command.settled).toBe(false);
-                expect(ingested.slice(0, 16).map(event => (event as RecordValue).type)).toEqual([
+                expect(ingested.slice(0, 17).map(event => (event as RecordValue).type)).toEqual([
                     'platform:chat-message', 'platform:chat-message', 'platform:chat-message', 'platform:gift',
                     'platform:chat-message', 'platform:chat-message', 'platform:chat-message', 'platform:follow',
                     'platform:chat-message', 'platform:chat-message', 'platform:raid', 'platform:chat-message',
-                    'platform:share', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope',
+                    'platform:share', 'platform:repost', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope',
                 ]);
                 await until(() => feed!.packets.filter(row => row.type === 'chat').length >= 4, 'scheduled command HTTP chat rows');
                 feed.assertHealthy();

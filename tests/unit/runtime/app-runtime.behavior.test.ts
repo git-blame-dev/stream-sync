@@ -206,12 +206,13 @@ describe('AppRuntime with production main owners', () => {
     for (const [method, type, platform] of [
       ['handleFollowNotification', 'platform:follow', 'twitch'],
       ['handleShareNotification', 'platform:share', 'tiktok'],
+      ['handleRepostNotification', 'platform:repost', 'tiktok'],
       ['handleRaidNotification', 'platform:raid', 'twitch'],
     ] as const) {
       expect(await h.runtime[method](platform, 'synthetic-viewer', { ...base, viewerCount: 3 })).toMatchObject({ success: true });
       expect(items().some(item => item.type === type && item.data.username === 'synthetic-viewer')).toBe(true);
     }
-    expect(h.queue.state.queue).toHaveLength(3);
+    expect(h.queue.state.queue).toHaveLength(4);
   });
 
   it('returns actual manager rejection and recovers after gifts are enabled', async () => {

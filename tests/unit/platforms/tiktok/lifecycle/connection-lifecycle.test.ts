@@ -270,7 +270,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         },
       };
 
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-error-a",
@@ -282,7 +282,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         message: "Stream is not live",
         code: 4404,
       });
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-error-b",
@@ -306,7 +306,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         },
       };
 
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-error-c",
@@ -315,7 +315,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         }),
       );
       platform.handleConnectionError(new Error("network timeout"));
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-error-d",
@@ -513,7 +513,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         },
       };
 
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-a",
@@ -522,7 +522,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         }),
       );
       await platform.handleConnectionIssue("temporary network interruption");
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-b",
@@ -547,7 +547,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         },
       };
 
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-c",
@@ -559,7 +559,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         message: "Stream is not live",
         code: 4404,
       });
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-d",
@@ -628,7 +628,7 @@ describe("TikTokPlatform connection lifecycle", () => {
       platform.intervalManager.hasInterval =
         vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(true);
 
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-e",
@@ -637,7 +637,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         }),
       );
       await platform._handleStreamEnd();
-      await platform._handleShare(
+      await platform._handleSocialInteraction(
         createSharePayload({
           common: {
             msgId: "test-share-msg-f",

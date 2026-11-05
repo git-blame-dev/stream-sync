@@ -13,6 +13,7 @@ const PlatformEvents = {
     GIFT: 'platform:gift',
     FOLLOW: 'platform:follow',
     SHARE: 'platform:share',
+    REPOST: 'platform:repost',
     ENVELOPE: 'platform:envelope',
     PAYPIGGY: 'platform:paypiggy',
     CHAT_CONNECTED: 'platform:chat-connected',
@@ -213,6 +214,27 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
         return '';
     };
 
+    const createSocialInteraction = (interactionType: 'share' | 'repost', params: EventFactoryPayload) => {
+        const identity = normalizeUserData({
+            userId: String(params.userId ?? ''),
+            username: String(params.username ?? '')
+        });
+        const avatarUrl = resolveAvatarUrl(params);
+
+        return {
+            type: interactionType === 'repost' ? PlatformEvents.REPOST : PlatformEvents.SHARE,
+            platform: platformName,
+            username: identity.username,
+            userId: identity.userId,
+            avatarUrl,
+            timestamp: params.timestamp,
+            metadata: buildEventMetadata({
+                interactionType,
+                ...(asRecord(params.metadata) || {})
+            })
+        };
+    };
+
     return {
         createChatMessage: (data: EventFactoryPayload = {}, eventOptions: EventFactoryChatOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
@@ -376,26 +398,8 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 metadata: buildEventMetadata(asRecord(params.metadata) || undefined)
             };
         },
-        createShare: (params: EventFactoryPayload = {}) => {
-            const identity = normalizeUserData({
-                userId: String(params.userId ?? ''),
-                username: String(params.username ?? '')
-            });
-            const avatarUrl = resolveAvatarUrl(params);
-
-            return {
-                type: PlatformEvents.SHARE,
-                platform: platformName,
-                username: identity.username,
-                userId: identity.userId,
-                avatarUrl,
-                timestamp: params.timestamp,
-                metadata: buildEventMetadata({
-                    interactionType: 'share',
-                    ...(asRecord(params.metadata) || {})
-                })
-            };
-        },
+        createShare: (params: EventFactoryPayload = {}) => createSocialInteraction('share', params),
+        createRepost: (params: EventFactoryPayload = {}) => createSocialInteraction('repost', params),
         createEnvelope: (data: EventFactoryPayload = {}) => {
             if (asRecord(data.envelopeInfo)) {
                 // v3 has no handle or established contribution unit/eligibility contract.

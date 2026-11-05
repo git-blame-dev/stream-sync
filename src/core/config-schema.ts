@@ -15,6 +15,7 @@ const CONFIG_SCHEMA = {
         giftsEnabled: { type: 'boolean', default: true },
         raidsEnabled: { type: 'boolean', default: true },
         sharesEnabled: { type: 'boolean', default: true },
+        repostsEnabled: { type: 'boolean', default: true },
         paypiggiesEnabled: { type: 'boolean', default: true },
         filterOldMessages: { type: 'boolean', default: true },
         logChatMessages: { type: 'boolean', default: true },
@@ -98,6 +99,7 @@ const CONFIG_SCHEMA = {
         raidsEnabled: { type: 'boolean', inheritFrom: 'general' },
         paypiggiesEnabled: { type: 'boolean', inheritFrom: 'general' },
         sharesEnabled: { type: 'boolean', inheritFrom: 'general' },
+        repostsEnabled: { type: 'boolean', inheritFrom: 'general' },
         ignoreSelfMessages: { type: 'boolean', inheritFrom: 'general' },
         pollInterval: { type: 'number', userDefined: true }
     },
@@ -152,6 +154,7 @@ const CONFIG_SCHEMA = {
         showFarewells: { type: 'boolean', default: true },
         showFollows: { type: 'boolean', default: true },
         showShares: { type: 'boolean', default: true },
+        showReposts: { type: 'boolean', default: true },
         showRaids: { type: 'boolean', default: true },
         showGifts: { type: 'boolean', default: true },
         showPaypiggies: { type: 'boolean', default: true },
@@ -261,6 +264,10 @@ const CONFIG_SCHEMA = {
     },
 
     shares: {
+        command: { type: 'string', userDefined: true }
+    },
+
+    reposts: {
         command: { type: 'string', userDefined: true }
     },
 

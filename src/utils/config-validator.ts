@@ -151,9 +151,10 @@ class ConfigValidator {
         };
     }
 
-    static _parseShareFlag(raw: RawConfigSection) {
+    static _parseSocialFlags(raw: RawConfigSection) {
         return {
-            sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, null)
+            sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, null),
+            repostsEnabled: ConfigValidator.parseBoolean(raw.repostsEnabled, null)
         };
     }
 
@@ -185,6 +186,7 @@ class ConfigValidator {
             paypiggies: ConfigValidator._normalizePaypiggiesSection(rawConfig.paypiggies || {}),
             greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}),
             shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {}),
+            reposts: ConfigValidator.normalizeFromSchema('reposts', rawConfig.reposts || {}),
             profiles: ConfigValidator._normalizeProfiles(rawConfig.profile || {})
         };
     }
@@ -200,6 +202,7 @@ class ConfigValidator {
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, DEFAULTS.general.giftsEnabled),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, DEFAULTS.general.raidsEnabled),
             sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, DEFAULTS.general.sharesEnabled),
+            repostsEnabled: ConfigValidator.parseBoolean(raw.repostsEnabled, DEFAULTS.general.repostsEnabled),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, DEFAULTS.general.paypiggiesEnabled),
             filterOldMessages: ConfigValidator.parseBoolean(raw.filterOldMessages, DEFAULTS.general.filterOldMessages),
             logChatMessages: ConfigValidator.parseBoolean(raw.logChatMessages, DEFAULTS.general.logChatMessages),
@@ -249,7 +252,7 @@ class ConfigValidator {
             giftAggregationEnabled: ConfigValidator.parseBoolean(raw.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
             ...ConfigValidator._parseInheritableFlags(raw),
-            ...ConfigValidator._parseShareFlag(raw),
+            ...ConfigValidator._parseSocialFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
     }

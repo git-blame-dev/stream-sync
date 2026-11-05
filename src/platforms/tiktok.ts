@@ -30,6 +30,7 @@ const PlatformEvents = {
     GIFT: 'platform:gift',
     FOLLOW: 'platform:follow',
     SHARE: 'platform:share',
+    REPOST: 'platform:repost',
     PAYPIGGY: 'platform:paypiggy',
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     ENVELOPE: 'platform:envelope',
@@ -251,6 +252,7 @@ type DefaultHandlerName =
     | 'onFollow'
     | 'onRaid'
     | 'onShare'
+    | 'onRepost'
     | 'onEnvelope'
     | 'onStreamStatus';
 
@@ -331,7 +333,7 @@ class TikTokPlatform extends EventEmitter {
     declare initializationStats: InitializationStatistics;
     declare listenersConfigured: boolean;
     declare recentPlatformMessageIds: Map<string, number>;
-    declare recentShareActors: Set<string>;
+    declare recentSocialActors: Set<string>;
     private readonly recentPaypiggyActors = new Map<string, number>();
     declare deduplicationConfig: DeduplicationConfig;
     declare fallbackAvatarUrl: string;
@@ -385,7 +387,7 @@ class TikTokPlatform extends EventEmitter {
         this.initializationStats = dependencies.initializationStats || new InitializationStatistics('tiktok', this.logger);
         this.listenersConfigured = false;
         this.recentPlatformMessageIds = new Map();
-        this.recentShareActors = new Set();
+        this.recentSocialActors = new Set();
         this.deduplicationConfig = {
             maxCacheSize: dependencies.deduplicationMaxCacheSize ?? 2000,
             ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
@@ -801,7 +803,7 @@ class TikTokPlatform extends EventEmitter {
         const errorMessage = details.message;
         const isStreamNotLive = this._isStreamNotLive(details);
         if (isStreamNotLive) {
-            this._resetShareActorTracking('stream-not-live');
+            this._resetSocialActorTracking('stream-not-live');
             this.reportOfflineMonitoring();
             this.connectionStateManager.markDisconnected();
         } else {
@@ -1145,7 +1147,7 @@ class TikTokPlatform extends EventEmitter {
       });
 
       if (decision.isStreamNotLive) {
-        this._resetShareActorTracking('stream-not-live');
+        this._resetSocialActorTracking('stream-not-live');
         this.reportOfflineMonitoring(decision.willReconnect);
       } else if (isError) {
         this.offlineMonitoring = false;
@@ -1360,8 +1362,8 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            if (actionType === 'share') {
-                await this._handleShare(data);
+            if (actionType === 'share' || actionType === 'repost') {
+                await this._handleSocialInteraction(data, actionType);
                 return;
             }
             await this._handleFollow(data);
@@ -1392,7 +1394,7 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            if (actionType !== 'share' && actionType !== 'follow') {
+            if (actionType !== 'share' && actionType !== 'repost' && actionType !== 'follow') {
                 return;
             }
 
@@ -1400,8 +1402,8 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            if (actionType === 'share') {
-                await this._handleShare(data);
+            if (actionType === 'share' || actionType === 'repost') {
+                await this._handleSocialInteraction(data, actionType);
                 return;
             }
 
@@ -1433,7 +1435,7 @@ class TikTokPlatform extends EventEmitter {
             if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
                 return;
             }
-            await this._handleShare(data);
+            await this._handleSocialInteraction(data);
         } catch (err) {
             this.errorHandler.handleEventProcessingError(
                 err,
@@ -1454,10 +1456,13 @@ class TikTokPlatform extends EventEmitter {
         const displayType = String(displayText.displayType || displayText.key || dataRecord.displayType || '').toLowerCase();
 
         if (
-            defaultPattern.includes('repost')
-            || defaultPattern.includes('shared')
-            || displayType.includes('repost')
-            || displayType.includes('share')
+            defaultPattern.includes('repost') || displayType.includes('repost')
+        ) {
+            return 'repost';
+        }
+
+        if (
+            defaultPattern.includes('shared') || displayType.includes('share')
         ) {
             return 'share';
         }
@@ -1466,7 +1471,11 @@ class TikTokPlatform extends EventEmitter {
             return 'follow';
         }
 
-        if (normalizedBaseType.includes('repost') || normalizedBaseType.includes('share')) {
+        if (normalizedBaseType.includes('repost')) {
+            return 'repost';
+        }
+
+        if (normalizedBaseType.includes('share')) {
             return 'share';
         }
 
@@ -1745,7 +1754,7 @@ class TikTokPlatform extends EventEmitter {
         return false;
     }
 
-    _shouldSkipDuplicateShareActor(userId: unknown): boolean {
+    _shouldSkipDuplicateSocialActor(userId: unknown, interactionType: 'share' | 'repost' = 'share'): boolean {
         const normalizedUserId = typeof userId === 'string'
             ? userId.trim()
             : (typeof userId === 'number' ? String(userId).trim() : '');
@@ -1753,21 +1762,22 @@ class TikTokPlatform extends EventEmitter {
             return false;
         }
 
-        if (this.recentShareActors.has(normalizedUserId)) {
+        const actorKey = `${interactionType}:${normalizedUserId}`;
+        if (this.recentSocialActors.has(actorKey)) {
             return true;
         }
 
-        this.recentShareActors.add(normalizedUserId);
+        this.recentSocialActors.add(actorKey);
         return false;
     }
 
-    _resetShareActorTracking(reason: string): void {
-        const trackedCount = this.recentShareActors.size;
+    _resetSocialActorTracking(reason: string): void {
+        const trackedCount = this.recentSocialActors.size;
         if (trackedCount === 0) {
             return;
         }
 
-        this.recentShareActors.clear();
+        this.recentSocialActors.clear();
     }
 
     _handleEventProcessingError(emitType: string, data: unknown, error: unknown) {
@@ -1944,26 +1954,27 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleShare(data: unknown) {
+    async _handleSocialInteraction(data: unknown, interactionType: 'share' | 'repost' = 'share') {
         try {
             const { username, userId } = extractTikTokUserData(data);
 
             if (!userId || !username) {
-                this.logger.warn('[TikTok Share] Missing canonical identity in share event', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
+                this.logger.warn(`[TikTok ${interactionType}] Missing canonical identity in social event`, 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
             const timestamp = this._getTimestamp(data);
             if (!timestamp) {
-                this.logger.warn('[TikTok Share] Missing timestamp in share event data', 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
+                this.logger.warn(`[TikTok ${interactionType}] Missing timestamp in social event data`, 'tiktok', { dataType: typeof data, hasUser: !!asRecord(data).user });
                 return;
             }
 
-            if (this._shouldSkipDuplicateShareActor(userId)) {
+            if (this._shouldSkipDuplicateSocialActor(userId, interactionType)) {
                 return;
             }
 
-            const eventData = this.eventFactory.createShare({
+            const createEvent = interactionType === 'repost' ? this.eventFactory.createRepost : this.eventFactory.createShare;
+            const eventData = createEvent({
                 username,
                 userId,
                 avatarUrl: this._resolveAvatarUrl(data),
@@ -1973,9 +1984,9 @@ class TikTokPlatform extends EventEmitter {
                 }
             });
 
-            this._emitPlatformEvent(PlatformEvents.SHARE, eventData);
+            this._emitPlatformEvent(interactionType === 'repost' ? PlatformEvents.REPOST : PlatformEvents.SHARE, eventData);
         } catch (error) {
-            this._handleError(error, { operation: 'handleShare', data });
+            this._handleError(error, { operation: 'handleSocialInteraction', interactionType, data });
         }
     }
 
@@ -2083,7 +2094,7 @@ class TikTokPlatform extends EventEmitter {
       }
 
       this.reportOfflineMonitoring(decision.willReconnect);
-      this._resetShareActorTracking(decision.isStreamNotLive ? 'stream-not-live' : 'stream-end');
+      this._resetSocialActorTracking(decision.isStreamNotLive ? 'stream-not-live' : 'stream-end');
 
       this.isPlannedDisconnection = false;
       this.connectionActive = false;
@@ -2148,6 +2159,7 @@ class TikTokPlatform extends EventEmitter {
             [PlatformEvents.PAYPIGGY]: 'onPaypiggy',
             [PlatformEvents.RAID]: 'onRaid',
             [PlatformEvents.SHARE]: 'onShare',
+            [PlatformEvents.REPOST]: 'onRepost',
             [PlatformEvents.ENVELOPE]: 'onEnvelope',
             [PlatformEvents.STREAM_STATUS]: 'onStreamStatus',
             [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'
@@ -2186,6 +2198,7 @@ class TikTokPlatform extends EventEmitter {
             onPaypiggy: (data: unknown) => emitToBus(PlatformEvents.PAYPIGGY, data),
             onFollow: (data: unknown) => emitToBus(PlatformEvents.FOLLOW, data),
             onShare: (data: unknown) => emitToBus(PlatformEvents.SHARE, data),
+            onRepost: (data: unknown) => emitToBus(PlatformEvents.REPOST, data),
             onRaid: (data: unknown) => emitToBus(PlatformEvents.RAID, data),
             onEnvelope: (data: unknown) => emitToBus(PlatformEvents.ENVELOPE, data),
             onStreamStatus: (data: unknown) => emitToBus(PlatformEvents.STREAM_STATUS, data)
