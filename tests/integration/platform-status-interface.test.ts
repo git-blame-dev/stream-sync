@@ -28,9 +28,13 @@ const createTwitchEventSubFixture = (state: {
   isActive: () => state.isActive,
 });
 
-const createYouTubeConnectionManagerFixture = (connectionCount: number) => {
+const createYouTubeConnectionManagerFixture = async (connectionCount: number) => {
   const manager = new YouTubeConnectionManager(noOpLogger, { config: {} });
-  manager.getConnectionCount = () => connectionCount;
+  for (let index = 0; index < connectionCount; index++) {
+    const id = `synthetic-status-stream-${index}`;
+    await manager.connectToStream(id, async () => ({ stop() {} }));
+    manager.setConnectionReady(id, manager.getConnectionStatus(id)!.attemptId);
+  }
   return manager;
 };
 
@@ -199,9 +203,9 @@ describe("Platform getStatus() interface standardization", () => {
       expect(Array.isArray(status.issues)).toBe(true);
     });
 
-    test("isReady is true when enabled and has connections", () => {
+    test("isReady is true when enabled and has ready connections", async () => {
       const platform = createYouTubePlatform({ enabled: true });
-      platform.connectionManager = createYouTubeConnectionManagerFixture(1);
+      platform.connectionManager = await createYouTubeConnectionManagerFixture(1);
 
       const status = platform.getStatus();
 
@@ -218,9 +222,9 @@ describe("Platform getStatus() interface standardization", () => {
       expect(status.issues).toEqual([]);
     });
 
-    test("isReady is false with issue when enabled but no connections", () => {
+    test("isReady is false with issue when enabled but no connections", async () => {
       const platform = createYouTubePlatform({ enabled: true });
-      platform.connectionManager = createYouTubeConnectionManagerFixture(0);
+      platform.connectionManager = await createYouTubeConnectionManagerFixture(0);
 
       const status = platform.getStatus();
 

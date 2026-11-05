@@ -469,20 +469,6 @@ class YouTubePlatform extends EventEmitter {
     }
 
 
-  removeYouTubeConnection(videoId: string) {
-        this.connectionManager.removeConnection(videoId);
-        
-        if (this.viewerService && typeof this.viewerService.clearActiveStream === 'function') {
-            try {
-                if (this.viewerService._activeStream && this.viewerService._activeStream.videoId === videoId) {
-                    this.viewerService.clearActiveStream();
-                }
-            } catch (serviceError: unknown) {
-                this.logger.warn(`Failed to clear active stream in viewer service: ${getErrorMessage(serviceError)}`, 'youtube');
-            }
-        }
-    }
-
     async disconnectFromYouTubeStream(videoId: string, reason = 'unknown', options: StreamRefreshRequest = {}): Promise<boolean> {
         if (!this.connectionManager) {
             return false;
@@ -586,7 +572,9 @@ class YouTubePlatform extends EventEmitter {
         }
         if (availability !== previous.availability && availability !== 'unknown') {
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
-                platform: 'youtube', isLive: availability === 'live', timestamp: getSystemTimestampISO()
+                platform: 'youtube', isLive: availability === 'live',
+                ...(availability === 'offline' ? { status: 'stream-ended' } : {}),
+                timestamp: getSystemTimestampISO()
             });
         }
     }
@@ -1304,14 +1292,14 @@ class YouTubePlatform extends EventEmitter {
 
     getStatus(): { isReady: boolean; issues: string[] } {
         const issues = [];
-        const connectionCount = this.connectionManager?.getConnectionCount() ?? 0;
+        const readyConnectionCount = this.connectionManager?.getReadyConnectionCount() ?? 0;
 
-        if (this.config.enabled === true && connectionCount === 0) {
+        if (this.config.enabled === true && readyConnectionCount === 0) {
             issues.push('Not connected');
         }
 
         return {
-            isReady: this.config.enabled === true && connectionCount > 0,
+            isReady: this.config.enabled === true && readyConnectionCount > 0,
             issues
         };
     }
@@ -1468,22 +1456,6 @@ class YouTubePlatform extends EventEmitter {
             }
         }
     }
-
-    getHealthStatus(): UnknownMap {
-        const activeConnections = this.connectionManager ? this.connectionManager.getConnectionCount() : 0;
-        const monitoringActive = !!this.monitoringInterval;
-        const overall = activeConnections > 0 ? 'healthy' : (monitoringActive ? 'idle' : 'degraded');
-
-        return {
-            overall,
-            services: {
-                connectionManager: activeConnections > 0 ? 'healthy' : 'idle',
-                monitoring: monitoringActive ? 'active' : 'stopped'
-            },
-            lastRecovery: this.lastRecoveryTime || null
-        };
-    }
-
 
     _clearMonitoringInterval(): void {
         if (this.monitoringInterval) {

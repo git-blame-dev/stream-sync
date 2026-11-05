@@ -6,6 +6,8 @@ import { YouTubeStreamDetectionService } from '../../src/services/youtube-stream
 import { ViewerCountExtractionService } from '../../src/services/viewer-count-extraction-service';
 import { ViewerCountSystem } from '../../src/utils/viewer-count';
 import { OBSViewerCountObserver } from '../../src/observers/obs-viewer-count-observer';
+import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
+import { UserTrackingService } from '../../src/services/UserTrackingService';
 import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
 import { noOpLogger } from '../helpers/mock-factories';
 import { createRecordingLogger } from '../helpers/recording-logger';
@@ -99,6 +101,122 @@ function fixture(maxStreams = 2, extractionEnabled = true, username = channelId)
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
+    for (const failure of ['chat', 'playback'] as const) {
+        it(`tries later candidates within the same capacity check after ${failure} acquisition fails`, async () => {
+            const f = fixture(1);
+            try {
+                (failure === 'chat' ? f.chatFailures : f.playbackUnavailable).add(a);
+                await f.platform.checkMultiStream();
+                expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
+                expect(f.platform.getActiveYouTubeVideoIds()).toEqual([b]);
+                expect(f.platform.connectionManager.getConnectionCount()).toBe(1);
+                await f.store.pollPlatform('youtube');
+                expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '30' });
+            } finally { await f.close(); }
+        });
+    }
+
+    it('admits a replacement in the same full check that confirms an existing stream ended', async () => {
+        const f = fixture(1);
+        try {
+            f.setDiscovery([a]);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([a]);
+            f.infoOverrides.set(a, { id: a, end_timestamp: new Date(epoch - 1) });
+            f.setDiscovery([b]);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getDetectedStreamIds()).toEqual([b]);
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([b]);
+            expect(f.platform.connectionManager.getConnectionCount()).toBe(1);
+        } finally { await f.close(); }
+    });
+
+    it('counts connecting reservations against capacity while readiness waits for a ready connection', async () => {
+        const f = fixture(1);
+        const gate = Promise.withResolvers<void>();
+        const pending = f.platform.connectionManager.connectToStream(a, async () => {
+            await gate.promise;
+            return { stop() {} };
+        });
+        try {
+            expect(f.platform.connectionManager.getConnectionState()).toMatchObject({ totalConnections: 1, readyConnections: 0 });
+            expect(f.platform.getStatus()).toEqual({ isReady: false, issues: ['Not connected'] });
+            await f.platform.checkMultiStream();
+            expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
+            expect(f.platform.connectionManager.getAllVideoIds()).toEqual([a]);
+            expect(f.chats.size).toBe(0);
+            gate.resolve();
+            await pending;
+            expect(f.platform.getStatus().isReady).toBe(false);
+            const attempt = f.platform.connectionManager.getConnectionStatus(a)!.attemptId;
+            f.platform.connectionManager.setConnectionReady(a, attempt);
+            expect(f.platform.getStatus()).toEqual({ isReady: true, issues: [] });
+            expect(f.platform.getStats()).toMatchObject({ activeConnections: 1, totalConnections: 1 });
+        } finally { gate.resolve(); await pending; await f.close(); }
+    });
+
+    it('preserves an uncertain omitted stream at capacity instead of overadmitting a new candidate', async () => {
+        const f = fixture(1);
+        try {
+            f.setDiscovery([a]);
+            await f.platform.checkMultiStream();
+            f.setDiscovery([b]);
+            f.setPartial(true);
+            f.failures.add(a);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getViewerMembershipSnapshot()).toMatchObject({ videoIds: [a, b], availability: 'live', discoveryComplete: false });
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([a]);
+            expect(f.platform.connectionManager.getConnectionCount()).toBe(1);
+            expect(f.chats.has(b)).toBe(false);
+        } finally { await f.close(); }
+    });
+
+    it('clears real router supporter state only after authoritative global offline', async () => {
+        const f = fixture();
+        const tracking = new UserTrackingService();
+        const routed: Promise<void>[] = [];
+        const router = new PlatformEventRouter({
+            eventBus: { subscribe: (_name, handler) => {
+                const listener = (event: unknown) => { routed.push(handler(event)); };
+                f.platform.on('platform:event', listener);
+                return () => { f.platform.off('platform:event', listener); };
+            } },
+            runtime: {}, notificationManager: {}, config: {}, logger: noOpLogger, userTrackingService: tracking
+        });
+        const supporter = 'synthetic-supporter';
+        tracking.markStreamSupporter('youtube', supporter);
+        tracking.markStreamSupporter('twitch', supporter);
+        const remains = () => expect(tracking.isStreamSupporter('youtube', supporter)).toBe(true);
+        try {
+            f.failDiscovery();
+            await f.platform.getLiveVideoIds();
+            remains();
+            f.recoverDiscovery();
+            await f.platform.checkMultiStream();
+            remains();
+            await f.platform.disconnectFromYouTubeStream(a, 'synthetic chat disconnect');
+            remains();
+            f.setDiscovery([b]);
+            f.infoOverrides.set(a, { id: a, end_timestamp: new Date(epoch - 1) });
+            await f.platform.getLiveVideoIds();
+            remains();
+            f.setPartial(true);
+            f.setDiscovery([]);
+            f.infoOverrides.set(b, { id: b, end_timestamp: new Date(epoch - 1) });
+            await f.platform.getLiveVideoIds();
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('unknown');
+            remains();
+            f.setPartial(false);
+            await f.platform.getLiveVideoIds();
+            await Promise.all(routed);
+            expect(f.platform.getViewerMembershipSnapshot().availability).toBe('offline');
+            expect(tracking.isStreamSupporter('youtube', supporter)).toBe(false);
+            expect(tracking.isStreamSupporter('twitch', supporter)).toBe(true);
+            await f.platform.getLiveVideoIds();
+            expect(f.statuses).toEqual([true, false]);
+        } finally { router.dispose(); await f.close(); }
+    });
+
     it('admits authorless tab candidates using the resolved channel behind a handle', async () => {
         const f = fixture(2, true, '@synthetic');
         try {

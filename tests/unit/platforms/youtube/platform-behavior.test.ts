@@ -754,52 +754,6 @@ describe("YouTubePlatform modern architecture", () => {
     expect(events.filter((event) => event.type === "platform:stream-status")).toHaveLength(0);
   });
 
-  it("removeYouTubeConnection clears active stream in viewer service when matching", () => {
-    const { platform } = createPlatform();
-    const clearCalled: string[] = [];
-    platform.viewerService = {
-      _activeStream: { videoId: "vid-123" },
-      clearActiveStream: () => clearCalled.push("cleared"),
-    };
-    platform.connectionManager.removeConnection = vi.fn<(videoId: string) => Promise<void>>();
-
-    platform.removeYouTubeConnection("vid-123");
-
-    expect(clearCalled).toEqual(["cleared"]);
-  });
-
-  it("removeYouTubeConnection does not clear viewer service when videoId does not match", () => {
-    const { platform } = createPlatform();
-    const clearCalled: string[] = [];
-    platform.viewerService = {
-      _activeStream: { videoId: "other-vid" },
-      clearActiveStream: () => clearCalled.push("cleared"),
-    };
-    platform.connectionManager.removeConnection = vi.fn<(videoId: string) => Promise<void>>();
-
-    platform.removeYouTubeConnection("vid-123");
-
-    expect(clearCalled).toEqual([]);
-  });
-
-  it("removeYouTubeConnection completes when viewer service throws error", () => {
-    const { platform } = createPlatform();
-    let removeConnectionCalled = false;
-    platform.viewerService = {
-      _activeStream: { videoId: "vid-123" },
-      clearActiveStream: () => {
-        throw new Error("service error");
-      },
-    };
-    platform.connectionManager.removeConnection = async () => {
-      removeConnectionCalled = true;
-    };
-
-    platform.removeYouTubeConnection("vid-123");
-
-    expect(removeConnectionCalled).toBe(true);
-  });
-
   it("disconnectFromYouTubeStream returns false when connectionManager is null", async () => {
     const { platform } = createPlatform();
     setNullableConnectionManager(platform, null);
@@ -856,38 +810,6 @@ describe("YouTubePlatform modern architecture", () => {
     const result = platform.isActive();
 
     expect(result).toBe(false);
-  });
-
-  it("getHealthStatus returns degraded when no active connections and not monitoring", () => {
-    const { platform } = createPlatform();
-    platform.connectionManager.getConnectionCount =
-      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
-    platform.monitoringInterval = null;
-
-    const status = platform.getHealthStatus();
-
-    expect(status.overall).toBe("degraded");
-  });
-
-  it("getHealthStatus returns idle when no connections but monitoring active", () => {
-    const { platform } = createPlatform();
-    platform.connectionManager.getConnectionCount =
-      vi.fn<(...args: unknown[]) => number>().mockReturnValue(0);
-    platform.monitoringInterval = { testInterval: "health-status" };
-
-    const status = platform.getHealthStatus();
-
-    expect(status.overall).toBe("idle");
-  });
-
-  it("getHealthStatus returns healthy when connections exist", () => {
-    const { platform } = createPlatform();
-    platform.connectionManager.getConnectionCount =
-      vi.fn<(...args: unknown[]) => number>().mockReturnValue(1);
-
-    const status = platform.getHealthStatus();
-
-    expect(status.overall).toBe("healthy");
   });
 
   it("cleanup handles viewerService cleanup error gracefully", async () => {
@@ -1003,7 +925,7 @@ describe("YouTubePlatform modern architecture", () => {
   it("getStatus returns issue when enabled but not connected", () => {
     const { platform } = createPlatform();
     platform.config.enabled = true;
-    platform.connectionManager = { getConnectionCount: () => 0 };
+    platform.connectionManager = { getReadyConnectionCount: () => 0 };
 
     const result = platform.getStatus();
 

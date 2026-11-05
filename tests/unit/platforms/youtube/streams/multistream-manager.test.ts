@@ -379,6 +379,7 @@ describe("YouTube multi-stream manager", () => {
       await manager.checkMultiStream();
 
       expect(platform.lastFullStreamCheck).toBe(currentTime - 50);
+      expect(platform.getLiveVideoIds).not.toHaveBeenCalled();
     });
 
     test("updates lastFullStreamCheck when performing full check after interval exceeded", async () => {
@@ -510,6 +511,11 @@ describe("YouTube multi-stream manager", () => {
           maxStreams: 2,
           streamPollingInterval: 60,
           fullCheckInterval: 1000,
+        },
+        connectionManager: {
+          getConnectionCount: () => connected.length,
+          getAllVideoIds: () => [...connected],
+          hasConnection: id => connected.includes(id),
         },
         getLiveVideoIds: vi.fn(async () => ["s1", "s2", "s3", "s4"]),
         connectToYouTubeStream: vi.fn(async (videoId: string) => {
@@ -647,7 +653,7 @@ describe("YouTube multi-stream manager", () => {
           fullCheckInterval: 1000,
         },
         connectionManager: {
-          getConnectionCount: vi.fn(() => 1),
+          getConnectionCount: vi.fn(() => 1 + connected.length),
           getAllVideoIds: vi.fn(() => ["existing-stream"]),
           hasConnection: vi.fn((videoId: string) => videoId === "existing-stream"),
         },

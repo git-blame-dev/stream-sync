@@ -141,26 +141,6 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 }
 
                 platform.lastFullStreamCheck = currentTimeMs;
-
-                const videoIds = await platform.getLiveVideoIds();
-
-                if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {
-                    return;
-                }
-
-                const connectedVideoIds = platform.connectionManager.getAllVideoIds();
-                const omittedConnectedVideoIds = connectedVideoIds.filter((videoId: string) =>
-                    !videoIds.includes(videoId)
-                );
-
-                if (omittedConnectedVideoIds.length > 0) {
-                    platform.logger.warn(
-                        `Stream detection omitted ${omittedConnectedVideoIds.length} connected stream(s); preserving existing connections`,
-                        'youtube'
-                    );
-                }
-
-                return;
             }
 
             const videoIds = await platform.getLiveVideoIds();
@@ -170,21 +150,14 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
             const newStreamCandidates = videoIds.filter((id: string) =>
                 !platform.connectionManager.hasConnection(id)
             );
-            const availableSlots = maxStreams > 0
-                ? Math.max(maxStreams - platform.connectionManager.getConnectionCount(), 0)
-                : Number.POSITIVE_INFINITY;
-            const newStreamIds = Number.isFinite(availableSlots)
-                ? newStreamCandidates.slice(0, availableSlots)
-                : newStreamCandidates;
-
-            if (newStreamCandidates.length > newStreamIds.length) {
-                platform.logger.warn(
-                    `Deferring ${newStreamCandidates.length - newStreamIds.length} detected stream(s); maxStreams limit reached`,
-                    'youtube'
-                );
-            }
-
-            for (const videoId of newStreamIds) {
+            for (const [index, videoId] of newStreamCandidates.entries()) {
+                if (maxStreams > 0 && platform.connectionManager.getConnectionCount() >= maxStreams) {
+                    platform.logger.warn(
+                        `Deferring ${newStreamCandidates.length - index} detected stream(s); maxStreams limit reached`,
+                        'youtube'
+                    );
+                    break;
+                }
                 try {
                     await platform.connectToYouTubeStream(videoId);
                 } catch (error: unknown) {
