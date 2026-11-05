@@ -159,3 +159,101 @@ for (const mutation of ['controls', 'appearance', 'funding'] as const) {
     }
   })
 }
+
+for (const boundary of ['headers', 'body'] as const) {
+  test(`actual operator releases pending and reconciles committed funding after lost ${boundary}`, async () => {
+    const { newControl, newAppearance } = await owners()
+    const oldSource = globalThis.EventSource
+    const oldFetch = globalThis.fetch
+    const silenceError = spyOn(console, 'error').mockImplementation(() => {})
+    const silenceWarn = spyOn(console, 'warn').mockImplementation(() => {})
+    const deadlineCallbacks = new Map<ReturnType<typeof setTimeout>, () => void>()
+    const nativeTimeout = globalThis.setTimeout
+    const timers = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, delay: number) => {
+      if (delay !== 10_000) return nativeTimeout(callback, delay)
+      const handle = nativeTimeout(() => {}, 60_000)
+      deadlineCallbacks.set(handle, callback)
+      return handle
+    }) as typeof setTimeout)
+    let funding = { enabled: true, id: 'test-goal', sessionId: 'test-goal-owner', revision: 0, label: 'Test goal', labelOverridden: false, currentUsd: 0, targetUsd: 100, completed: false }
+    let mutations = 0
+    let mutationSignal: AbortSignal | null | undefined
+    let releaseBody: ((value: unknown) => void) | undefined
+    globalThis.EventSource = TestEventSource as unknown as typeof EventSource
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        mutations++
+        mutationSignal = init.signal
+        funding = { ...funding, revision: 1, currentUsd: 1 }
+        if (boundary === 'headers') return await new Promise<Response>(() => {})
+        return { ok: true, json: () => new Promise(resolve => { releaseBody = resolve }) } as Response
+      }
+      return Response.json(String(url).includes('funding-goal') ? funding : String(url).includes('appearance') ? buildOperatorAppearance(newAppearance.snapshot) : buildOperatorState(newControl))
+    }) as typeof fetch
+    TestEventSource.sources = []
+    let renderer: TestRenderer.ReactTestRenderer | undefined
+    try {
+      await TestRenderer.act(async () => { renderer = TestRenderer.create(React.createElement(OperatorApp)) })
+      const add = () => renderer!.root.findAllByType('button').find(button => button.children.join('') === '+$1')!
+      await TestRenderer.act(async () => { add().props.onClick() })
+      expect(add().props.disabled).toBe(true)
+      await TestRenderer.act(async () => {
+        for (const callback of deadlineCallbacks.values()) callback()
+      })
+      expect(mutationSignal?.aborted).toBe(true)
+      expect(add().props.disabled).toBe(false)
+      expect(mutations).toBe(1)
+      expect(JSON.stringify(renderer!.toJSON())).toContain('Outcome uncertain')
+      expect(JSON.stringify(renderer!.toJSON())).toContain('$1.00')
+      await TestRenderer.act(async () => { releaseBody?.({ ...funding, currentUsd: 999 }) })
+      expect(JSON.stringify(renderer!.toJSON())).not.toContain('$999.00')
+      expect(mutations).toBe(1)
+    } finally {
+      if (renderer) await TestRenderer.act(async () => { renderer!.unmount() })
+      for (const handle of deadlineCallbacks.keys()) clearTimeout(handle)
+      timers.mockRestore()
+      globalThis.fetch = oldFetch
+      globalThis.EventSource = oldSource
+      silenceError.mockRestore()
+      silenceWarn.mockRestore()
+    }
+  })
+}
+
+test('actual operator aborts held initial bodies and mutation on unmount', async () => {
+  const { newControl, newAppearance } = await owners()
+  const oldSource = globalThis.EventSource
+  const oldFetch = globalThis.fetch
+  const silenceError = spyOn(console, 'error').mockImplementation(() => {})
+  const silenceWarn = spyOn(console, 'warn').mockImplementation(() => {})
+  const signals: AbortSignal[] = []
+  const funding = { enabled: true, id: 'test-goal', sessionId: 'test-owner', revision: 0, label: 'Test goal', labelOverridden: false, currentUsd: 0, targetUsd: 100, completed: false }
+  globalThis.EventSource = TestEventSource as unknown as typeof EventSource
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    signals.push(init!.signal!)
+    return { ok: true, json: () => new Promise(() => {}) } as unknown as Response
+  }) as typeof fetch
+  TestEventSource.sources = []
+  let renderer: TestRenderer.ReactTestRenderer | undefined
+  try {
+    await TestRenderer.act(async () => { renderer = TestRenderer.create(React.createElement(OperatorApp)) })
+    await TestRenderer.act(async () => {
+      const stream = TestEventSource.sources.find(source => source.url.includes('/operator/'))!
+      stream.emit('state', buildOperatorState(newControl))
+      stream.emit('appearance', buildOperatorAppearance(newAppearance.snapshot))
+      stream.emit('funding-goal', funding)
+    })
+    await TestRenderer.act(async () => {
+      renderer!.root.findAllByType('button').find(button => button.children.join('') === '+$1')!.props.onClick()
+    })
+    expect(signals).toHaveLength(4)
+    await TestRenderer.act(async () => { renderer!.unmount() })
+    expect(signals.every(signal => signal.aborted)).toBe(true)
+  } finally {
+    if (renderer) await TestRenderer.act(async () => { renderer!.unmount() })
+    globalThis.fetch = oldFetch
+    globalThis.EventSource = oldSource
+    silenceError.mockRestore()
+    silenceWarn.mockRestore()
+  }
+})

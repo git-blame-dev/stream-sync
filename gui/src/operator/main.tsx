@@ -22,6 +22,7 @@ import {
   parseFundingGoalSnapshot,
   type FundingGoalSnapshot,
 } from './model'
+import { createOperatorRequests, OperatorRequestError } from './requests'
 import './operator.css'
 
 type StreamStatus = 'Connecting' | 'Live' | 'Reconnecting' | 'Invalid data'
@@ -66,19 +67,15 @@ function useEventStream(
   }, [url])
 }
 
-async function request(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(url, init)
-  const payload = await response.json().catch(() => null) as unknown
-  if (!response.ok) {
-    const message = payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-      ? payload.error
-      : `Request failed (${response.status})`
-    throw new Error(message)
-  }
-  return payload
-}
-
 function OperatorApp() {
+  const requestsRef = useRef<ReturnType<typeof createOperatorRequests> | null>(null)
+  if (!requestsRef.current) requestsRef.current = createOperatorRequests()
+  useEffect(() => {
+    // A fresh scope also supports React's development effect setup/cleanup cycle.
+    requestsRef.current = createOperatorRequests()
+    return () => requestsRef.current?.dispose()
+  }, [])
+  const ownedRequest = (url: string, init?: RequestInit) => requestsRef.current!.request(url, init)
   const [state, setState] = useState<OperatorState | null>(null)
   const [appearance, setAppearance] = useState<AppearanceState | null>(null)
   const [fundingGoal, setFundingGoal] = useState<FundingGoalSnapshot | null>(null)
@@ -93,6 +90,26 @@ function OperatorApp() {
   const [stateStreamStatus, setStateStreamStatus] = useState<StreamStatus>('Connecting')
   const [logStreamStatus, setLogStreamStatus] = useState<StreamStatus>('Connecting')
   const viewportRef = useRef<HTMLDivElement>(null)
+
+  const reportRequestError = (failure: unknown, fallback: string) => {
+    if (!requestsRef.current?.active || (failure instanceof OperatorRequestError && failure.cancelled)) return
+    if (failure instanceof OperatorRequestError && failure.uncertain) {
+      setError('Outcome uncertain: the change may have been saved. Refreshing authoritative state; check it before trying again.')
+      // Read only: an additive funding adjustment must never be retried automatically.
+      void ownedRequest('/api/v1/operator/state').then(value => {
+        const next = parseOperatorState(value)
+        if (next) setState(current => selectNewestState(current, next))
+      }).catch(() => undefined)
+      void ownedRequest('/api/v1/operator/appearance').then(value => {
+        const next = parseAppearanceState(value)
+        if (next) setAppearance(current => selectNewestAppearance(current, next))
+      }).catch(() => undefined)
+      void ownedRequest('/api/v1/operator/funding-goal').then(value => {
+        const next = parseFundingGoalSnapshot(value)
+        if (next) setFundingGoal(current => selectSessionSnapshot(current, next))
+      }).catch(() => undefined)
+    } else setError(failure instanceof Error ? failure.message : fallback)
+  }
 
   const receiveState = (value: unknown) => {
     const next = parseOperatorState(value)
@@ -130,34 +147,34 @@ function OperatorApp() {
   useEventStream('/api/v1/logs/events', { log: receiveLog, 'log.history': resetLogs }, setLogStreamStatus)
 
   useEffect(() => {
-    request('/api/v1/operator/state')
+    ownedRequest('/api/v1/operator/state')
       .then((value) => {
         const next = parseOperatorState(value)
         if (!next) throw new Error('Invalid operator state')
         setState((current) => selectNewestState(current, next))
       })
       .catch((requestError: unknown) => {
-        setError(requestError instanceof Error ? requestError.message : 'Unable to load operator state')
+        reportRequestError(requestError, 'Unable to load operator state')
       })
   }, [])
 
   useEffect(() => {
-    request('/api/v1/operator/funding-goal').then((value) => {
+    ownedRequest('/api/v1/operator/funding-goal').then((value) => {
       const next = parseFundingGoalSnapshot(value)
       if (!next) throw new Error('Invalid funding goal response')
       setFundingGoal((current) => selectSessionSnapshot(current, next))
-    }).catch((requestError: unknown) => setError(requestError instanceof Error ? requestError.message : 'Unable to load funding goal'))
+    }).catch((requestError: unknown) => reportRequestError(requestError, 'Unable to load funding goal'))
   }, [])
 
   useEffect(() => {
-    request('/api/v1/operator/appearance')
+    ownedRequest('/api/v1/operator/appearance')
       .then((value) => {
         const next = parseAppearanceState(value)
         if (!next) throw new Error('Invalid appearance response')
         setAppearance((current) => selectNewestAppearance(current, next))
       })
       .catch((requestError: unknown) => {
-        setError(requestError instanceof Error ? requestError.message : 'Unable to load appearance')
+        reportRequestError(requestError, 'Unable to load appearance')
       })
   }, [])
 
@@ -173,11 +190,11 @@ function OperatorApp() {
 
   async function applyMutation(url: string, init: RequestInit, fallbackMessage: string) {
     try {
-      const next = parseOperatorState(await request(url, init))
+      const next = parseOperatorState(await ownedRequest(url, init))
       if (!next) throw new Error('Invalid operator state response')
       setState((current) => selectNewestState(current, next))
     } catch (mutationError: unknown) {
-      setError(mutationError instanceof Error ? mutationError.message : fallbackMessage)
+      reportRequestError(mutationError, fallbackMessage)
     }
   }
 
@@ -189,7 +206,7 @@ function OperatorApp() {
       headers: mutationHeaders,
       body: JSON.stringify({ key, enabled }),
     }, 'Unable to save control')
-    setPending(null)
+    if (requestsRef.current?.active) setPending(null)
   }
 
   async function reset() {
@@ -200,14 +217,14 @@ function OperatorApp() {
       headers: mutationHeaders,
       body: '{}',
     }, 'Unable to restore defaults')
-    setPending(null)
+    if (requestsRef.current?.active) setPending(null)
   }
 
   async function changeAppearance(key: keyof AppearanceState['settings'], value: AppearanceValue) {
     setPending(`appearance:${key}`)
     setError('')
     try {
-      const next = parseAppearanceState(await request('/api/v1/operator/appearance', {
+      const next = parseAppearanceState(await ownedRequest('/api/v1/operator/appearance', {
         method: 'PATCH',
         headers: mutationHeaders,
         body: JSON.stringify({ key, value }),
@@ -215,16 +232,16 @@ function OperatorApp() {
       if (!next) throw new Error('Invalid appearance response')
       setAppearance((current) => selectNewestAppearance(current, next))
     } catch (mutationError: unknown) {
-      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save appearance')
+      reportRequestError(mutationError, 'Unable to save appearance')
     }
-    setPending(null)
+    if (requestsRef.current?.active) setPending(null)
   }
 
   async function resetAppearance() {
     setPending('appearance:reset')
     setError('')
     try {
-      const next = parseAppearanceState(await request('/api/v1/operator/appearance/reset', {
+      const next = parseAppearanceState(await ownedRequest('/api/v1/operator/appearance/reset', {
         method: 'POST',
         headers: mutationHeaders,
         body: '{}',
@@ -232,16 +249,16 @@ function OperatorApp() {
       if (!next) throw new Error('Invalid appearance response')
       setAppearance((current) => selectNewestAppearance(current, next))
     } catch (mutationError: unknown) {
-      setError(mutationError instanceof Error ? mutationError.message : 'Unable to restore appearance')
+      reportRequestError(mutationError, 'Unable to restore appearance')
     }
-    setPending(null)
+    if (requestsRef.current?.active) setPending(null)
   }
 
   async function mutateFunding(operation: 'adjust' | 'set', amountUsd: number) {
     setPending(`funding:${operation}`)
     setError('')
     try {
-      const next = parseFundingGoalSnapshot(await request('/api/v1/operator/funding-goal', {
+      const next = parseFundingGoalSnapshot(await ownedRequest('/api/v1/operator/funding-goal', {
         method: 'PATCH',
         headers: mutationHeaders,
         body: JSON.stringify({ operation, amountUsd }),
@@ -250,16 +267,16 @@ function OperatorApp() {
       setFundingGoal((current) => selectSessionSnapshot(current, next))
       setSetTotalDraft('')
     } catch (mutationError: unknown) {
-      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal')
+      reportRequestError(mutationError, 'Unable to save funding goal')
     }
-    setPending(null)
+    if (requestsRef.current?.active) setPending(null)
   }
 
   async function mutateFundingLabel(operation: 'set-label' | 'reset-label', label?: string): Promise<boolean> {
     setPending(`funding:${operation}`)
     setError('')
     try {
-      const next = parseFundingGoalSnapshot(await request('/api/v1/operator/funding-goal', {
+      const next = parseFundingGoalSnapshot(await ownedRequest('/api/v1/operator/funding-goal', {
         method: 'PATCH',
         headers: mutationHeaders,
         body: JSON.stringify(operation === 'set-label' ? { operation, label } : { operation }),
@@ -268,10 +285,10 @@ function OperatorApp() {
       setFundingGoal((current) => selectSessionSnapshot(current, next))
       return true
     } catch (mutationError: unknown) {
-      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal label')
+      reportRequestError(mutationError, 'Unable to save funding goal label')
       return false
     } finally {
-      setPending(null)
+      if (requestsRef.current?.active) setPending(null)
     }
   }
 
