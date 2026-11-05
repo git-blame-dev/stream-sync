@@ -3,6 +3,7 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { validateTimeout } from '../utils/timeout-validator';
 import { mapConcurrent } from '../utils/map-concurrent';
 import type { InnertubeService } from './innertube-service';
+import { hasMatchingYouTubeVideoInfo } from '../utils/youtube-video-info';
 
 type ServiceDependencies = {
     logger?: {
@@ -106,18 +107,8 @@ class ViewerCountExtractionService {
                 const info = await client.getInfo(videoId, { client: 'WEB' });
                 options.signal?.throwIfAborted();
                 stage = 'parse';
-                if (!info || typeof info !== 'object' || !('basic_info' in info) ||
-                    !info.basic_info || typeof info.basic_info !== 'object' ||
-                    !('id' in info.basic_info) || info.basic_info.id !== videoId) {
-                    throw new TypeError('Video identity mismatch');
-                }
-                // The player supplies basic_info, but the count belongs to /next.
-                // Both responses must identify the requested video independently.
-                const page = 'page' in info ? info.page : undefined;
-                const next = Array.isArray(page) ? page[1] : undefined;
-                if (!next || typeof next !== 'object'
-                    || next.current_video_endpoint?.payload?.videoId !== videoId) {
-                    throw new TypeError('Viewer count source identity mismatch');
+                if (!hasMatchingYouTubeVideoInfo(videoId, info)) {
+                    throw new TypeError('Video response identity mismatch');
                 }
                 return YouTubeViewerExtractor.extractConcurrentViewers(info);
             });
