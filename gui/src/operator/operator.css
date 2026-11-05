@@ -461,3 +461,11 @@ button:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+.control input:indeterminate + .switch-track {
+  background: #74603c;
+}
+
+.control input:indeterminate + .switch-track::after {
+  transform: translateX(0.5rem);
+}

@@ -1,3 +1,4 @@
+import { OPERATOR_CONTROL_KEYS, type OperatorConfigState } from '../../../src/core/operator-control-contract'
 import {
   isRowTheme,
   isRowVisualEffectId,
@@ -18,6 +19,7 @@ export type Control = {
   label: string
   enabled: boolean
   overridden: boolean
+  configState?: OperatorConfigState
 }
 
 export type OperatorState = { sessionId?: string; revision: number; controls: Control[] }
@@ -32,18 +34,7 @@ export type AppearanceSettings = {
 export type AppearanceValue = AppearanceSettings[keyof AppearanceSettings]
 export type AppearanceState = { sessionId?: string; revision: number; settings: AppearanceSettings; overriddenKeys: string[] }
 export type LogEntry = { id: number; timestamp: string; level: string; message: string; source: string; data?: unknown }
-export const CONTROL_KEYS = [
-  'messagesEnabled',
-  'commandsEnabled',
-  'greetingsEnabled',
-  'farewellsEnabled',
-  'followsEnabled',
-  'giftsEnabled',
-  'paypiggiesEnabled',
-  'raidsEnabled',
-  'sharesEnabled',
-  'repostsEnabled',
-] as const
+export const CONTROL_KEYS = OPERATOR_CONTROL_KEYS
 export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'] as const
 export const MAX_LOG_ROWS = 200
 export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges', 'streamSupporterChatEffectsEnabled', 'memberRowTheme', 'memberRowEffects'] as const
@@ -74,6 +65,7 @@ export function parseOperatorState(value: unknown): OperatorState | null {
       && typeof item.label === 'string'
       && typeof item.enabled === 'boolean'
       && typeof item.overridden === 'boolean'
+      && (item.configState === undefined || ['on', 'off', 'mixed'].includes(item.configState as string))
   })
   return controls.length === CONTROL_KEYS.length
     && controls.length === candidate.controls.length

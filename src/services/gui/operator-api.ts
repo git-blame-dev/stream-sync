@@ -1,3 +1,4 @@
+import type { OperatorConfigState } from '../../core/operator-control-contract';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { AppLogger } from '../../core/logger/types';
@@ -30,6 +31,7 @@ type OperatorControlView = {
     label: string;
     enabled: boolean;
     overridden: boolean;
+    configState?: OperatorConfigState;
 };
 
 type OperatorStateView = {
@@ -78,7 +80,7 @@ function isOperatorRoute(route: string): boolean {
 }
 
 function buildOperatorState(
-    controls: (Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision'> & { sessionId?: string }) | OperatorControlSnapshot
+    controls: (Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision'> & { sessionId?: string; configStates?: OperatorControlSnapshot['configStates'] }) | OperatorControlSnapshot
 ): OperatorStateView {
     const overriddenKeys = new Set(controls.overriddenKeys);
     return {
@@ -88,7 +90,8 @@ function buildOperatorState(
             key,
             label: CONTROL_LABELS[key],
             enabled: controls.controls[key],
-            overridden: overriddenKeys.has(key)
+            overridden: overriddenKeys.has(key),
+            ...(controls.configStates?.[key] ? { configState: controls.configStates[key] } : {})
         }))
     };
 }

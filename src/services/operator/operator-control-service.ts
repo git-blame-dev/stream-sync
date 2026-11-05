@@ -2,24 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const OPERATOR_CONTROL_KEYS = [
-    'messagesEnabled',
-    'commandsEnabled',
-    'greetingsEnabled',
-    'farewellsEnabled',
-    'followsEnabled',
-    'giftsEnabled',
-    'paypiggiesEnabled',
-    'raidsEnabled',
-    'sharesEnabled',
-    'repostsEnabled'
-] as const;
+import { OPERATOR_CONTROL_KEYS, type OperatorControlKey, type OperatorControls, type OperatorConfigState } from '../../core/operator-control-contract';
+import { ViewerOutputPolicy } from '../../core/viewer-output-policy';
+
 const operatorControlKeys = new Set<string>(OPERATOR_CONTROL_KEYS);
 
-type OperatorControlKey = (typeof OPERATOR_CONTROL_KEYS)[number];
-type OperatorControls = Record<OperatorControlKey, boolean>;
 type OperatorControlSnapshot = Readonly<{
     controls: OperatorControls;
+    configStates?: Readonly<Partial<Record<OperatorControlKey, OperatorConfigState>>>;
     overriddenKeys: readonly OperatorControlKey[];
     sessionId?: string;
     revision: number;
@@ -33,6 +23,7 @@ type FileSystem = {
 };
 type OperatorControlOptions = {
     defaults: OperatorControls;
+    platformConfig?: ConstructorParameters<typeof ViewerOutputPolicy>[0];
     filePath?: string;
     fs?: FileSystem;
     warn?: (message: string) => void;
@@ -49,6 +40,7 @@ function assertControlKey(key: unknown): asserts key is OperatorControlKey {
 }
 
 class OperatorControlService {
+    readonly outputPolicy: ViewerOutputPolicy | undefined;
     private readonly defaults: OperatorControls;
     private readonly filePath: string;
     private readonly fs: FileSystem;
@@ -64,6 +56,7 @@ class OperatorControlService {
     private constructor(options: OperatorControlOptions) {
         this.defaults = { ...options.defaults };
         this.values = { ...this.defaults };
+        this.outputPolicy = options.platformConfig ? new ViewerOutputPolicy(options.platformConfig, key => this.overrides.get(key)) : undefined;
         this.filePath = options.filePath ?? './data/operator-control-overrides.json';
         this.fs = options.fs ?? { readFile, mkdir, writeFile, rename, unlink };
         this.warn = options.warn ?? (() => undefined);
@@ -73,6 +66,10 @@ class OperatorControlService {
         const service = new OperatorControlService(options);
         await service.load();
         return service;
+    }
+
+    get configStates() {
+        return this.outputPolicy?.configStates;
     }
 
     get controls(): OperatorControls {
@@ -104,11 +101,7 @@ class OperatorControlService {
         }
         return this.enqueue(async () => {
             const next = new Map(this.overrides);
-            if (enabled === this.defaults[key]) {
-                next.delete(key);
-            } else {
-                next.set(key, enabled);
-            }
+            next.set(key, enabled);
             await this.persist(next);
             this.overrides = next;
             this.values = this.withOverrides(next);
@@ -148,9 +141,7 @@ class OperatorControlService {
                 if (typeof value !== 'boolean') {
                     throw new TypeError(`Expected boolean override for ${key}`);
                 }
-                if (value !== this.defaults[key]) {
-                    next.set(key, value);
-                }
+                next.set(key, value);
             }
             this.overrides = next;
             this.values = this.withOverrides(next);
@@ -197,6 +188,7 @@ class OperatorControlService {
         this.currentRevision += 1;
         const snapshot = Object.freeze({
             controls: Object.freeze(this.controls),
+            ...(this.configStates ? { configStates: this.configStates } : {}),
             overriddenKeys: Object.freeze(this.overriddenKeys),
             sessionId: this.sessionId,
             revision: this.revision

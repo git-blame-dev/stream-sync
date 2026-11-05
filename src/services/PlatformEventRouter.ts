@@ -82,6 +82,7 @@ type RouterNotificationManager = {
 };
 
 type RouterOptions = {
+    operatorPreparationEnabled?: boolean;
     eventBus: RouterEventBus;
     runtime: RouterRuntime;
     notificationManager: RouterNotificationManager;
@@ -146,6 +147,7 @@ function resolveCanonicalMessageParts(data: unknown = {}): CanonicalMessagePart[
 }
 
 class PlatformEventRouter {
+    private readonly operatorPreparationEnabled: boolean;
     eventBus: RouterEventBus;
     runtime: RouterRuntime;
     notificationManager: RouterNotificationManager;
@@ -160,6 +162,7 @@ class PlatformEventRouter {
         if (!options) {
             throw new Error('PlatformEventRouter requires options');
         }
+        this.operatorPreparationEnabled = options.operatorPreparationEnabled === true;
         this.eventBus = options.eventBus;
         this.runtime = options.runtime;
         this.notificationManager = options.notificationManager;
@@ -215,7 +218,7 @@ class PlatformEventRouter {
         this._trackStreamSupporter(type, platform, payload);
 
         if (type !== PlatformEvents.CHAT_MESSAGE && isNotificationType(type) && NOTIFICATION_CONFIGS[type]?.settingKey) {
-            if (this._isNotificationEnabled(type, platform) === false) {
+            if (!this.operatorPreparationEnabled && this._isNotificationEnabled(type, platform) === false) {
                 this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'platform-event-router');
                 return;
             }

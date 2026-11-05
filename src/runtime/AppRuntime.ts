@@ -531,6 +531,7 @@ class AppRuntime {
         const construction: Array<() => void> = [];
         try {
             this.platformEventRouter = new PlatformEventRouter({
+                operatorPreparationEnabled: !!this.dependencies.operatorControls,
                 eventBus: this.eventBus,
                 runtime: routerRuntime,
                 notificationManager: this.notificationManager,
@@ -540,6 +541,7 @@ class AppRuntime {
             });
             construction.push(() => this.platformEventRouter.dispose());
             this.chatNotificationRouter = new ChatNotificationRouter({
+                operatorPreparationEnabled: !!this.dependencies.operatorControls,
                 runtime: this,
                 logger: this.logger,
                 config: this.config,

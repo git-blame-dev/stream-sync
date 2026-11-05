@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { build } from 'vite';
 import { createGuiTransportService } from '../../src/services/gui/gui-transport-service';
+import { buildConfig } from '../../src/core/config-builders';
+import { ConfigValidator } from '../../src/utils/config-validator';
 import { createOperatorControlService, OPERATOR_CONTROL_KEYS, type OperatorControls } from '../../src/services/operator/operator-control-service';
 import { createOperatorAppearanceService } from '../../src/services/operator/operator-appearance-service';
 import { createOperatorLogSource } from '../../src/services/operator/operator-log-source';
@@ -30,6 +32,7 @@ async function createBackend(assetsRoot: string, root: string) {
     return createOperatorControlService({
       defaults: Object.fromEntries(OPERATOR_CONTROL_KEYS.map(key => [key, true])) as OperatorControls,
       filePath: join(root, 'test-controls.json'),
+      platformConfig: buildConfig(ConfigValidator.normalize({ tiktok: { followsEnabled: false } })),
     });
   }
   function newAppearance() {

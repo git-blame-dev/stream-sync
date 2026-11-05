@@ -100,3 +100,11 @@ describe('operator model behavior', () => {
     expect(parseFundingGoalLabelDraft('x'.repeat(81))).toBeNull()
   })
 })
+
+
+test('parses config modes without mistaking explicit default values for config', () => {
+  const controls = CONTROL_KEYS.map(key => ({ key, label: key, enabled: true, overridden: false, configState: 'mixed' }));
+  expect(parseOperatorState({ revision: 0, controls })?.controls[0]).toMatchObject({ overridden: false, configState: 'mixed' });
+  expect(parseOperatorState({ revision: 1, controls: controls.map(control => ({ ...control, overridden: true })) })?.controls[0]).toMatchObject({ overridden: true, enabled: true });
+  expect(parseOperatorState({ revision: 2, controls: controls.map(control => ({ ...control, configState: 'synthetic-invalid' })) })).toBeNull();
+});

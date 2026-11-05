@@ -216,11 +216,7 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
 
 function buildOperatorControlDefaults(config: MainConfig): OperatorControls {
     const general = config.general as Record<string, unknown>;
-    return {
-        ...Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls,
-        // Reposts originate only on TikTok; preserve its resolved config override.
-        repostsEnabled: (config.tiktok.repostsEnabled ?? general.repostsEnabled) !== false
-    };
+    return Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls;
 }
 
 function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearanceSettings {
@@ -237,17 +233,6 @@ function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearance
         memberRowTheme: normalizeRowTheme(gui?.memberRowTheme) ?? 'green',
         memberRowEffects: normalizeRowEffects(gui?.memberRowEffects) ?? ['sheen']
     };
-}
-
-function enableOperatorNotificationPreparation(config: MainConfig): MainConfig {
-    const enabledControls = Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, true]));
-    return {
-        ...config,
-        general: { ...config.general, ...enabledControls },
-        tiktok: { ...config.tiktok, ...enabledControls },
-        twitch: { ...config.twitch, ...enabledControls },
-        youtube: { ...config.youtube, ...enabledControls }
-    } as MainConfig;
 }
 
 function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
@@ -685,6 +670,7 @@ async function main(overrides: MainOverrides = {}) {
         const operatorControls: OperatorControlService | undefined = config.gui?.enableOperator === true
             ? await (runtimeOverrides.createOperatorControlService || createOperatorControlService)({
                 defaults: buildOperatorControlDefaults(config),
+                platformConfig: config,
                 warn: (message) => logger.warn(message, 'operator-controls')
             })
             : undefined;
@@ -698,9 +684,6 @@ async function main(overrides: MainOverrides = {}) {
                 warn: (message) => logger.warn(message, 'operator-appearance')
             })
             : undefined;
-        const runtimeProcessingConfig = operatorControls
-            ? enableOperatorNotificationPreparation(config)
-            : config;
         
         const displayQueueConfig = {
             autoProcess: config.displayQueue.autoProcess,
@@ -817,7 +800,8 @@ async function main(overrides: MainOverrides = {}) {
         const notificationManager = new NotificationManagerCtor({
             displayQueue: displayQueue,
             eventBus: eventBus,
-            config: runtimeProcessingConfig,
+            config,
+            operatorPreparationEnabled: !!operatorControls,
             vfxCommandService: vfxCommandService,
             userTrackingService: userTrackingService,
             logger,
@@ -927,7 +911,7 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.platformLifecycleService = platformLifecycleService;
         
         assertRuntimeDependencies(dependencies);
-        app = createAppRuntime(toAppRuntimeConfig(runtimeProcessingConfig), dependencies);
+        app = createAppRuntime(toAppRuntimeConfig(config), dependencies);
         runtimeOwnsResources = true;
 
         const gracefulExitService = createGracefulExitServiceFn(

@@ -83,7 +83,7 @@ for (const platformEnabled of [false, true]) {
     try {
       await h.start();
       const controls = h.runtime.dependencies.operatorControls!;
-      expect(controls.isEnabled('repostsEnabled')).toBe(platformEnabled);
+      expect(controls.outputPolicy?.isEnabled('platform:repost', 'tiktok')).toBe(platformEnabled);
       await h.runtime.handleRepostNotification('tiktok', 'Synthetic Override Viewer', {
         userId: 'synthetic-override-viewer', timestamp: '2026-01-01T00:00:00.000Z',
       });
@@ -92,7 +92,7 @@ for (const platformEnabled of [false, true]) {
       await controls.setEnabled('repostsEnabled', !platformEnabled);
       expect(controls.isEnabled('repostsEnabled')).toBe(!platformEnabled);
       await controls.reset();
-      expect(controls.isEnabled('repostsEnabled')).toBe(platformEnabled);
+      expect(controls.outputPolicy?.isEnabled('platform:repost', 'tiktok')).toBe(platformEnabled);
     } finally { await h.dispose(); }
   });
 }

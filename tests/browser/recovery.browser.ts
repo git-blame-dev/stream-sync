@@ -157,3 +157,25 @@ for (const viewport of [{ width: 360, height: 240 }, { width: 1280, height: 720 
     await expect(notifications.locator('html')).toHaveAttribute('data-test-animations', /gui-notification-row-exit/);
   });
 }
+
+
+test('operator distinguishes mixed config from explicit on/off and restores config on reset', async ({ page, backend }) => {
+  await page.goto(`${backend.url}/operator`);
+  const follow = page.getByRole('checkbox', { name: /Follows/ });
+  const row = page.locator('label.control').filter({ has: follow });
+  await expect(row).toContainText('Use config · Mixed by platform');
+  await expect(follow).toHaveJSProperty('indeterminate', true);
+  await follow.click();
+  await expect(row).toContainText('Override · On');
+  await expect(follow).toBeChecked();
+  await expect.poll(() => backend.controls.overriddenKeys.includes('followsEnabled')).toBe(true);
+  await follow.click();
+  await expect(row).toContainText('Override · Off');
+  await expect(follow).not.toBeChecked();
+  await backend.restart();
+  await expect(row).toContainText('Override · Off');
+  await page.getByRole('button', { name: 'Restore config defaults', exact: true }).first().click();
+  await expect(row).toContainText('Use config · Mixed by platform');
+  await expect(follow).toHaveJSProperty('indeterminate', true);
+  await expect.poll(() => backend.controls.overriddenKeys).toEqual([]);
+});

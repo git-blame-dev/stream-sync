@@ -101,6 +101,7 @@ type NotificationManagerDependencies = {
     constants?: NotificationConstants;
     eventBus?: unknown;
     config?: NotificationRuntimeConfig;
+    operatorPreparationEnabled?: boolean;
     vfxCommandService?: VFXCommandServiceLike;
     userTrackingService?: UserTrackingServiceLike;
     displayQueue?: DisplayQueueDependency;
@@ -205,7 +206,7 @@ class NotificationManager extends EventEmitter {
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
         this.NotificationBuilder = NotificationBuilder;
         this.inputValidator = new NotificationInputValidator(this.NOTIFICATION_CONFIGS);
-        this.notificationGate = new NotificationGate(this.config);
+        this.notificationGate = new NotificationGate(this.config, dependencies.operatorPreparationEnabled);
         this.payloadBuilder = new NotificationPayloadBuilder({
             build: (input: NotificationRecord) => {
                 const built = NotificationBuilder.build(input);

@@ -401,11 +401,13 @@ function OperatorApp() {
               <label className="control" key={control.key}>
                 <span>
                   <strong>{control.label}</strong>
-                  {control.overridden && <em>Persisted override</em>}
+                  <em>{control.overridden ? `Override · ${control.enabled ? 'On' : 'Off'}` : `Use config · ${control.configState === 'mixed' ? 'Mixed by platform' : (control.configState ?? (control.enabled ? 'on' : 'off')) === 'on' ? 'On' : 'Off'}`}</em>
                 </span>
                 <input
                   type="checkbox"
-                  checked={control.enabled}
+                  checked={control.overridden ? control.enabled : control.configState ? control.configState === 'on' : control.enabled}
+                  aria-checked={!control.overridden && control.configState === 'mixed' ? 'mixed' : undefined}
+                  ref={(input) => { if (input) input.indeterminate = !control.overridden && control.configState === 'mixed' }}
                   disabled={pending !== null}
                   onChange={(event) => void change(control.key, event.target.checked)}
                 />

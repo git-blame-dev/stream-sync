@@ -58,10 +58,10 @@ describe("operator controls", () => {
     expect(warnings).toHaveLength(1);
   });
 
-  test("normalizes loaded defaults and serializes concurrent updates", async () => {
+  test("preserves explicit defaults and serializes concurrent updates", async () => {
     const fs = memoryFs(JSON.stringify({ giftsEnabled: true }));
     const service = await createOperatorControlService({ defaults, filePath: "/tmp/operator.json", fs });
-    expect(service.overriddenKeys).toEqual([]);
+    expect(service.overriddenKeys).toEqual(["giftsEnabled"]);
     const first = service.setEnabled("giftsEnabled", false);
     const second = service.setEnabled("sharesEnabled", false);
     await Promise.all([first, second]);
@@ -90,3 +90,17 @@ describe("operator controls", () => {
     expect(service.isEnabled("messagesEnabled")).toBe(false);
   });
 });
+
+for (const enabled of [true, false]) {
+  test(`persists explicit ${enabled} equal to default across restart until reset`, async () => {
+    const fs = memoryFs();
+    const options = { defaults: { ...defaults, giftsEnabled: enabled }, filePath: "/tmp/synthetic-operator.json", fs };
+    const service = await createOperatorControlService(options);
+    await service.setEnabled("giftsEnabled", enabled);
+    expect(JSON.parse(fs.value!)).toEqual({ giftsEnabled: enabled });
+    const restarted = await createOperatorControlService(options);
+    expect(restarted.overriddenKeys).toEqual(["giftsEnabled"]);
+    await restarted.reset();
+    expect(restarted.overriddenKeys).toEqual([]);
+  });
+}

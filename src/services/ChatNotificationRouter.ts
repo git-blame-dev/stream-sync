@@ -115,6 +115,7 @@ type RuntimeLike = {
 };
 
 type RouterDependencies = {
+    operatorPreparationEnabled?: boolean;
     runtime: RuntimeLike;
     logger: LoggerLike;
     config: RouterConfig;
@@ -149,13 +150,15 @@ function getErrorMessage(error: unknown) {
 }
 
 class ChatNotificationRouter {
+    private readonly operatorPreparationEnabled: boolean;
     runtime: RuntimeLike;
     logger: LoggerLike;
     maxMessageLength: number;
     errorHandler: PlatformErrorHandlerLike;
     publishChatMessage?: RouterDependencies['publishChatMessage'];
 
-    constructor({ runtime, logger, config, publishChatMessage }: RouterDependencies) {
+    constructor({ runtime, logger, config, publishChatMessage, operatorPreparationEnabled = false }: RouterDependencies) {
+        this.operatorPreparationEnabled = operatorPreparationEnabled;
         this.runtime = runtime;
         this.logger = logger;
         if (!config) {
@@ -454,6 +457,7 @@ class ChatNotificationRouter {
     }
 
     isGreetingEnabled(platform: string) {
+        if (this.operatorPreparationEnabled) return true;
         const value = this.getPlatformConfig(platform).greetingsEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.greetingsEnabled`);
@@ -462,6 +466,7 @@ class ChatNotificationRouter {
     }
 
     isChatEnabled(platform: string) {
+        if (this.operatorPreparationEnabled) return true;
         const value = this.getPlatformConfig(platform).messagesEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.messagesEnabled`);
@@ -470,6 +475,7 @@ class ChatNotificationRouter {
     }
 
     isFarewellEnabled(platform: string) {
+        if (this.operatorPreparationEnabled) return true;
         const value = this.getPlatformConfig(platform).farewellsEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.farewellsEnabled`);

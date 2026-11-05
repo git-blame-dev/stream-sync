@@ -38,3 +38,12 @@ describe("NotificationGate", () => {
     );
   });
 });
+
+
+it('permits operator preparation without replacing resolved platform baselines', () => {
+  const config = { twitch: { giftsEnabled: false }, youtube: { giftsEnabled: true } };
+  const gate = new NotificationGate(config, true);
+  expect(gate.isEnabled('giftsEnabled', 'twitch')).toBe(true);
+  expect(config.twitch.giftsEnabled).toBe(false);
+  expect(config.youtube.giftsEnabled).toBe(true);
+});

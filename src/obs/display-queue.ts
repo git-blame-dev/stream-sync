@@ -1,3 +1,4 @@
+import type { ViewerOutputPolicy } from '../core/viewer-output-policy';
 import crypto from 'node:crypto';
 
 import { logger } from '../core/logging';
@@ -24,6 +25,7 @@ type QueueItemData = DisplayQueueItemData;
 type OutstandingPresentation = {
     presented: boolean;
     active: boolean;
+    cancelled: boolean;
     rowDone: Promise<void>;
     finishRow: () => void;
 };
@@ -49,7 +51,7 @@ type DisplayQueueEventBus = {
 type DisplayQueueDependencies = {
     onPresentationStarted?: (item: DisplayQueueItem) => Promise<unknown> | unknown;
     fetch?: ConstructorParameters<typeof DisplayQueueEffects>[0]['fetch'];
-    operatorControls?: Pick<OperatorControlService, 'isEnabled' | 'subscribe'>;
+    operatorControls?: Pick<OperatorControlService, 'isEnabled' | 'subscribe'> & Partial<Pick<OperatorControlService, 'outputPolicy'>>;
     sourcesManager?: DisplayQueueSourcesManager;
     goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
     delay?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -159,6 +161,7 @@ class DisplayQueue {
     notificationCoordinator: NotificationDisplayCoordinator;
     get effectChain(): Promise<void> { return this.runner ?? Promise.resolve(); }
     operatorControls?: DisplayQueueDependencies['operatorControls'];
+    viewerOutputPolicy?: ViewerOutputPolicy | undefined;
     unsubscribeOperatorControls?: () => void;
 
     constructor(
@@ -180,6 +183,7 @@ class DisplayQueue {
         this.delay = dependencies.delay || defaultDelay;
         this.config = config;
         this.operatorControls = dependencies.operatorControls;
+        this.viewerOutputPolicy = dependencies.operatorControls?.outputPolicy;
         this.onPresentationStarted = dependencies.onPresentationStarted;
         this.state = new DisplayQueueState({
             ...(this.config.maxQueueSize === undefined ? {} : { maxQueueSize: this.config.maxQueueSize }),
@@ -215,11 +219,7 @@ class DisplayQueue {
             emit: (event, payload) => this.eventBus?.emit?.(event, payload as Record<string, unknown>)
         });
         if (this.operatorControls) {
-            this.unsubscribeOperatorControls = this.operatorControls.subscribe((snapshot) => {
-                for (const [key, enabled] of Object.entries(snapshot.controls)) {
-                    if (!enabled) this.cancelDisabledItems(key);
-                }
-            });
+            this.unsubscribeOperatorControls = this.operatorControls.subscribe(() => this.cancelDisabledItems());
         }
     }
 
@@ -357,7 +357,11 @@ class DisplayQueue {
                                 }
                             } else {
                                 const prepare = () => this.effects.prepareNotificationEffects(item);
-                                const start = () => this.emitDisplayRow(item);
+                                const start = () => {
+                                    if (this.stopped || !this.isViewerOutputEnabled(item)) return false;
+                                    this.emitDisplayRow(item);
+                                    return true;
+                                };
                                 const effect = () => this.runPresentation(item);
                                 if (this.isNotificationCoordinationEnabled()) {
                                     await this.notificationCoordinator.register(item).run(start, effect, () => this.effects.cancelActive(), prepare);
@@ -400,7 +404,7 @@ class DisplayQueue {
     private registerRecord(item: QueueItem) {
         let finishRow!: () => void;
         const rowDone = new Promise<void>((resolve) => { finishRow = resolve; });
-        this.records.set(item, { presented: false, active: false, rowDone, finishRow });
+        this.records.set(item, { presented: false, active: false, cancelled: false, rowDone, finishRow });
         this.ensureEventId(item);
         this.notificationCoordinator.setSuccessorAvailable(this.hasPendingNotification());
         this.workWaiter?.();
@@ -592,16 +596,20 @@ class DisplayQueue {
     }
 
     private isViewerOutputEnabled(item: QueueItem) {
+        if (this.records.get(item)?.cancelled) return false;
+        if (this.viewerOutputPolicy) return this.viewerOutputPolicy.isEnabled(item.type, item.platform);
         if (!this.operatorControls) return true;
         const settingKey = isChatType(item.type) ? 'messagesEnabled' : NOTIFICATION_CONFIGS[item.type as keyof typeof NOTIFICATION_CONFIGS]?.settingKey;
         return !settingKey || this.operatorControls.isEnabled(settingKey);
     }
 
-    private cancelDisabledItems(settingKey: string) {
-        const removed = this.state.removeMatching((item) => {
-            const itemKey = isChatType(item.type) ? 'messagesEnabled' : NOTIFICATION_CONFIGS[item.type as keyof typeof NOTIFICATION_CONFIGS]?.settingKey;
-            return itemKey === settingKey;
-        });
+    private cancelDisabledItems() {
+        // Preparing items retain their admission slot until settlement. Once muted,
+        // unseen work stays cancelled even if the category is enabled again.
+        for (const [item, record] of this.records) {
+            if (!record.presented && !this.isViewerOutputEnabled(item)) record.cancelled = true;
+        }
+        const removed = this.state.removeMatching((item) => !this.isViewerOutputEnabled(item));
         removed.forEach((item) => this.retire(item));
         this.activeSequenceRemaining = this.activeSequenceRemaining.filter((item) => {
             if (this.isViewerOutputEnabled(item)) return true;

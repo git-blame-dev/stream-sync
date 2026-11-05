@@ -11,7 +11,7 @@ export type NotificationDisplayCoordinatorOptions = {
 };
 
 export type NotificationDisplayRegistration = {
-    run: (onStart: () => void, effect: () => Promise<unknown> | unknown, cancelEffect?: () => void, onPrepare?: () => Promise<unknown> | unknown) => Promise<void>;
+    run: (onStart: () => unknown, effect: () => Promise<unknown> | unknown, cancelEffect?: () => void, onPrepare?: () => Promise<unknown> | unknown) => Promise<void>;
 };
 
 type CancellableDelay = {
@@ -89,7 +89,7 @@ export class NotificationDisplayCoordinator {
                     }
                     if (this.stopped) return;
 
-                    onStart();
+                    if (onStart() === false) return;
                     try {
                         if (!this.stopped) this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('started'));
                     } catch (error) {
