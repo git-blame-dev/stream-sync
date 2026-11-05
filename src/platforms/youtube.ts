@@ -16,6 +16,7 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
 import { ensureLogDirectorySync } from '../utils/log-directory';
 import { mapConcurrent } from '../utils/map-concurrent';
+import { hasMatchingYouTubeVideoInfo } from '../utils/youtube-video-info';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
 import { getFallbackUsername } from '../utils/validation';
@@ -529,7 +530,13 @@ class YouTubePlatform extends EventEmitter {
     }
 
     setYouTubeConnectionReady(videoId: string, attemptId: number) {
-        this.connectionManager.setConnectionReady(videoId, attemptId);
+        if (!this.connectionManager.setConnectionReady(videoId, attemptId)) return;
+        const data = this.eventFactory.createChatConnectedEvent({
+            videoId, connectionId: `youtube-${videoId}`, timestamp: getSystemTimestampISO()
+        });
+        this.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
+        if (!this.connectionManager.isCurrentAttempt(videoId, attemptId)) return;
+        this.emit('platform:event', { platform: data.platform, type: PlatformEvents.CHAT_CONNECTED, data });
     }
 
     isAnyYouTubeStreamReady(): boolean {
@@ -753,33 +760,13 @@ class YouTubePlatform extends EventEmitter {
             return true;
         }
 
-        let admittedAttemptId: number | undefined;
-        
         try {
-            const success = await this.connectionManager.connectToStream(
+            return await this.connectionManager.connectToStream(
                 videoId, 
-                (videoId: string, attemptId: number, context: YouTubeConnectionAttemptContext) => {
-                    admittedAttemptId = attemptId;
-                    return this._createYouTubeConnection(videoId, attemptId, context);
-                },
+                (videoId: string, attemptId: number, context: YouTubeConnectionAttemptContext) =>
+                    this._createYouTubeConnection(videoId, attemptId, context),
                 { reason: 'stream detected', ...options }
             );
-            
-            if (success) {
-                if (admittedAttemptId !== undefined && !this.connectionManager.isCurrentAttempt(videoId, admittedAttemptId)) return false;
-                const connectionId = `youtube-${videoId}`;
-                const timestamp = getSystemTimestampISO();
-                const chatConnectedEvent = this.eventFactory.createChatConnectedEvent({ videoId, connectionId, timestamp });
-                const eventPlatform = chatConnectedEvent.platform;
-                this.emit('platform:event', {
-                    platform: eventPlatform,
-                    type: PlatformEvents.CHAT_CONNECTED,
-                    data: chatConnectedEvent
-                });
-            }
-            
-            return success;
-            
         } catch (error) {
             this._handleConnectionErrorLogging(`Failed to connect to YouTube stream: ${getErrorMessage(error)}`, error, 'stream-connect');
             throw error;
@@ -1337,24 +1324,26 @@ class YouTubePlatform extends EventEmitter {
 
     _validateVideoForConnection(videoId: string, info: unknown) {
         const infoRecord = toUnknownMap(info);
-        const basicInfo = toUnknownMap(infoRecord.basic_info);
-        const playabilityStatus = toUnknownMap(infoRecord.playability_status);
-        const liveStatus = basicInfo.live_status;
-        const isUpcoming = basicInfo.is_upcoming === true;
-        // Playback admission is separate from current-broadcast identity/state.
-        const isLive = this.classifyStreamInfo(videoId, info) === 'live'
-            && (playabilityStatus.status === undefined || playabilityStatus.status === 'OK');
-        if (isLive) {
-            return { shouldConnect: true, isLive, isUpcoming, liveStatus, reason: 'Stream is live' };
-        }
-        if (isUpcoming) {
-            return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Stream is upcoming but not yet live' };
-        }
-        if (basicInfo.is_live === true && playabilityStatus.status !== undefined && playabilityStatus.status !== 'OK') {
-            return { shouldConnect: false, isLive, isUpcoming, liveStatus,
-                reason: 'Video playback is unavailable; live chat connection cannot be validated' };
-        }
-        return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Video is not live content (replay/VOD)' };
+        const broadcast = this.classifyStreamInfo(videoId, info);
+        const chat = toUnknownMap(infoRecord.livechat);
+        const hasContinuation = typeof chat.continuation === 'string' && !!chat.continuation.trim();
+        const status = toUnknownMap(infoRecord.playability_status).status;
+        const playbackStatus = typeof status === 'string' && [
+            'OK', 'ERROR', 'UNPLAYABLE', 'LOGIN_REQUIRED', 'LIVE_STREAM_OFFLINE',
+            'CONTENT_CHECK_REQUIRED', 'AGE_CHECK_REQUIRED', 'AGE_VERIFICATION_REQUIRED'
+        ].includes(status) ? status : 'UNKNOWN';
+        let reason: string | undefined;
+        if (broadcast === 'upcoming') reason = 'Stream is upcoming but not yet live';
+        else if (broadcast !== 'live') reason = 'Video is not live content (replay/VOD or unverified broadcast)';
+        else if (!hasMatchingYouTubeVideoInfo(videoId, info)) reason = 'Chat response video identity mismatch';
+        else if (infoRecord.livechat == null) reason = 'Live chat is unavailable';
+        else if (chat.is_replay !== false) reason = 'Live chat is replay or its mode is unverified';
+        else if (!hasContinuation) reason = 'Live chat continuation is unavailable';
+        return {
+            shouldConnect: reason === undefined, reason: reason ?? 'Stream is live',
+            diagnostics: { broadcast, playbackStatus, chatPresent: infoRecord.livechat != null,
+                replay: chat.is_replay === true, hasContinuation }
+        };
     }
 
     _generateErrorMessage(context: string, videoId: string | null = null): string {

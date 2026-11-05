@@ -69,17 +69,32 @@ describe("YouTubePlatform live validation (modern signals)", () => {
     });
   }
 
-  it('admits a playable matching live SDK response', () => {
-    expect(createPlatform()._validateVideoForConnection('synthetic_A', {
-      basic_info: { id: 'synthetic_A', is_live: true }, playability_status: { status: 'OK' }
-    }).shouldConnect).toBe(true);
+  const liveInfo = () => ({
+    basic_info: { id: 'synthetic_A', is_live: true },
+    page: [{}, { current_video_endpoint: { payload: { videoId: 'synthetic_A' } } }],
+    livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false }
   });
 
-  for (const status of ['ERROR', 'UNPLAYABLE', 'LOGIN_REQUIRED']) {
-    it(`rejects live metadata with playability ${status}`, () => {
+  for (const status of ['OK', 'ERROR', 'UNPLAYABLE', 'LOGIN_REQUIRED']) {
+    it(`admits verified live chat independently of video playability ${status}`, () => {
       expect(createPlatform()._validateVideoForConnection('synthetic_A', {
-        basic_info: { id: 'synthetic_A', is_live: true }, playability_status: { status }
-      })).toMatchObject({ shouldConnect: false, reason: 'Video playback is unavailable; live chat connection cannot be validated' });
+        ...liveInfo(), playability_status: { status }
+      }).shouldConnect).toBe(true);
+    });
+  }
+
+  for (const info of [
+    { ...liveInfo(), page: undefined },
+    { ...liveInfo(), page: [{}, { current_video_endpoint: { payload: { videoId: 'synthetic_B' } } }] },
+    { ...liveInfo(), livechat: undefined },
+    { ...liveInfo(), livechat: { continuation: '', is_replay: false } },
+    { ...liveInfo(), livechat: { continuation: '   ', is_replay: false } },
+    { ...liveInfo(), livechat: { continuation: 12, is_replay: false } },
+    { ...liveInfo(), livechat: { continuation: 'SYNTHETIC', is_replay: true } },
+    { ...liveInfo(), livechat: { continuation: 'SYNTHETIC', is_replay: 'false' } },
+  ]) {
+    it(`rejects missing, mismatched, malformed or replay chat: ${JSON.stringify(info)}`, () => {
+      expect(createPlatform()._validateVideoForConnection('synthetic_A', info).shouldConnect).toBe(false);
     });
   }
 
@@ -140,6 +155,6 @@ describe("YouTubePlatform live validation (modern signals)", () => {
 
     const result = platform._validateVideoForConnection("vod123", info);
     expect(result.shouldConnect).toBe(false);
-    expect(result.reason).toBe("Video is not live content (replay/VOD)");
+    expect(result.reason).toBe("Video is not live content (replay/VOD or unverified broadcast)");
   });
 });

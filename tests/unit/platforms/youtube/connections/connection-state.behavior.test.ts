@@ -12,7 +12,9 @@ it('reports actual acquired connections, monitoring and removal in state and sta
     getChannel: async () => { throw new Error('Synthetic discovery unavailable'); },
     getInfo: async (id: string) => {
       const chat = new EventEmitter();
-      return { basic_info: { id, is_live: true }, getLiveChat: async () => Object.assign(chat, {
+      return { basic_info: { id, is_live: true },
+        page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
+        livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false }, getLiveChat: async () => Object.assign(chat, {
         start() { chat.emit('start', {}); },
         stop() { stopped.push(id); },
       }) };

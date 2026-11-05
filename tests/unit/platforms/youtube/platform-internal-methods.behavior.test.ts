@@ -75,6 +75,8 @@ describe("YouTubePlatform internal behavior", () => {
 
     const liveResult = platform._validateVideoForConnection("video-live", {
       basic_info: { id: "video-live", is_live: true, is_upcoming: false },
+      page: [{}, { current_video_endpoint: { payload: { videoId: "video-live" } } }],
+      livechat: { continuation: "SYNTHETIC_CHAT_CONTINUATION", is_replay: false },
       playability_status: { status: "OK" },
     });
 

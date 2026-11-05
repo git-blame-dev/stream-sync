@@ -61,11 +61,11 @@ const service = new InnertubeService<Innertube>({
     const endpoint = new URL(input instanceof Request ? input.url : String(input)).pathname;
     const payload = JSON.parse(String(init?.body)) as Record<string, string>;
     if (endpoint.endsWith('/player')) return Response.json({
-        playabilityStatus: { status: 'OK' },
+        playabilityStatus: { status: 'UNPLAYABLE', reason: 'Synthetic unavailable playback' },
         videoDetails: { videoId: payload.videoId, channelId: 'UC_SYNTHETIC', title: 'Synthetic live title',
             isLive: true, isLiveContent: true, lengthSeconds: '0', viewCount: '1', thumbnail: { thumbnails: [] } }
     });
-    if (endpoint.endsWith('/next')) return Response.json({ contents: { twoColumnWatchNextResults: {
+    if (endpoint.endsWith('/next')) return Response.json({ currentVideoEndpoint: { watchEndpoint: { videoId: payload.videoId } }, contents: { twoColumnWatchNextResults: {
         results: { results: { contents: [] } }, secondaryResults: { secondaryResults: { results: [] } },
         conversationBar: { liveChatRenderer: {
             continuations: [{ reloadContinuationData: { continuation: `${payload.videoId}:INITIAL` } }],
@@ -129,7 +129,11 @@ const manager = platform.connectionManager;
 const factory = platform._youtubeConnectionFactory;
 const callbacks: string[] = [];
 const events: Array<{ type: string; data: Record<string, unknown> }> = [];
-platform.on('platform:event', event => { events.push(event); });
+const connected: string[] = [];
+platform.on('platform:event', event => {
+    if (event.type === 'platform:chat-connected') connected.push(String(event.data.videoId));
+    else events.push(event);
+});
 const sdkItems: Array<{ id: string; type: string }> = [];
 const assertIngress = (streamIds: string[]) => {
     assert.deepEqual(sdkItems, streamIds.flatMap(id => [
@@ -180,7 +184,9 @@ try {
             'first and subsequent post-header requests must use the configured mode chain');
         checks++;
     }
-    assert.equal(events.length, 0, 'headers only signal start');
+    assert.equal(events.length, 0, 'headers do not emit messages');
+    assert.deepEqual(connected, ids, 'filter reloads announce readiness exactly once per stream');
+    assert.equal(manager.getReadyConnectionCount(), ids.length);
     batches.get('SYNTHETIC_A')!.release.resolve();
     await bodies.get('SYNTHETIC_A')!.entered.promise;
     assertIngress(['SYNTHETIC_A']);

@@ -20,6 +20,7 @@ function fixture(streams: Stream[]) {
             const stream = streams.find(s => s.id === id)!;
             return { page: [{}, { current_video_endpoint: { payload: { videoId: id } } }], basic_info: { id, channel_id: `UC${'q'.repeat(22)}`, is_live: true, is_live_content: true, view_count: stream.count },
                 primary_info: { view_count: { is_live: true, original_view_count: stream.count } },
+                livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false },
                 getLiveChat: () => {
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
                     const chat = Object.assign(new EventEmitter(), { start(this: EventEmitter) { this.emit('start', {}); }, stop() {}, applyFilter() {} });

@@ -57,7 +57,9 @@ function fixture() {
         },
       });
       chats.set(id, [...(chats.get(id) ?? []), chat]);
-      return { basic_info: { id, is_live: true }, ...plan.info,
+      return { basic_info: { id, is_live: true },
+        page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
+        livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false }, ...plan.info,
         getLiveChat: async () => {
           calls.push(`chat:${id}`);
           if (plan.chatFailure) throw plan.chatFailure;
@@ -108,7 +110,7 @@ describe('Premiere readiness with actual platform validation and default connect
   });
 
   test('upcoming without a live signal is rejected before SDK chat acquisition', async () => {
-    const f = fixture(); f.plans.set('synthetic-upcoming', { info: { basic_info: { is_upcoming: true } } });
+    const f = fixture(); f.plans.set('synthetic-upcoming', { info: { basic_info: { id: 'synthetic-upcoming', is_upcoming: true } } });
     expect(await f.platform.connectToYouTubeStream('synthetic-upcoming')).toBe(false);
     expect(f.manager.getConnectionCount()).toBe(0);
     expect(f.calls).toEqual(['info:synthetic-upcoming']);

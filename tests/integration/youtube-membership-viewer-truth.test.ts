@@ -26,6 +26,7 @@ function fixture(maxStreams = 2, extractionEnabled = true, username = channelId)
     const failures = new Set<string>();
     const chatFailures = new Set<string>();
     const playbackUnavailable = new Set<string>();
+    const missingChat = new Set<string>();
     const infoOverrides = new Map<string, Record<string, unknown>>();
     const infoErrors = new Map<string, Error>();
     const chats = new Map<string, EventEmitter>();
@@ -49,6 +50,7 @@ function fixture(maxStreams = 2, extractionEnabled = true, username = channelId)
                 basic_info: basic,
                 playability_status: { status: playbackUnavailable.has(id) ? 'UNPLAYABLE' : 'OK' },
                 primary_info: { view_count: { is_live: true, original_view_count: counts.get(id) } },
+                livechat: missingChat.has(id) ? undefined : { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false },
                 getLiveChat: () => {
                     membershipAtChat.set(id, platform.getDetectedStreamIds());
                     if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
@@ -89,7 +91,7 @@ function fixture(maxStreams = 2, extractionEnabled = true, username = channelId)
         if (event.type === PlatformEvents.STREAM_STATUS) statuses.push(event.data.isLive);
         if (event.type === PlatformEvents.STREAM_DETECTED) detected.push(event.data.newStreamIds);
     });
-    return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, playbackUnavailable, infoOverrides, infoErrors,
+    return { logger, owner, platform, store, observer, writes, counts, chats, membershipAtChat, statuses, detected, failures, chatFailures, playbackUnavailable, missingChat, infoOverrides, infoErrors,
         setPartial(partial: boolean) { discoveryPartial = partial; now += 2; },
         setDiscovery(ids: string[]) { discovered = ids; now += 2; },
         failDiscovery() { discoveryUnavailable = true; now += 2; },
@@ -101,11 +103,11 @@ function fixture(maxStreams = 2, extractionEnabled = true, username = channelId)
 }
 
 describe('authoritative membership through real platform, metadata, provider, store and OBS', () => {
-    for (const failure of ['chat', 'playback'] as const) {
+    for (const failure of ['chat', 'capability'] as const) {
         it(`tries later candidates within the same capacity check after ${failure} acquisition fails`, async () => {
             const f = fixture(1);
             try {
-                (failure === 'chat' ? f.chatFailures : f.playbackUnavailable).add(a);
+                (failure === 'chat' ? f.chatFailures : f.missingChat).add(a);
                 await f.platform.checkMultiStream();
                 expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
                 expect(f.platform.getActiveYouTubeVideoIds()).toEqual([b]);
@@ -299,7 +301,7 @@ describe('authoritative membership through real platform, metadata, provider, st
         } finally { await f.close(); }
     });
 
-    it('counts live metadata while playback restrictions prevent every chat connection', async () => {
+    it('connects live chats despite unavailable playback while preserving independent viewer counts', async () => {
         const f = fixture();
         try {
             f.setPartial(true);
@@ -307,7 +309,7 @@ describe('authoritative membership through real platform, metadata, provider, st
             f.playbackUnavailable.add(b);
             await f.platform.checkMultiStream();
             expect(f.platform.getDetectedStreamIds()).toEqual([a, b]);
-            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([]);
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([a, b]);
             await f.store.pollPlatform('youtube');
             expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '30' });
             f.infoOverrides.set(a, { id: a, is_live: false, end_timestamp: new Date(epoch - 1) });

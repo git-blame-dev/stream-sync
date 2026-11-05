@@ -402,38 +402,6 @@ describe("YouTubePlatform modern architecture", () => {
     expect(first(emitted).message).toEqual({ text: "plain text only" });
   });
 
-  it("emits chat connected event when connectToYouTubeStream succeeds", async () => {
-    const mockConnectionManager = {
-      hasConnection: vi.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
-      connectToStream: vi.fn<(...args: unknown[]) => Promise<boolean>>().mockResolvedValue(true),
-      getConnectionCount: vi.fn<(...args: unknown[]) => number>()
-        .mockReturnValueOnce(0)
-        .mockReturnValueOnce(1),
-      getConnectionId: vi.fn<(...args: unknown[]) => string>().mockReturnValue("youtube-abc123"),
-    };
-
-    const youtubePlatform = createStandalonePlatform();
-
-    youtubePlatform.connectionManager = mockConnectionManager;
-    const events: PlatformEvent[] = [];
-    youtubePlatform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
-
-    await youtubePlatform.connectToYouTubeStream("abc123");
-
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          platform: "youtube",
-          type: "platform:chat-connected",
-          data: expect.objectContaining({
-            platform: "youtube",
-            videoId: "abc123",
-          }),
-        }),
-      ]),
-    );
-  });
-
   it("silently ignores gift redemption announcements", async () => {
     const logger = createLogger();
     const { platform } = createPlatform({ logger });
@@ -942,18 +910,6 @@ describe("YouTubePlatform modern architecture", () => {
     const result = platform.getNextUserAgent();
 
     expect(result).toBe("test-ua");
-  });
-
-  it("setYouTubeConnectionReady updates connection ready state", () => {
-    const { platform } = createPlatform();
-    const readyAttempt: { value: [string, number] | null } = { value: null };
-    platform.connectionManager.setConnectionReady = (videoId: string, attemptId: number) => {
-      readyAttempt.value = [videoId, attemptId];
-    };
-
-    platform.setYouTubeConnectionReady("vid-123", 9);
-
-    expect(readyAttempt.value).toEqual(["vid-123", 9]);
   });
 
   it("isAnyYouTubeStreamReady delegates to connectionManager", () => {

@@ -32,7 +32,7 @@ interface YouTubePlatform {
   ) => Promise<boolean>;
     handleChatMessage: (message: UnknownRecord, isCurrent?: () => boolean) => void | Promise<void>;
     logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
-    _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string };
+    _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string; diagnostics?: UnknownRecord };
     _handleProcessingError: (message: string, error: unknown, category: string, metadata?: UnknownRecord) => void;
     _extractMessagesFromChatItem: (chatItem: UnknownRecord) => UnknownRecord[];
     _shouldSkipMessage: (message: UnknownRecord) => boolean;
@@ -341,7 +341,10 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                     signal.throwIfAborted();
                     if (!isYouTubeInfo(info)) throw new Error(`YouTube getInfo returned invalid stream info for ${videoId}`);
                     const validation = platform._validateVideoForConnection(videoId, info);
-                    if (!validation.shouldConnect) throw new Error(`Stream validation failed: ${validation.reason}`);
+                    if (!validation.shouldConnect) {
+                        platform.logger.debug('YouTube chat admission rejected', 'youtube', validation.diagnostics);
+                        throw new Error(`Stream validation failed: ${validation.reason}`);
+                    }
                     if (isActionsLike(info.actions)) await captureInstaller({ actions: info.actions, videoId,
                         initialContinuation: typeof info.livechat?.continuation === 'string' ? info.livechat.continuation : null });
                     signal.throwIfAborted();
@@ -398,16 +401,12 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             throw new Error('YouTube connection missing event emitter interface (on)');
         }
 
-        let readyReported = false;
         connection.on('start', async (data: unknown) => {
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
                 return;
             }
-            if (!readyReported) {
-                readyReported = true;
-                platform.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
-            }
             platform.setYouTubeConnectionReady(videoId, attemptId);
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
             await applyConfiguredChatMode(connection, videoId, attemptId, data);
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
 

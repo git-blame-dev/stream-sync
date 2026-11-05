@@ -58,7 +58,9 @@ function fixture() {
         },
       });
       chats.set(id, [...(chats.get(id) ?? []), chat]);
-      return { basic_info: { id, is_live: true }, ...plan.info,
+      return { basic_info: { id, is_live: true },
+        page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
+        livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false }, ...plan.info,
         getLiveChat: async () => {
           calls.push(`chat:${id}`);
           if (plan.chatFailure) throw plan.chatFailure;
@@ -114,7 +116,7 @@ describe('default YouTube factory with actual platform owners', () => {
     const controller = new AbortController();
     await expect(f.platform._youtubeConnectionFactory.createConnection('synthetic-vod', {
       signal: controller.signal, adopt() { throw new Error('Rejected VOD must not adopt'); },
-    })).rejects.toThrow('Stream validation failed: Video is not live content (replay/VOD)');
+    })).rejects.toThrow('Stream validation failed: Video is not live content (replay/VOD or unverified broadcast)');
     expect(f.calls).toEqual(['info:synthetic-vod']);
   });
 

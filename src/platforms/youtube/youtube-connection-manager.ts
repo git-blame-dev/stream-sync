@@ -224,15 +224,16 @@ class YouTubeConnectionManager {
         }
     }
 
-    setConnectionReady(videoId: string, attemptId: number): void {
+    setConnectionReady(videoId: string, attemptId: number): boolean {
         const connectionData = this.connections.get(videoId);
         if (!connectionData || connectionData.attemptId !== attemptId) {
             this.logger.warn(`Attempted to set ready status for non-existent connection: ${videoId}`, 'youtube');
-            return;
+            return false;
         }
-
+        if (connectionData.ready) return false;
         connectionData.ready = true;
         connectionData.state = this.CONNECTION_STATES.READY;
+        return true;
     }
 
     isConnectionReady(videoId: string): boolean {

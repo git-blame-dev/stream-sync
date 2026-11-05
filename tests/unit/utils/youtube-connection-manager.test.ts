@@ -34,7 +34,8 @@ function fixture() {
   const plans = new Map<string, SdkPlan>();
   const chats = new Map<string, Array<EventEmitter & { start(): void; stop(): Promise<void>; applyFilter(filter: string): void }>>();
   const calls: string[] = [], diagnostics: unknown[][] = [];
-  const logger = { ...noOpLogger, warn: (...args: unknown[]) => { diagnostics.push(args); },
+  const logger = { ...noOpLogger, debug: (...args: unknown[]) => { diagnostics.push(args); },
+    warn: (...args: unknown[]) => { diagnostics.push(args); },
     error: (...args: unknown[]) => { diagnostics.push(args); } };
   const entered = new Map<string, ReturnType<typeof deferred>>();
   const releases = new Set<ReturnType<typeof deferred>>();
@@ -62,7 +63,9 @@ function fixture() {
         },
       });
       chats.set(id, [...(chats.get(id) ?? []), chat]);
-      return { basic_info: { id, is_live: true }, ...plan.info,
+      return { basic_info: { id, is_live: true },
+        page: [{}, { current_video_endpoint: { payload: { videoId: id } } }],
+        livechat: { continuation: 'SYNTHETIC_CHAT_CONTINUATION', is_replay: false }, ...plan.info,
         getLiveChat: async () => {
           calls.push(`chat:${id}`);
           if (plan.chatAcquire) { releases.add(plan.chatAcquire); entered.get(id)?.resolve(); await plan.chatAcquire.promise; }
@@ -104,11 +107,69 @@ import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from
 const flush = async () => { for (let index = 0; index < 60; index++) await Promise.resolve(); };
 
 describe('YouTube manager through actual platform and default factory', () => {
+  test('connects unavailable playback to live chat and announces readiness once, including filter reloads', async () => {
+    const f = fixture();
+    const id = 'synthetic_A';
+    f.plans.set(id, { info: { playability_status: { status: 'UNPLAYABLE' } } });
+    expect(await f.platform.connectToYouTubeStream(id)).toBe(true);
+    expect(f.manager.isConnectionReady(id)).toBe(false);
+    const connected = () => f.events.filter(event => event.type === 'platform:chat-connected');
+    expect(connected()).toEqual([]);
+    const header = { header: { view_selector: { sub_menu_items: [
+      { selected: true }, { selected: false, continuation: 'SYNTHETIC_LIVE_FILTER' }
+    ] } } };
+    f.chat(id).emit('start', header); await checkpoint();
+    f.chat(id).emit('start', header); await checkpoint();
+    expect(f.manager.isConnectionReady(id)).toBe(true);
+    expect(connected()).toHaveLength(1);
+    expect(connected()[0]?.data).toMatchObject({ videoId: id, connectionId: `youtube-${id}` });
+    expect(f.calls.filter(call => call === `filter:${id}:LIVE_CHAT`)).toHaveLength(2);
+    f.chat(id).emit('chat-update', direct()); await checkpoint();
+    expect(messages(f)).toHaveLength(1);
+    const old = f.chat(id);
+    await f.manager.disconnectFromStream(id);
+    expect(await f.platform.connectToYouTubeStream(id)).toBe(true);
+    old.emit('start', header); await checkpoint();
+    expect(f.manager.isConnectionReady(id)).toBe(false);
+    expect(connected()).toHaveLength(1);
+    f.chat(id).emit('start', header); await checkpoint();
+    expect(connected()).toHaveLength(2);
+  });
+
+  test('does not announce chat connected merely because playable acquisition succeeded', async () => {
+    const f = fixture();
+    expect(await f.platform.connectToYouTubeStream('synthetic_A')).toBe(true);
+    expect(f.events.filter(event => event.type === 'platform:chat-connected')).toEqual([]);
+  });
+
+  for (const info of [
+    { page: [{}, { current_video_endpoint: { payload: { videoId: 'synthetic_B' } } }] },
+    { livechat: undefined },
+    { livechat: { continuation: 'SYNTHETIC_PRIVATE_CONTINUATION', is_replay: true } },
+    { livechat: { continuation: '', is_replay: false } },
+  ]) {
+    test(`rejects invalid chat before acquisition and safely releases the reservation: ${JSON.stringify(info)}`, async () => {
+      const f = fixture();
+      f.plans.set('synthetic_A', { info: { ...info,
+        playability_status: { status: 'SYNTHETIC_PRIVATE_STATUS', reason: 'SYNTHETIC_PRIVATE_REASON' } } });
+      expect(await f.platform.connectToYouTubeStream('synthetic_A')).toBe(false);
+      expect(f.calls).toEqual(['info:synthetic_A']);
+      expect(f.manager.getConnectionCount()).toBe(0);
+      expect(f.events.filter(event => event.type === 'platform:chat-connected')).toEqual([]);
+      const admission = f.diagnostics.find(entry => entry[0] === 'YouTube chat admission rejected');
+      expect(admission?.[2]).toMatchObject({ broadcast: 'live', playbackStatus: 'UNKNOWN' });
+      expect(JSON.stringify(f.diagnostics)).not.toContain('SYNTHETIC_PRIVATE');
+      f.plans.delete('synthetic_A');
+      expect(await f.platform.connectToYouTubeStream('synthetic_A')).toBe(true);
+    });
+  }
+
   test('preserves synchronous external start before factory resolution', async () => {
     const f = fixture(); f.plans.set('synthetic-early', { earlyStart: true });
     expect(await f.connect('synthetic-early')).toBe(true);
     expect(f.manager.getConnectionStatus('synthetic-early')).toMatchObject({ state: 'ready', ready: true });
     expect(f.manager.getReadyConnectionCount()).toBe(1);
+    expect(f.events.filter(event => event.type === 'platform:chat-connected')).toHaveLength(1);
   });
 
   test('tracks registry, metadata, independent readiness, aggregate queries and defensive snapshots', async () => {
