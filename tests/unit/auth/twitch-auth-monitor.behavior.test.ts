@@ -2,6 +2,7 @@ import { vi, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test
 import fs from 'node:fs/promises';
 import disk from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { TwitchAuth } from '../../../src/auth/TwitchAuth';
 import { TWITCH_OAUTH_SCOPES } from '../../../src/auth/twitch-oauth-scopes';
 import { secrets, _resetForTesting } from '../../../src/core/secrets';
@@ -65,7 +66,7 @@ function completeTokenIoSynchronously(tokenStorePath: string) {
 }
 
 describe('TwitchAuth validation monitoring', () => {
-    let directory: string;
+    let directory: string | undefined;
     let tokenStorePath: string;
     let auth: TwitchAuth;
     let restoreTokenIo: () => void;
@@ -74,12 +75,13 @@ describe('TwitchAuth validation monitoring', () => {
     const oauthFlow = vi.fn<(...args: []) => Promise<null>>();
 
     beforeEach(async () => {
+        directory = undefined;
         restoreTokenIo = () => {};
         _resetForTesting();
         secrets.twitch.clientSecret = 'test-secret';
         get.mockReset(); post.mockReset(); oauthFlow.mockReset();
         get.mockResolvedValue(valid());
-        directory = await fs.mkdtemp('/tmp/opencode/twitch-monitor-');
+        directory = await fs.mkdtemp(path.join(tmpdir(), 'synthetic-twitch-monitor-'));
         tokenStorePath = path.join(directory, 'test-tokens.json');
         await fs.writeFile(tokenStorePath, JSON.stringify({ twitch: { accessToken: 'test-access', refreshToken: 'test-refresh' } }));
         auth = new TwitchAuth({ tokenStorePath, clientId: 'test-client', expectedUsername: 'test-user', logger: noOpLogger,
@@ -96,7 +98,7 @@ describe('TwitchAuth validation monitoring', () => {
         } finally {
             restoreTokenIo();
             try {
-                await fs.rm(directory, { recursive: true, force: true });
+                if (directory) await fs.rm(directory, { recursive: true, force: true });
             } finally {
                 _resetForTesting();
             }
