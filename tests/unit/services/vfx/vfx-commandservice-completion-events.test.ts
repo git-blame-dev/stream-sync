@@ -1,4 +1,9 @@
-import { vi, describe, test, expect, beforeEach, spyOn } from 'bun:test';
+import { vi, describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { EventBus } from '../../../../src/core/EventBus';
 
 import { noOpLogger } from "../../../helpers/mock-factories";
 
@@ -11,59 +16,19 @@ import {
 } from "../../../../src/services/VFXCommandService.ts";
 
 type EventRecord = { name: string; payload: Record<string, unknown> };
-type EventBus = ConstructorParameters<typeof VFXCommandService>[1];
 type VFXServiceConfig = ConstructorParameters<typeof VFXCommandService>[0];
-type PlayMediaInOBS = OBSEffectsManager["playMediaInOBS"];
 
-function createConfig(): VFXServiceConfig {
+function createConfig(dir: string): VFXServiceConfig {
   return {
     commands: { greetings: "!hello, Synthetic VFX Source" },
     farewell: {},
-    vfx: { filePath: "/tmp" },
+    vfx: { filePath: dir },
     cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
   };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function createMockEffectsManager(): OBSEffectsManager {
-  const obsLogger = {
-    debug: () => {},
-    warn: () => {},
-    error: () => {},
-  };
-  const effectsManager = new OBSEffectsManager(
-    {
-      ensureConnected: vi.fn<(...args: []) => Promise<void>>().mockResolvedValue(undefined),
-      call: vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>().mockResolvedValue({}),
-    },
-    {
-      logger: obsLogger,
-      retrySystem: { delay: () => Promise.resolve() },
-    },
-  );
-  effectsManager.playMediaInOBS = vi.fn<(...args: Parameters<PlayMediaInOBS>) => ReturnType<PlayMediaInOBS>>()
-    .mockResolvedValue(undefined);
-  return effectsManager;
-}
-
-function createExternalOBSFixture() {
-  const call = vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>()
-    .mockResolvedValue({});
-  const effectsManager = new OBSEffectsManager({
-    ensureConnected: async () => {},
-    call,
-    addEventListener: (_name: string, handler: (data?: Record<string, unknown>) => void) => {
-      queueMicrotask(() => handler({ inputName: "Synthetic VFX Source" }));
-    },
-    removeEventListener: () => {},
-  }, {
-    logger: noOpLogger,
-    delay: async () => {},
-  });
-  return { effectsManager, call };
 }
 
 function expectRecordedEvent(
@@ -81,37 +46,61 @@ function expectRecordedEvent(
 describe("VFXCommandService completion events", () => {
   let eventBus: EventBus;
   let recordedEvents: EventRecord[];
-  let mockEffectsManager: OBSEffectsManager;
+  let effectsManager: OBSEffectsManager;
+  let dir: string;
+  let remoteEvents: EventEmitter;
+  let remoteFailure: unknown;
+  let call: ReturnType<typeof vi.fn<(...args: [string, Record<string, unknown>?]) => Promise<unknown>>>;
 
-  beforeEach(() => {
-    recordedEvents = [];
-    eventBus = {
-      emit: (name: string, payload: unknown) => {
-        if (!isRecord(payload)) {
-          throw new Error("Expected VFX event payload object");
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "synthetic-vfx-completion-"));
+    try {
+      await writeFile(join(dir, "greetings.mp4"), "synthetic bytes; remote OBS playback is simulated");
+      recordedEvents = [];
+      eventBus = new EventBus();
+      for (const name of [PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED]) {
+        eventBus.on(name, (payload: unknown) => {
+          if (!isRecord(payload)) throw new Error("Expected VFX event payload object");
+          recordedEvents.push({ name, payload });
+        });
+      }
+      remoteEvents = new EventEmitter();
+      remoteFailure = undefined;
+      call = vi.fn(async (method: string, payload?: Record<string, unknown>): Promise<unknown> => {
+        if (remoteFailure !== undefined) throw remoteFailure;
+        if (method === "TriggerMediaInputAction") {
+          // Duplicate external end notifications must not duplicate service completion.
+          remoteEvents.emit("MediaInputPlaybackEnded", { inputName: payload?.inputName });
+          remoteEvents.emit("MediaInputPlaybackEnded", { inputName: payload?.inputName });
         }
-        recordedEvents.push({ name, payload });
-      },
-    };
-    mockEffectsManager = createMockEffectsManager();
+        return {};
+      });
+      effectsManager = new OBSEffectsManager({
+        ensureConnected: async () => {}, call,
+        addEventListener: (name, handler) => { remoteEvents.on(name, handler); },
+        removeEventListener: (name, handler) => { remoteEvents.off(name, handler); },
+      }, { logger: noOpLogger });
+    } catch (error) {
+      await rm(dir, { recursive: true, force: true });
+      throw error;
+    }
+  });
+
+  afterEach(async () => {
+    try {
+      expect(remoteEvents?.listenerCount("MediaInputPlaybackEnded") ?? 0).toBe(0);
+    } finally {
+      effectsManager?.dispose();
+      eventBus?.reset();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("emits both executed and effect-completed with enriched payload", async () => {
-    const config = createConfig();
+    const config = createConfig(dir);
     const service = new VFXCommandService(config, eventBus, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
-
-    const vfxConfig = {
-      commandKey: "greetings",
-      filename: "hello",
-      mediaSource: "VFX Top",
-      vfxFilePath: "/tmp",
-      command: "!hello",
-      duration: 5000,
-    };
-
-    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<typeof vfxConfig>>().mockResolvedValue(vfxConfig);
 
     await service.executeCommand("!hello", {
       username: "testViewer",
@@ -124,6 +113,17 @@ describe("VFXCommandService completion events", () => {
 
     const executedEvent = expectRecordedEvent(recordedEvents, PlatformEvents.VFX_COMMAND_EXECUTED);
     const completedEvent = expectRecordedEvent(recordedEvents, PlatformEvents.VFX_EFFECT_COMPLETED);
+    expect(recordedEvents.map(({ name }) => name)).toEqual([
+      PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED,
+    ]);
+    expect(call.mock.calls).toEqual([
+      ["SetInputSettings", { inputName: "Synthetic VFX Source", inputSettings: {
+        local_file: join(dir, "greetings.mp4"), looping: false,
+      }, overlay: false }],
+      ["TriggerMediaInputAction", { inputName: "Synthetic VFX Source",
+        mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART" }],
+    ]);
+    expect(completedEvent.payload.correlationId).toBe("test-corr-1");
 
     const payload = completedEvent.payload;
     expect(executedEvent.payload.type).toBe(
@@ -131,8 +131,8 @@ describe("VFXCommandService completion events", () => {
     );
     expect(payload.type).toBe(PlatformEvents.VFX_EFFECT_COMPLETED);
     expect(payload.commandKey).toBe("greetings");
-    expect(payload.filename).toBe("hello");
-    expect(payload.mediaSource).toBe("VFX Top");
+    expect(payload.filename).toBe("greetings");
+    expect(payload.mediaSource).toBe("Synthetic VFX Source");
     expect(payload.username).toBe("testViewer");
     expect(payload.platform).toBe("twitch");
     expect(payload.userId).toBe("test-user-123");
@@ -142,18 +142,9 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("omits userId for automatic executions while preserving event correlation and context", async () => {
-    const service = new VFXCommandService(createConfig(), eventBus, {
-      effectsManager: mockEffectsManager,
+    const service = new VFXCommandService(createConfig(dir), eventBus, {
+      effectsManager,
     });
-    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<{ commandKey: string; filename: string; mediaSource: string; vfxFilePath: string; command: string; duration: number; }>>().mockResolvedValue({
-      commandKey: "greetings",
-      filename: "synthetic-automatic",
-      mediaSource: "Synthetic VFX Source",
-      vfxFilePath: "/tmp/synthetic-automatic.vfx",
-      command: "!hello",
-      duration: 5000,
-    });
-
     await service.executeCommand("!hello", {
       username: "  Synthetic Automation  ",
       platform: "twitch",
@@ -184,8 +175,8 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("factory passes injected effects manager through to service construction", () => {
-    const config = createConfig();
-    const customEffectsManager = createMockEffectsManager();
+    const config = createConfig(dir);
+    const customEffectsManager = effectsManager;
 
     const service = createVFXCommandService(config, null, {
       effectsManager: customEffectsManager,
@@ -195,9 +186,8 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("rejects missing correlation before OBS execution or cooldown updates", async () => {
-    const obs = createExternalOBSFixture();
-    const service = new VFXCommandService(createConfig(), eventBus, {
-      effectsManager: obs.effectsManager,
+    const service = new VFXCommandService(createConfig(dir), eventBus, {
+      effectsManager,
     });
     const result = await service.executeCommand("!hello", {
       username: "Synthetic Viewer",
@@ -207,7 +197,7 @@ describe("VFXCommandService completion events", () => {
     });
     expect(result.success).toBe(false);
     expect(result.error).toContain("correlationId");
-    expect(obs.call).not.toHaveBeenCalled();
+    expect(call).not.toHaveBeenCalled();
     expect(recordedEvents).toHaveLength(0);
     expect(service.userLastCommand.size).toBe(0);
     expect(service.globalCommandCooldowns.size).toBe(0);
@@ -216,20 +206,16 @@ describe("VFXCommandService completion events", () => {
   });
 
   test.each([PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED])("preserves actual success and cooldowns when %s publication fails", async (failingEvent) => {
-    const obs = createExternalOBSFixture();
-    const config = createConfig();
+    const config = createConfig(dir);
     const cooldownCommittedAtPublication: boolean[] = [];
-    const failingEventBus = {
-      emit: (name: string) => {
+    for (const name of [PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED]) {
+      eventBus.on(name, () => {
         cooldownCommittedAtPublication.push(service.userLastCommand.has("test-user-123"));
-        recordedEvents.push({ name, payload: {} });
-        if (name === failingEvent) {
-          throw new Error("emit failed");
-        }
-      },
-    };
-    const service = new VFXCommandService(config, failingEventBus, {
-      effectsManager: obs.effectsManager,
+        if (name === failingEvent) throw new Error("synthetic consumer failure");
+      });
+    }
+    const service = new VFXCommandService(config, eventBus, {
+      effectsManager,
     });
 
     const result = await service.executeCommand("!hello", {
@@ -257,19 +243,16 @@ describe("VFXCommandService completion events", () => {
       skipCooldown: false, correlationId: "synthetic-repeat",
     });
     expect(repeated.error).toBe("Command on cooldown");
-    expect(obs.call.mock.calls.map(([name]) => name)).toEqual([
+    expect(call.mock.calls.map(([name]) => name)).toEqual([
       "SetInputSettings", "TriggerMediaInputAction",
     ]);
   });
 
   test("still publishes completion when executed publication and its diagnostic both throw", async () => {
-    const obs = createExternalOBSFixture();
-    const service = new VFXCommandService(createConfig(), {
-      emit: (name, payload) => {
-        if (name === PlatformEvents.VFX_COMMAND_EXECUTED) throw new Error("synthetic observer failure");
-        if (isRecord(payload)) recordedEvents.push({ name, payload });
-      },
-    }, { effectsManager: obs.effectsManager });
+    eventBus.on(PlatformEvents.VFX_COMMAND_EXECUTED, () => {
+      throw new Error("synthetic observer failure");
+    });
+    const service = new VFXCommandService(createConfig(dir), eventBus, { effectsManager });
     const diagnostic = spyOn(getUnifiedLogger(), "error").mockImplementation(() => {
       throw new Error("synthetic diagnostic failure");
     });
@@ -280,6 +263,9 @@ describe("VFXCommandService completion events", () => {
       });
       expect(result.success).toBe(true);
       expect(diagnostic).toHaveBeenCalledTimes(1);
+      expect(recordedEvents.map(({ name }) => name)).toEqual([
+        PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED,
+      ]);
       expectRecordedEvent(recordedEvents, PlatformEvents.VFX_EFFECT_COMPLETED);
       expect(service.userLastCommand.has("synthetic-user")).toBe(true);
       expect(service.stats.successfulCommands).toBe(1);
@@ -290,22 +276,38 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("returns safe error text when non-Error values are thrown during execution", async () => {
-    const config = createConfig();
+    const config = createConfig(dir);
     const service = new VFXCommandService(config, eventBus, {
-      effectsManager: mockEffectsManager,
+      effectsManager,
     });
 
-    service.selectVFXCommand = vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue("plain-string-failure");
+    remoteFailure = "plain-string-failure";
 
     const result = await service.executeCommand("!hello", {
       username: "testViewer",
       platform: "twitch",
       userId: "test-user-123",
-      skipCooldown: true,
+      skipCooldown: false,
       correlationId: "test-corr-3",
     });
 
     expect(result.success).toBe(false);
     expect(result.error).toBe("plain-string-failure");
+    expect(recordedEvents).toEqual([]);
+    expect(service.stats.failedCommands).toBe(1);
+    expect(service.stats.successfulCommands).toBe(0);
+    expect(service.stats.timedCommands).toBe(1);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+    remoteFailure = undefined;
+    const recovered = await service.executeCommand("!hello", {
+      username: "Synthetic Viewer", platform: "twitch", userId: "test-user-123",
+      skipCooldown: false, correlationId: "synthetic-recovery",
+    });
+    expect(recovered.success).toBe(true);
+    expect(service.stats.successfulCommands).toBe(1);
+    expect(recordedEvents.map(({ name }) => name)).toEqual([
+      PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED,
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import { vi, describe, expect, afterEach, it, beforeEach } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import { createConfigFixture } from "../../../helpers/config-fixture";
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
@@ -13,14 +13,6 @@ describe("VFXCommandService failure paths", () => {
       vfx: { filePath: "/tmp" },
       cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
     });
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
 
   it("returns friendly error when parser is missing", async () => {
     const service = new VFXCommandService(createConfig(), null);
@@ -39,9 +31,6 @@ describe("VFXCommandService failure paths", () => {
 
   it("returns friendly error when parser finds no VFX command", async () => {
     const service = new VFXCommandService(createConfig(), null);
-    service.commandParser = {
-      getVFXConfig: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
-    };
 
     const result = await service.executeCommand("not-a-command", {
       username: "testUser",
@@ -54,23 +43,25 @@ describe("VFXCommandService failure paths", () => {
     expect(result.error).toBe("Command not found");
   });
 
-  it("returns friendly error when parser throws while selecting command", async () => {
-    const service = new VFXCommandService(createConfig(), null);
-    service.commandParser = {
-      getVFXConfig: vi.fn(() => {
-        throw new Error("parser explode");
-      }),
-    };
+  it("returns the actual validation error when the configured media path is empty", async () => {
+    const config = createConfig();
+    config.commands = { synthetic: "!boom, Synthetic VFX Source" };
+    config.vfx.filePath = "";
+    const service = new VFXCommandService(config, null);
 
     const result = await service.executeCommand("!boom", {
-      username: "testUser",
+      username: "Synthetic Viewer",
       platform: "tiktok",
-      userId: "testUserId",
-      skipCooldown: true,
+      userId: "synthetic-user",
+      skipCooldown: false,
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("parser explode");
+    expect(result.error).toBe("VFX config requires vfxFilePath");
+    expect(service.stats.failedCommands).toBe(1);
+    expect(service.stats.timedCommands).toBe(1);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
   });
 
   it("returns friendly error when command string is empty", async () => {
@@ -89,9 +80,6 @@ describe("VFXCommandService failure paths", () => {
 
   it("returns friendly error when command is whitespace only", async () => {
     const service = new VFXCommandService(createConfig(), null);
-    service.commandParser = {
-      getVFXConfig: vi.fn<(...args: unknown[]) => null>().mockReturnValue(null),
-    };
 
     const result = await service.executeCommand("   ", {
       username: "testUser",
