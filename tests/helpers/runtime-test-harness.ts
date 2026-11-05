@@ -1,5 +1,6 @@
 import { vi } from 'bun:test';
-import { EventEmitter } from 'node:events';
+import { createEventBus } from '../../src/core/EventBus';
+import { UserTrackingService } from '../../src/services/UserTrackingService';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
 
 
@@ -16,39 +17,20 @@ type RuntimeDependenciesForTest = ConstructorParameters<typeof AppRuntime>[1];
 type ConfigFixtureOverrides = Parameters<typeof createConfigFixture>[0];
 type ConfigFixture = ReturnType<typeof createConfigFixture>;
 type NotificationManagerOverrides = Parameters<typeof createMockNotificationManager>[0];
-type RuntimeEventHandler = (event: Record<string, unknown>) => Promise<void> | void;
-type EventBusStub = RuntimeDependenciesForTest['eventBus'] & {
-    reset: () => void;
-};
 type PlatformLifecycleStub = RuntimeDependenciesForTest['platformLifecycleService'] & Record<string, unknown>;
 type AppRuntimeDependencyOverrides = Partial<RuntimeDependenciesForTest> & Record<string, unknown>;
 
-type AppRuntimeTestOptions = Partial<RuntimeDependenciesForTest> & {
+type AppRuntimeTestOptions = {
+    [Key in keyof RuntimeDependenciesForTest]?: RuntimeDependenciesForTest[Key] | undefined;
+} & {
     configOverrides?: ConfigFixtureOverrides;
     notificationManagerOverrides?: NotificationManagerOverrides;
     overrides?: AppRuntimeDependencyOverrides;
     logger?: RuntimeDependenciesForTest['logging'];
-    displayQueue?: RuntimeDependenciesForTest['displayQueue'];
-    notificationManager?: RuntimeDependenciesForTest['notificationManager'];
-    eventBus?: RuntimeDependenciesForTest['eventBus'];
-    platformLifecycleService?: RuntimeDependenciesForTest['platformLifecycleService'];
 };
 
 const asRuntimeConfig = (config: ConfigFixture): RuntimeConfigForTest => {
     return config as unknown as RuntimeConfigForTest;
-};
-
-const createEventBusStub = (): EventBusStub => {
-    const emitter = new EventEmitter();
-
-    return {
-        subscribe: vi.fn((event: string, handler: RuntimeEventHandler) => {
-            emitter.on(event, handler);
-            return () => emitter.removeListener(event, handler);
-        }),
-        emit: vi.fn((event: string, payload: unknown) => emitter.emit(event, payload)),
-        reset: vi.fn(() => emitter.removeAllListeners())
-    };
 };
 
 const createPlatformLifecycleStub = (overrides: Partial<PlatformLifecycleStub> = {}): PlatformLifecycleStub => ({
@@ -74,41 +56,40 @@ function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
     const {
         configOverrides = {},
         notificationManagerOverrides = {},
-        overrides = {}
+        overrides = {},
+        logger: loggerOption,
+        ...dependencyOptions
     } = options;
 
-    const logger = options.logger || noOpLogger;
-    const displayQueue = options.displayQueue || createMockDisplayQueue();
-    const notificationManager = options.notificationManager ||
-        createMockNotificationManager(notificationManagerOverrides);
-    const eventBus = options.eventBus || createEventBusStub();
+    const logger = loggerOption ?? noOpLogger;
+    const displayQueue = options.displayQueue === undefined ? createMockDisplayQueue() : options.displayQueue;
+    const notificationManager = options.notificationManager === undefined ?
+        createMockNotificationManager(notificationManagerOverrides) : options.notificationManager;
+    const eventBus = options.eventBus === undefined ? createEventBus() : options.eventBus;
     const config = createConfigFixture(configOverrides);
     const runtimeConfig = asRuntimeConfig(config);
-    const vfxCommandService = options.vfxCommandService || {
+    const vfxCommandService = options.vfxCommandService === undefined ? {
         executeCommand: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
         executeCommandForKey: vi.fn<(...args: [unknown, Record<string, unknown>]) => Promise<Record<string, boolean>>>().mockResolvedValue({ success: true }),
         getVFXConfig: vi.fn<(...args: [string, string | null]) => Promise<Record<string, unknown>>>().mockResolvedValue({})
-    };
-    const userTrackingService = options.userTrackingService || {
-        isFirstMessage: vi.fn<(...args: [unknown, Record<string, unknown>?]) => boolean>().mockReturnValue(true)
-    };
-    const commandCooldownService = options.commandCooldownService || {
-        loadCooldownConfig: vi.fn<(...args: []) => void>(),
-        registerConfigListeners: vi.fn<(...args: []) => void>(),
+    } : options.vfxCommandService;
+    const userTrackingService = options.userTrackingService === undefined ? new UserTrackingService() : options.userTrackingService;
+    const commandCooldownService: RuntimeDependenciesForTest['commandCooldownService'] = options.commandCooldownService === undefined ? {
         getStatus: vi.fn<(...args: []) => Record<string, unknown>>().mockReturnValue({ commands: {} }),
         checkUserCooldown: vi.fn<(...args: [unknown, number, number]) => boolean>().mockReturnValue(true),
-        updateUserCooldown: vi.fn<(...args: [unknown]) => void>()
-    };
-    const platformLifecycleService = options.platformLifecycleService ||
-        createPlatformLifecycleStub();
-    const commandParser = options.commandParser || {
+        updateUserCooldown: vi.fn<(...args: [unknown]) => void>(),
+        dispose: vi.fn<(...args: []) => void>()
+    } : options.commandCooldownService;
+    const platformLifecycleService = options.platformLifecycleService === undefined ?
+        createPlatformLifecycleStub() : options.platformLifecycleService;
+    const commandParser = options.commandParser === undefined ? {
         getVFXConfig: vi.fn<(...args: [string?, string?]) => null>().mockReturnValue(null)
-    };
-    const dependencyFactory = options.dependencyFactory || {
+    } : options.commandParser;
+    const dependencyFactory = options.dependencyFactory === undefined ? {
         createYoutubeDependencies: vi.fn<(...args: []) => { streamDetectionService: { isLive: () => unknown } }>().mockReturnValue({
             streamDetectionService: { isLive: vi.fn<(...args: unknown[]) => unknown>() }
         })
-    };
+    } : options.dependencyFactory;
 
     const dependencies = {
         logging: logger,
@@ -123,25 +104,26 @@ function createAppRuntimeTestDependencies(options: AppRuntimeTestOptions = {}) {
         platformLifecycleService,
         commandParser,
         dependencyFactory,
-        timestampService: options.timestampService || { now: vi.fn((): number => testClock.now()) },
-        obsManager: options.obsManager || null,
-        twitchAuth: options.twitchAuth || null,
-        obs: options.obs || {},
-        obsEventService: options.obsEventService || { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() },
-        sceneManagementService: options.sceneManagementService || { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() },
-        gracefulExitService: options.gracefulExitService || {
+        timestampService: options.timestampService === undefined ? { now: vi.fn((): number => testClock.now()) } : options.timestampService,
+        obsManager: options.obsManager === undefined ? null : options.obsManager,
+        twitchAuth: options.twitchAuth === undefined ? null : options.twitchAuth,
+        obs: options.obs === undefined ? {} : options.obs,
+        obsEventService: options.obsEventService === undefined ? { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() } : options.obsEventService,
+        sceneManagementService: options.sceneManagementService === undefined ? { start: vi.fn<(...args: unknown[]) => unknown>(), stop: vi.fn<(...args: unknown[]) => unknown>() } : options.sceneManagementService,
+        gracefulExitService: options.gracefulExitService === undefined ? {
             isEnabled: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
             getTargetMessageCount: vi.fn<(...args: []) => number>().mockReturnValue(0),
             incrementMessageCount: vi.fn<(...args: []) => boolean>().mockReturnValue(false),
             triggerExit: vi.fn<(...args: []) => Promise<unknown>>().mockResolvedValue(undefined)
-        },
+        } : options.gracefulExitService,
+        ...Object.fromEntries(Object.entries(dependencyOptions).filter(([, value]) => value !== undefined)),
         ...overrides
     } as RuntimeDependenciesForTest;
 
     return {
         dependencies,
-        eventBus,
-        notificationManager,
+        eventBus: dependencies.eventBus,
+        notificationManager: dependencies.notificationManager,
         configFixture: config,
         runtimeConfig
     };

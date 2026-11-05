@@ -120,6 +120,16 @@ describe('event-driven-testing behavior', () => {
         expect(attempts).toBeGreaterThanOrEqual(3);
     });
 
+    it('polls without changing the clock owned by the test', async () => {
+        const initial = testClock.now();
+        let attempts = 0;
+        await waitFor(() => ++attempts === 3, { timeout: 100, interval: 1 });
+        expect(testClock.now()).toBe(initial);
+        await expect(waitFor(() => { testClock.advance(1000); return false; }, { timeout: 5, interval: 1 }))
+            .rejects.toThrow('Condition not met');
+        expect(testClock.now()).toBeGreaterThanOrEqual(initial + 1000);
+    });
+
     it('records and summarizes user-visible experience outcomes', () => {
         const observer = new UserExperienceObserver();
 

@@ -161,15 +161,16 @@ const waitForEvent = (emitter: EventEmitter, eventName: EventName, timeout = 500
 
 const waitFor = async (condition: () => boolean | Promise<boolean>, options: WaitForOptions = {}) => {
     const { timeout = 5000, interval = 50 } = options;
-    const start = testClock.now();
+    // eslint-disable-next-line no-restricted-properties -- Polling deadlines use real elapsed time; the caller owns the fixture clock.
+    const start = performance.now();
     const effectiveInterval = resolveDelay(interval);
     
-    while (testClock.now() - start < timeout) {
+    // eslint-disable-next-line no-restricted-properties -- Keep the deadline in the same monotonic clock domain.
+    while (performance.now() - start < timeout) {
         if (await condition()) {
             return true;
         }
         await waitForDelay(effectiveInterval);
-        testClock.advance(effectiveInterval);
     }
     
     throw new Error(`Condition not met within ${timeout}ms`);

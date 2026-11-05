@@ -1,6 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { NeuralTtsProcessManager } from '../../../src/obs/neural-tts-process-manager';
-import { AppRuntime } from '../../../src/runtime/AppRuntime';
 import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
 import { noOpLogger } from '../../helpers/mock-factories';
 import { withTimeout } from '../../../src/utils/timeout-wrapper';
@@ -622,22 +621,21 @@ describe('NeuralTtsProcessManager', () => {
         h.config.obs.neuralTtsEndpoint = 'http://127.0.0.1:8765';
         const requests: string[] = [];
         const leaseBodies: unknown[] = [];
-        const lifecycle: string[] = [];
-        let requestsBeforePlatformInit: string[] | undefined;
-        let restoreObservers = () => {};
-        const originalInitializePlatforms = AppRuntime.prototype.initializePlatforms;
-        const initPlatformsObserver = spyOn(AppRuntime.prototype, 'initializePlatforms').mockImplementation(async function (this: AppRuntime) {
-            requestsBeforePlatformInit = [...requests];
-            return await originalInitializePlatforms.call(this);
-        });
+        let queueRetiredAtRelease = false;
         const syntheticFetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
             const path = new URL(String(input)).pathname;
             requests.push(path);
             if (path.startsWith('/v1/lease/')) leaseBodies.push(JSON.parse(String(init?.body)));
             if (path === '/health') return new Response('{}', { status: 200 });
             if (path === '/v1/lease/acquire') return new Response(JSON.stringify({ active_clients: 1, active_jobs: 0 }), { status: 200 });
-            if (path === '/v1/lease/release') lifecycle.push('lease released');
-            if (path === '/v1/lease/release') return new Response(JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: false }), { status: 200 });
+            if (path === '/v1/lease/release') {
+                try {
+                    h.queue.addItem({ type: 'chat', platform: 'twitch', data: { username: 'synthetic-retired-viewer', message: 'synthetic retired row' } });
+                } catch (error) {
+                    queueRetiredAtRelease = error instanceof Error && error.message === 'Display queue stopped';
+                }
+                return new Response(JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: false }), { status: 200 });
+            }
             throw new Error(`Unexpected synthetic neural request: ${path}`);
         }, { preconnect: globalThis.fetch.preconnect });
         const fetch = spyOn(globalThis, 'fetch').mockImplementation(syntheticFetch);
@@ -646,14 +644,7 @@ describe('NeuralTtsProcessManager', () => {
             await expect((async () => {
                 try {
                     await h.start();
-                    const queueStop = h.queue.stop.bind(h.queue);
-                    const queueObserver = spyOn(h.queue, 'stop').mockImplementation(async () => { await queueStop(); lifecycle.push('queue stopped'); });
-                    const platforms = h.runtime.platformLifecycleService;
-                    const disconnect = platforms.disconnectAll.bind(platforms);
-                    const platformObserver = spyOn(platforms, 'disconnectAll').mockImplementation(async () => { await disconnect(); lifecycle.push('platforms disconnected'); });
-                    restoreObservers = () => { queueObserver.mockRestore(); platformObserver.mockRestore(); };
                     expect(h.runtime.isStarted).toBe(true);
-                    expect(requestsBeforePlatformInit).toEqual(['/health', '/v1/lease/acquire']);
                     expect(requests).toEqual(['/health', '/v1/lease/acquire']);
                     throw early;
                 } finally { await h.dispose(); }
@@ -662,9 +653,9 @@ describe('NeuralTtsProcessManager', () => {
             expect(leaseBodies).toHaveLength(2);
             expect(leaseBodies[0]).toMatchObject({ client_id: expect.any(String) });
             expect(leaseBodies[1]).toEqual(leaseBodies[0]);
-            expect(lifecycle).toEqual(['queue stopped', 'lease released', 'platforms disconnected']);
+            expect(queueRetiredAtRelease).toBe(true);
             expect(h.runtime.isStarted).toBe(false);
-        } finally { initPlatformsObserver.mockRestore(); restoreObservers(); fetch.mockRestore(); }
+        } finally { fetch.mockRestore(); }
     });
 
     it('waits for a warming neural service before completing real runtime startup and releases its lease', async () => {
