@@ -277,7 +277,7 @@ describe('AppRuntime with production main owners', () => {
     expect(Reflect.get(h.runtime, 'recordPlatformConnection')).toBeUndefined();
   });
 
-  it('contains an external YouTube discovery failure and recovers through the real reconnect path', async () => {
+  it('contains an external YouTube discovery failure and recovers through the platform lifecycle owner', async () => {
     let unavailable = true;
     const client = {
       getInfo: async () => ({}),
@@ -293,64 +293,41 @@ describe('AppRuntime with production main owners', () => {
     const platform = new YouTubePlatform(config, dependencies);
     const detector = dependencies.streamDetectionService;
     if (!(detector instanceof YouTubeStreamDetectionService)) throw new Error('Expected production discovery service');
-    const previous = h.runtime.youtube;
-    h.runtime.youtube = platform as unknown as NonNullable<AppRuntime['youtube']>;
-    const event = { eventType: 'stream-detected', newStreamIds: ['synthetic-video'] };
     try {
-      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
+      await expect(platform.initialize()).resolves.toBeUndefined();
       expect(detector.getUsageMetrics().failedRequests).toBe(1);
       expect(h.runtime.isStarted).toBe(true);
       unavailable = false;
-      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
+      await expect(platform.reconnect()).resolves.toBeUndefined();
       expect(detector.getUsageMetrics().successfulRequests).toBe(1);
       expect(platform.isInitialized).toBe(true);
       expect(h.runtime.isStarted).toBe(true);
     } finally {
-      if (previous === undefined) delete h.runtime.youtube; else h.runtime.youtube = previous;
       await platform.cleanup();
       await owner.dispose();
     }
     expect(platform.monitoringInterval).toBeNull();
+    expect(platform.isInitialized).toBe(false);
+    expect(platform.getConnectionState()).toMatchObject({ isConnected: false, isMonitoring: false, totalConnections: 0 });
+    expect(() => owner.withMetadataOperation({}, async () => true)).toThrow('disposed');
   });
 
-  it('retains the public YouTube reconnect seam with actual repeated initialization and disposal', async () => {
-    const logger = noOpLogger;
-    const config = { ...h.config.youtube, username: 'synthetic-channel', enabled: false,
-      enableAPI: false, dataLoggingEnabled: false, envFileReadEnabled: false, envFileWriteEnabled: false };
-    const dependencies = new DependencyFactory().createYoutubeDependencies(config, { config: h.config, logger });
-    let platform: YouTubePlatform | undefined;
-    let restore = () => {};
-    const previous = h.runtime.youtube;
+  it('observes routed stream discovery without admitting connections or changing viewer state', async () => {
+    const debug = spyOn(h.runtime.logger, 'debug');
+    const queueLength = h.queue.state.queue.length;
+    await h.runtime.updateViewerCount('youtube', 17);
+    const viewerState = h.runtime.viewerCountSystem.getViewerCountSnapshot('youtube');
     try {
-      platform = new YouTubePlatform(config, dependencies);
-      h.runtime.youtube = platform as unknown as NonNullable<AppRuntime['youtube']>;
-      const initialize = spyOn(platform, 'initialize');
-      restore = () => { initialize.mockRestore(); };
-      const event = { eventType: 'stream-detected', newStreamIds: ['synthetic-video'] };
-      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
-      expect(initialize.mock.calls).toEqual([[{}, true]]);
-      await expect(initialize.mock.results[0]?.value).resolves.toBeUndefined();
-      expect(platform.isInitialized).toBe(true);
-      await h.runtime.handleStreamDetected('youtube', { eventType: 'unrelated', newStreamIds: ['synthetic-ignored'] });
-      await h.runtime.handleStreamDetected('youtube', { eventType: 'stream-detected', newStreamIds: [] });
-      await h.runtime.handleStreamDetected('twitch', event);
-      expect(initialize).toHaveBeenCalledTimes(1);
-      await expect(h.runtime.handleStreamDetected('youtube', event)).resolves.toBeUndefined();
-      expect(initialize.mock.calls).toEqual([[{}, true], [{}, true]]);
-      await expect(initialize.mock.results[1]?.value).resolves.toBeUndefined();
+      await h.runtime.platformEventRouter.routeEvent({
+        platform: 'youtube', type: PlatformEvents.STREAM_DETECTED,
+        data: { eventType: 'stream-detected', newStreamIds: ['synthetic-video'] },
+      });
+      expect(debug).toHaveBeenCalledWith('Stream detection event received: youtube detected 1 new streams', 'app-runtime');
+      expect(h.runtime.getPlatforms()).toEqual({});
+      expect(h.runtime.viewerCountSystem.getViewerCountSnapshot('youtube')).toEqual(viewerState);
+      expect(h.queue.state.queue).toHaveLength(queueLength);
       expect(h.runtime.isStarted).toBe(true);
-      await h.runtime.handleStreamDetected('youtube', event);
-      expect(initialize.mock.calls).toEqual([[{}, true], [{}, true], [{}, true]]);
-      await expect(initialize.mock.results[2]?.value).resolves.toBeUndefined();
-      expect(platform.isInitialized).toBe(true);
-    } finally {
-      if (previous === undefined) delete h.runtime.youtube; else h.runtime.youtube = previous;
-      try { await platform?.cleanup(); }
-      finally { try { await dependencies.innertubeService.dispose(); } finally { restore(); } }
-    }
-    expect(platform?.isInitialized).toBe(false);
-    expect(platform?.getConnectionState()).toMatchObject({ isConnected: false, isMonitoring: false, totalConnections: 0 });
-    expect(() => dependencies.innertubeService.withMetadataOperation({}, async () => true)).toThrow('disposed');
+    } finally { debug.mockRestore(); }
   });
 
   for (const mode of ['shutdown', 'rollbackStartup'] as const) {

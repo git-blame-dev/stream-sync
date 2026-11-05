@@ -316,7 +316,6 @@ class AppRuntime {
     platformEventRouter: PlatformEventRouter;
     chatNotificationRouter: ChatNotificationRouter;
     fundingGoal: FundingGoalService | undefined;
-    youtube?: { initialize?: (handlers?: RuntimeRecord, reconnect?: boolean) => Promise<unknown> | unknown };
     private shutdownPromise: Promise<void> | null = null;
     private teardownPromise: Promise<void> | null = null;
     private startupPromise: Promise<void> | null = null;
@@ -684,17 +683,6 @@ class AppRuntime {
         }
 
         this.logger.debug(`Stream detection event received: ${platform} detected ${newStreamIds.length} new streams`, 'app-runtime');
-
-        if (platform === 'youtube' && this.youtube && typeof this.youtube.initialize === 'function') {
-            this.logger.debug(`Requesting YouTube reconnection for ${newStreamIds.length} discovered stream(s)`, 'app-runtime');
-            try {
-                await this.youtube.initialize({}, true);
-            } catch (reconnectError) {
-                this._handleAppRuntimeError('YouTube reconnection request failed', reconnectError, null, {
-                    eventType: 'stream-detected', logContext: 'app-runtime'
-                });
-            }
-        }
     }
 
     isFirstMessage(userId: unknown, context: RuntimeRecord = {}) {
