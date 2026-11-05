@@ -311,9 +311,11 @@ Browser acceptance tests run separately from `bun run verify`. With Bun and Node
 
 ```bash
 bun install --frozen-lockfile
-bun run playwright install chromium
+bun run playwright install --with-deps chromium
 bun --no-env-file run test:browser
 ```
+
+On Linux, `--with-deps` installs Chromium's required operating-system libraries as well as its browser binary, matching CI setup. Run this preparation in an interactive terminal if it requests sudo authentication. Installing the browser alone assumes those system libraries are already present; a missing library can prevent every browser test from launching.
 
 The fixture builds temporary production GUI assets and serves them through the real local transport using synthetic test data. It does not require `config.ini`, credentials, OBS, or live platform providers.
 
