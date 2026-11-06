@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { logger } from '../core/logging';
 import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-animation/resolver';
 import MessageTTSHandler from '../utils/message-tts-handler';
+import { normalizeTtsText } from '../utils/tts-text';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
@@ -429,6 +430,7 @@ class DisplayQueueEffects {
     }
 
     async prepareWithNeuralTts(text: string) {
+        text = normalizeTtsText(text);
         const { root, voice } = this.resolveNeuralTtsTarget();
         if (!this.healthVerified) {
             await this.verifyNeuralTtsHealth(root);
@@ -479,6 +481,7 @@ class DisplayQueueEffects {
     }
 
     async speakWithNeuralTts(text: string) {
+        text = normalizeTtsText(text);
         const { root, voice } = this.resolveNeuralTtsTarget();
         const stageKey = this.getPreparedStageKey(voice, text);
         const preparedCount = this.preparedStageCounts.get(stageKey) ?? 0;
