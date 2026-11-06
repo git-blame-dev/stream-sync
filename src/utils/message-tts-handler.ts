@@ -1,4 +1,5 @@
 import { NotificationBuilder } from './notification-builder';
+import { normalizeTtsText } from './tts-text';
 
 type MessageTtsNotification = {
     ttsMessage?: unknown;
@@ -31,7 +32,7 @@ class MessageTTSHandler {
 
         if (typeof notification?.ttsMessage === 'string' && notification.ttsMessage.trim().length > 0) {
             stages.push({
-                text: notification.ttsMessage,
+                text: normalizeTtsText(notification.ttsMessage),
                 delay: 0,
                 type: 'primary'
             });
@@ -41,7 +42,7 @@ class MessageTTSHandler {
             stages.push(this.createMessageStage(notification));
         }
 
-        return stages;
+        return stages.filter(stage => stage.text.length > 0);
     }
 
     static createMessageStage(notification: MessageTtsNotification): TtsStage {
@@ -83,25 +84,10 @@ class MessageTTSHandler {
             cleanMessage = notification.cheermoteInfo.textContent;
         }
 
-        const messageNeedsTrimming = cleanMessage !== cleanMessage.trim();
-        const needsTruncation = this.needsUsernameTruncation(username, messageNeedsTrimming);
-        const maxLength = needsTruncation ? 12 : undefined;
-        const ttsUsername = NotificationBuilder.sanitizeUsernameForTts(username, maxLength);
+        const ttsUsername = NotificationBuilder.sanitizeUsernameForTts(username);
 
-        const sanitizedMessage = cleanMessage.trim();
+        const sanitizedMessage = normalizeTtsText(cleanMessage);
         return `${ttsUsername} says ${sanitizedMessage}`;
-    }
-
-    static needsUsernameTruncation(username: unknown, messageNeedsTrimming = false): boolean {
-        if (typeof username !== 'string' || username.length === 0) {
-            return false;
-        }
-
-        const hasEmojis = /[\u{1F000}-\u{1F999}]|[🌸🌈✨🦄🎮💎🔥💯]/gu.test(username);
-        const isVeryLong = username.length > 15;
-        const shouldOptimize = messageNeedsTrimming;
-
-        return hasEmojis || isVeryLong || shouldOptimize;
     }
 
     static getMessageDelay(notification: MessageTtsNotification): number {

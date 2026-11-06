@@ -1,4 +1,5 @@
-import { utf16BudgetPrefix } from './utf16-budget-prefix';
+import { utf16BudgetPrefix, wordBudgetPrefix } from './utf16-budget-prefix';
+import { formatTtsUsername } from './tts-text';
 import { config } from '../core/config';
 import { DEFAULTS } from '../core/config-schema';
 
@@ -18,65 +19,36 @@ const REGEX_PATTERNS = {
     HTML_TAGS: /<[^>]*>/g,
     JAVASCRIPT_URLS: /javascript:/gi,
     ALERT_CALLS: /alert\([^)]*\)/g,
-    EMOJI_UNICODE: /[\u{1F300}-\u{1F9FF}]/gu,
     WHITESPACE_NORMALIZE: /\s+/g
 };
 
-function sanitizeUsernameValue(username: unknown, maxLength: number, forTTS: boolean): string {
+function sanitizeUsernameValue(username: unknown, maxLength: number): string {
     let processedUsername = typeof username === 'string' ? username.trim() : '';
     
-    if (forTTS) {
-        processedUsername = processedUsername.replace(REGEX_PATTERNS.EMOJI_UNICODE, '').trim();
-        processedUsername = processedUsername.replace(/[_\-\.@]/g, ' ');
-        processedUsername = processedUsername.replace(/[^a-zA-Z0-9 ]/g, '');
-        processedUsername = processedUsername.replace(/\d{2,}/g, (match) => match[0] ?? '');
-        processedUsername = processedUsername.replace(/\s+/g, ' ').trim();
-    } else {
-        processedUsername = processedUsername
-            .replace(REGEX_PATTERNS.HTML_TAGS, '')
-            .replace(REGEX_PATTERNS.JAVASCRIPT_URLS, '')
-            .replace(REGEX_PATTERNS.ALERT_CALLS, '')
-            .replace(REGEX_PATTERNS.WHITESPACE_NORMALIZE, ' ')
-            .trim();
-    }
+    processedUsername = processedUsername
+        .replace(REGEX_PATTERNS.HTML_TAGS, '')
+        .replace(REGEX_PATTERNS.JAVASCRIPT_URLS, '')
+        .replace(REGEX_PATTERNS.ALERT_CALLS, '')
+        .replace(REGEX_PATTERNS.WHITESPACE_NORMALIZE, ' ')
+        .trim();
     
     if (!processedUsername) {
         return '';
     }
     
-    if (processedUsername.length <= maxLength) {
-        return processedUsername;
-    }
-    
-    const words = processedUsername.split(/\s+/);
-    let result = '';
-    
-    for (const word of words) {
-        const testResult = result ? `${result} ${word}` : word;
-        if (testResult.length <= maxLength) {
-            result = testResult;
-        } else {
-            break;
-        }
-    }
-    
-    if (result && result.length > 0) {
-        return result;
-    }
-    
-    const clipped = processedUsername.substring(0, maxLength);
-    return /[\uD800-\uDBFF]$/.test(clipped) ? clipped.slice(0, -1) : clipped;
+    return wordBudgetPrefix(processedUsername, maxLength);
 }
 
 function formatUsername(username: unknown, maxLength: number, forTTS: boolean): string {
     const limit = Number.isFinite(maxLength) && maxLength >= 0 ? Math.floor(maxLength) : 12;
     if (limit === 0) return '';
+    if (forTTS) return formatTtsUsername(username, limit, getFallbackUsername());
 
-    const formatted = sanitizeUsernameValue(username, limit, forTTS);
+    const formatted = sanitizeUsernameValue(username, limit);
     if (formatted) return formatted;
 
-    return sanitizeUsernameValue(getFallbackUsername(), limit, forTTS)
-        || sanitizeUsernameValue(DEFAULTS.general.fallbackUsername, limit, forTTS);
+    return sanitizeUsernameValue(getFallbackUsername(), limit)
+        || sanitizeUsernameValue(DEFAULTS.general.fallbackUsername, limit);
 }
 
 function formatUsername12(username: unknown, forTTS = false): string {

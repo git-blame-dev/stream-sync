@@ -8,3 +8,15 @@ export function utf16BudgetPrefix(text: string, budget: number): string {
     }
     return text.slice(0, end);
 }
+
+/** Prefer complete words, falling back to a Unicode-safe prefix for a single long word. */
+export function wordBudgetPrefix(text: string, budget: number): string {
+    if (text.length <= budget) return text;
+    let result = '';
+    for (const word of text.split(/\s+/)) {
+        const candidate = result ? `${result} ${word}` : word;
+        if (candidate.length > budget) break;
+        result = candidate;
+    }
+    return result || utf16BudgetPrefix(text, budget);
+}

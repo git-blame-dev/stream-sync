@@ -241,7 +241,7 @@ describe('MessageTTSHandler', () => {
             if (!messageStage) {
                 throw new Error('Expected long message TTS stage');
             }
-            expect(messageStage.text).toContain('VeryLongUser says');
+            expect(messageStage.text).toContain('VeryLongUsernameForTesting says');
             expect(messageStage.text.length).toBeLessThan(600);
         });
     });
@@ -338,7 +338,7 @@ describe('MessageTTSHandler', () => {
 
         test('should sanitize username for TTS', () => {
             const result = MessageTTSHandler.createMessageTTS('🎮VeryLongUsernameForTesting🎮', 'Hello');
-            expect(result).toBe('VeryLongUser says Hello');
+            expect(result).toBe('VeryLongUsernameForTesting says Hello');
         });
 
         test('should trim message content', () => {

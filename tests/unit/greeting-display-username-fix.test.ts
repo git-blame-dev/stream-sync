@@ -163,7 +163,7 @@ describe('Greeting builder username formatting', () => {
                 expect(result.type).toBe('greeting');
                 expect(result.displayMessage).toContain('fake_user_example');
                 expect(result.ttsMessage).toContain('Hi');
-                expect(result.ttsMessage).toContain('fake_user_example');
+                expect(result.ttsMessage).toContain('fake user example');
 
                 expectNoTechnicalArtifacts(result.displayMessage);
                 expectNoTechnicalArtifacts(result.ttsMessage);

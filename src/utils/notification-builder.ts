@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { utf16BudgetPrefix } from './utf16-budget-prefix';
 import { interpolateTemplate } from './notification-template-interpolator';
 import { normalizeCurrency } from './currency-utils';
-import { getAnonymousUsername } from './validation';
+import { getAnonymousUsername, getFallbackUsername } from './validation';
+import { formatTtsUsername } from './tts-text';
 import { allowsYouTubeJewelsMissingAmount } from './missing-fields';
 import { parseNotificationCount } from './notification-count';
 
@@ -655,7 +656,7 @@ class NotificationBuilder {
         }
 
         if (type === 'platform:share') {
-            return `${this.getTruncatedUsername(username)} shared the stream`;
+            return `${userName} shared the stream`;
         }
 
         if (type === 'platform:raid') {
@@ -674,9 +675,9 @@ class NotificationBuilder {
 
         if (!HARDCODED_TYPES.includes(type ?? '') && hasNotificationTemplate(type) && NOTIFICATION_TEMPLATES[type].tts) {
             const templateData = {
+                ...input,
                 username: this.getTruncatedUsername(username),
-                ttsUsername: this.sanitizeUsernameForTts(username),
-                ...input
+                ttsUsername: userName
             };
 
             return interpolateTemplate(NOTIFICATION_TEMPLATES[type].tts, templateData);
@@ -884,21 +885,7 @@ class NotificationBuilder {
             return '';
         }
         
-        let sanitized = username
-            .replace(/[\u{1F000}-\u{1F999}]/gu, '')
-            .replace(/[\u{2000}-\u{2600}]/gu, '')
-            .replace(/[\u{2700}-\u{3300}]/gu, '')
-            .replace(/[🌸🌈✨🦄🎮💎🔥💯]/g, '')
-            .replace(/\d+/g, match => match.substring(0, 1))
-            .trim();
-        
-        if (maxLength && sanitized.length > maxLength) {
-            sanitized = sanitized.substring(0, maxLength);
-        } else if (sanitized.length > 50) {
-            sanitized = sanitized.substring(0, 50);
-        }
-        
-        return sanitized || username.trim();
+        return formatTtsUsername(username, maxLength, getFallbackUsername());
     }
 
     static formatBitsAmount(amount: number) {

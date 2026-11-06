@@ -26,8 +26,8 @@ describe("bounded identity names", () => {
   it("preserves display Unicode without splitting surrogate pairs and retains TTS rules", () => {
     expect(sanitizeDisplayName("界é🌸name", 4)).toBe("界é🌸");
     expect(sanitizeDisplayName("界é🌸name", 3)).toBe("界é");
-    expect(formatUsername12("界é🌸name_123.x", true)).toBe("name 1 x");
-    expect(formatUsername12("<b>name</b>", true)).toBe("bnameb");
+    expect(formatUsername12("界é🌸name_123.x", true)).toBe("界é name 1 x");
+    expect(formatUsername12("<b>name</b>", true)).toBe("name");
   });
 
   it("sanitizes configured fallbacks once using the selected mode and limit", () => {
