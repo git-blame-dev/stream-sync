@@ -104,18 +104,23 @@ describe('anonymous gifted membership actual runtime and presentation accounting
         expect(h.funding.snapshot.currentUsd).toBe(17.5);
         expect(h.tracking.isStreamSupporter('twitch', 'synthetic-anonymous')).toBe(false);
     });
-    test('anonymous complete identity stays out of supporter accounts; partial identity rejects', async () => {
+    test('raw anonymous donor fields are suppressed while malformed canonical identity rejects', async () => {
         const h = await fixture();
         await h.send({ user_name: 'Synthetic Viewer', user_id: 'synthetic-anonymous' });
         await h.queue.processQueue();
         expect(h.funding.snapshot.currentUsd).toBe(17.5);
         expect(h.tracking.isStreamSupporter('twitch', 'synthetic-anonymous')).toBe(false);
-        await h.send({ user_name: 'Synthetic Partial' });
-        expect(h.queue.getQueueLength()).toBe(0);
+        await h.send({ user_name: 'Synthetic Partial', timestamp: '2026-01-02T00:00:00.000Z' });
+        expect(h.queue.getQueueLength()).toBe(1);
+        await h.queue.processQueue();
+        expect(h.presented).toHaveLength(2);
+        expect(h.presented[1]?.data.userId).toBeUndefined();
+        expect(h.presented[1]?.data.username).toBe('Anonymous User');
+        expect(h.tracker.getGoalState('twitch')?.current).toBe(3500);
         await expect(h.runtime.platformEventRouter.routeEvent({ platform: 'twitch', type: 'platform:giftpaypiggy', data: {
             isAnonymous: true, username: 'Synthetic Partial', giftCount: 5, tier: '1000', timestamp: '2026-01-01T00:00:00.000Z'
         } })).rejects.toThrow();
-        expect(h.funding.snapshot.currentUsd).toBe(17.5);
+        expect(h.funding.snapshot.currentUsd).toBe(35);
     });
     test('errored accepted payload can display without native or funding credit', async () => {
         const h = await fixture();

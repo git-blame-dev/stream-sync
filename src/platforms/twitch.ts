@@ -1087,6 +1087,12 @@ class TwitchPlatform extends EventEmitter {
 
     async _handleStandardEvent(eventType: TwitchStandardEventType, data: Record<string, unknown>, options: StandardEventOptions = {}, isCurrent = this._captureDataOwner()): Promise<void> {
         if (!isCurrent()) return;
+        if (data.isAnonymous === true && (eventType === 'gift' || eventType === 'giftpaypiggy')) {
+            data = { ...data };
+            delete data.username;
+            delete data.userId;
+            delete data.avatarUrl;
+        }
         const payloadTimestamp = this._getTimestamp(data);
         const errorNotificationType = eventType === 'gift'
             ? 'gift'

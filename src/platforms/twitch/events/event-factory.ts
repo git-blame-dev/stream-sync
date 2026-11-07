@@ -42,6 +42,7 @@ function normalizeIdentity(data: EventPayload | null | undefined): Identity {
 }
 
 function normalizeOptionalIdentity(data: EventPayload | null | undefined): Identity | null {
+  if (data?.isAnonymous === true) return null;
   const username = typeof data?.username === 'string' ? data.username.trim() : '';
   const userId = typeof data?.userId === 'string' ? data.userId.trim() : '';
   if (username && userId) {
@@ -50,9 +51,6 @@ function normalizeOptionalIdentity(data: EventPayload | null | undefined): Ident
             username
         };
     }
-    if (data?.isAnonymous === true && !username && !userId) {
-        return null;
-  }
   throw new Error('Twitch event payload requires userId and username');
 }
 
@@ -175,7 +173,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
 
     createGiftPaypiggyEvent: (data: EventPayload) => {
             const identity = normalizeOptionalIdentity(data);
-            const avatarUrl = resolveAvatarUrl(data);
+            const avatarUrl = identity ? resolveAvatarUrl(data) : DEFAULT_AVATAR_URL;
             const giftCount = normalizePositiveInteger(data.giftCount);
             if (giftCount === undefined) {
                 throw new Error('Twitch giftpaypiggy payload requires giftCount');
@@ -223,7 +221,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
 
     createGiftEvent: (data: EventPayload) => {
             const identity = normalizeOptionalIdentity(data);
-            const avatarUrl = resolveAvatarUrl(data);
+            const avatarUrl = identity ? resolveAvatarUrl(data) : DEFAULT_AVATAR_URL;
             const isError = data.isError === true;
             const giftType = typeof data.giftType === 'string' ? data.giftType.trim() : '';
             const giftCount = isError

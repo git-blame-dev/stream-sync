@@ -299,11 +299,10 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         const rawUsername = getString(event, 'user_name') || '';
         const rawUserId = getString(event, 'user_id') || '';
         const hasIdentity = rawUsername && rawUserId;
-        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
         const bits = getNumber(event, 'bits');
         const timestamp = getString(event, 'timestamp');
 
-        if (!eventId || bits === null || bits <= 0 || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !timestamp) {
+        if (!eventId || bits === null || bits <= 0 || (!isAnonymous && !hasIdentity) || !timestamp) {
             errorHandler.handleEventProcessingError(
                 new Error('Bits use event requires id, positive bits, timestamp, and identity unless anonymous'),
                 'gift',
@@ -352,7 +351,7 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             return;
         }
 
-        const identity = hasIdentity ? normalizeUserIdentity(rawUsername, rawUserId) : {};
+        const identity = !isAnonymous && hasIdentity ? normalizeUserIdentity(rawUsername, rawUserId) : {};
         safeEmit('gift', {
             platform: 'twitch',
             ...identity,
@@ -379,12 +378,11 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         const rawUsername = getString(event, 'user_name') || '';
         const rawUserId = getString(event, 'user_id') || '';
         const hasIdentity = rawUsername && rawUserId;
-        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
         const tier = getString(event, 'tier');
         const total = getNumber(event, 'total');
         const timestamp = getString(event, 'timestamp');
 
-        if (!tier || total === null || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !timestamp) {
+        if (!tier || total === null || (!isAnonymous && !hasIdentity) || !timestamp) {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription gift event requires tier, total, timestamp, and identity unless anonymous'),
                 'giftpaypiggy',
@@ -393,7 +391,7 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             return;
         }
 
-        const identity = hasIdentity ? normalizeUserIdentity(rawUsername, rawUserId) : {};
+        const identity = !isAnonymous && hasIdentity ? normalizeUserIdentity(rawUsername, rawUserId) : {};
         safeEmit('paypiggyGift', {
             ...identity,
             tier,
