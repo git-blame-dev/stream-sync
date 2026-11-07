@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { isIsoTimestamp } from '../../../utils/timestamp';
 import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
+import { parseNotificationCount } from '../../../utils/notification-count';
 
 const PlatformEvents = {
     FOLLOW: 'platform:follow',
@@ -204,8 +205,9 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
     createRaidEvent: (data: EventPayload) => {
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
-            if (typeof data.viewerCount !== 'number' || !Number.isFinite(data.viewerCount)) {
-                throw new Error('Twitch raid payload requires numeric viewerCount');
+            const viewerCount = typeof data.viewerCount === 'number' ? parseNotificationCount(data.viewerCount) : null;
+            if (viewerCount === null) {
+                throw new Error('Twitch raid payload requires non-negative integer viewerCount');
             }
             return {
                 type: PlatformEvents.RAID,
@@ -213,7 +215,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
                 username: identity.username,
                 userId: identity.userId,
                 avatarUrl,
-                viewerCount: data.viewerCount,
+                viewerCount,
                 timestamp: getTimestamp(data),
                 metadata: buildEventMetadata()
             };

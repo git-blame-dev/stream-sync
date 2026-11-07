@@ -1,6 +1,7 @@
 import type { AppLogger } from '../../../core/logger/types';
 import { extractTwitchMessageData } from '../../../utils/message-normalization';
 import { validateLoggerInterface } from '../../../utils/dependency-validator';
+import { parseNotificationCount } from '../../../utils/notification-count';
 import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
 import {
     applyNotificationMetadataFallback,
@@ -194,11 +195,12 @@ const logRawIfEnabled = (
 
         const username = getString(event, 'from_broadcaster_user_name');
         const userId = getString(event, 'from_broadcaster_user_id');
-        const viewers = getNumber(event, 'viewers');
+        const rawViewers = event?.viewers;
+        const viewers = typeof rawViewers === 'number' ? parseNotificationCount(rawViewers) : null;
         const timestamp = getString(event, 'timestamp');
         if (!username || !userId || viewers === null || !timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Raid event requires from_broadcaster_user_name, from_broadcaster_user_id, viewers, and timestamp'),
+                new Error('Raid event requires from_broadcaster_user_name, from_broadcaster_user_id, non-negative integer viewers, and timestamp'),
                 'raid',
                 event
             );
