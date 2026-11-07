@@ -36,7 +36,7 @@ for (const [label, overrides] of [
             const item = h.queue.queue[0] as DisplayQueueItem;
             expect(item.type).toBe('platform:envelope');
             expect(item.data).toMatchObject({ username: 'Synthetic Envelope', userId: 'synthetic-envelope-handle', amount: 50,
-                displayMessage: 'Synthetic Envelope sent a treasure chest!', ttsMessage: 'Synthetic En sent a treasure chest',
+                displayMessage: 'Synthetic Envelope sent a treasure chest!', ttsMessage: 'Synthetic sent a treasure chest',
                 logMessage: 'Treasure chest from Synthetic Envelope' });
             await h.drain();
             expect(h.rows).toHaveLength(1);
