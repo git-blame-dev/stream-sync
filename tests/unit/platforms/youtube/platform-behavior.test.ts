@@ -5,6 +5,9 @@ import { createYouTubeRunsMessageChatItem } from "../../../helpers/youtube-test-
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
+import { InnertubeService } from "../../../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../../../src/services/youtube-stream-detection-service";
+
 type UnknownRecord = Record<string, unknown>;
 type PlatformEvent = UnknownRecord & { type?: string; data?: UnknownRecord };
 type TestLogger = {
@@ -218,7 +221,6 @@ const createLogger = () => ({
   warn: vi.fn<(...args: unknown[]) => unknown>(),
   error: vi.fn<(...args: unknown[]) => unknown>(),
 });
-const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 describe("YouTubePlatform modern architecture", () => {
   afterEach(() => {
@@ -442,50 +444,40 @@ describe("YouTubePlatform modern architecture", () => {
     expect(getDebugCalls(logger)).toEqual([]);
   });
 
-  it("catches async handler failures and logs error without unhandled rejection", async () => {
+  it("contains a failing external observer through actual routing and accepts later chat", async () => {
     const logger = createLogger();
-    const { platform } = createPlatform({ logger });
-    const handlerError = new Error("dispatch failed");
-    platform.eventRouter = {
-      routeEvent: vi.fn<(...args: unknown[]) => Promise<never>>().mockRejectedValue(handlerError),
-    };
-
-    const errorHandlerCalls: UnknownRecord[] = [];
-    platform.errorHandler = {
-      handleEventProcessingError: (error: Error, eventType: string, eventData?: unknown, message?: string) => {
-        errorHandlerCalls.push({ error, eventType, eventData, message });
-      },
-    };
-
+    const metadata = new InnertubeService({ createWithTimeout: async () => { throw new Error("Unexpected synthetic SDK acquisition"); } }, { logger });
+    const platform = new YouTubePlatform({ enabled: true, username: "synthetic-channel", dataLoggingEnabled: false }, {
+      logger, innertubeService: metadata, streamDetectionService: new YouTubeStreamDetectionService(metadata, { logger }),
+    });
+    const observerError = new Error("synthetic observer failure");
+    const failObserver = () => { throw observerError; };
     const unhandled: unknown[] = [];
-    const listener = (error: unknown) => unhandled.push(error);
+    const listener = (error: unknown) => { unhandled.push(error); };
+    platform.on("platform:event", failObserver);
     process.on("unhandledRejection", listener);
-
     try {
-      await platform.handleChatMessage({
-        item: {
-          type: "LiveChatPaidMessage",
-          id: "LCC.test-async-error",
-          timestamp_usec: "1704067205000000",
-          author: {
-            id: "UC_TEST_CHANNEL_000400",
-            name: "AsyncTester",
-          },
-        },
-      });
-      await flushPromises();
+      await platform.handleChatMessage({ item: {
+        type: "LiveChatPaidMessage", id: "synthetic-failed-purchase",
+        timestamp_usec: "1704067205000000",
+        author: { id: "UC_SYNTHETIC_00000000000", name: "Synthetic Viewer" },
+      } });
+      expect(logger.error.mock.calls.some(call => String(call[0]).includes("Error handling event type LiveChatPaidMessage"))).toBe(true);
+      expect(unhandled).toEqual([]);
+      platform.off("platform:event", failObserver);
+      const recovered: unknown[] = [];
+      platform.on("platform:event", event => { recovered.push(event); });
+      await platform.handleChatMessage(createYouTubeRunsMessageChatItem({
+        item: { id: "synthetic-recovered-chat", message: { runs: [{ text: "synthetic recovered chat" }] } },
+      }));
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]).toMatchObject({ type: "platform:chat-message", data: {
+        message: { text: "synthetic recovered chat" },
+      } });
     } finally {
       process.off("unhandledRejection", listener);
+      try { await platform.cleanup(); } finally { await metadata.dispose(); }
     }
-
-    expect(unhandled).toHaveLength(0);
-    expect(errorHandlerCalls).toHaveLength(1);
-    const errorHandlerCall = first(errorHandlerCalls);
-    expect(errorHandlerCall.error).toBe(handlerError);
-    expect(errorHandlerCall.eventType).toBe("LiveChatPaidMessage");
-    expect(errorHandlerCall.message).toContain(
-      "Error handling event type LiveChatPaidMessage",
-    );
   });
 
   it("emits error notification when gift purchase header author is missing", async () => {
