@@ -3,6 +3,7 @@ import { types } from 'node:util';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+import { mapQuotedLogText, replaceWebUrls } from '../core/logger/web-url-pattern';
 import { asRecord } from './record-contracts';
 
 type LoggerLike = Partial<Pick<AppLogger, 'debug' | 'info' | 'warn' | 'error'>>;
@@ -80,16 +81,42 @@ function toOneLine(value: string): string {
         .trim();
 }
 
+function omitDiagnosticLocations(value: string, depth = 0): string {
+    if (!/[:@"']/.test(value)) return value;
+    const withoutUrls = mapQuotedLogText(value, (candidate, closed) => {
+        if (!closed || depth >= 12) return '[Location omitted]';
+        const quote = candidate[0]!;
+        if (quote === '"') {
+            try {
+                return JSON.stringify(omitDiagnosticLocations(JSON.parse(candidate) as string, depth + 1));
+            } catch {
+                // Non-JSON quotes still delimit structural diagnostics.
+            }
+        }
+        return quote + omitDiagnosticLocations(candidate.slice(1, -1), depth + 1) + quote;
+    }, plain => replaceWebUrls(plain, () => '[URL omitted]'));
+    // Structural classifications do not need address-bearing tokens. Scanning
+    // whole tokens also avoids repeated email-pattern backtracking on long labels.
+    return withoutUrls.replace(/\S+/g, token => token.includes('@') ? '[Email omitted]' : token);
+}
+
 function boundedDiagnostic(value: unknown, fallback = ''): string {
     if (typeof value !== 'string') return fallback;
-    return toOneLine(sanitizeLogText(value)).slice(0, MAX_DIAGNOSTIC_LENGTH);
+    return toOneLine(omitDiagnosticLocations(sanitizeLogText(value))).slice(0, MAX_DIAGNOSTIC_LENGTH);
 }
 
 function formatExpected(expected: unknown): string {
     if (Array.isArray(expected)) {
+        const normalized = new Map<string, string>();
         return boundedDiagnostic(expected.slice(0, 100)
             .filter((entry): entry is string => typeof entry === 'string')
-            .map((entry) => boundedDiagnostic(entry)).join(' | '));
+            .map((entry) => {
+                const cached = normalized.get(entry);
+                if (cached !== undefined) return cached;
+                const diagnostic = boundedDiagnostic(entry);
+                normalized.set(entry, diagnostic);
+                return diagnostic;
+            }).join(' | '));
     }
 
     if (typeof expected === 'string') {

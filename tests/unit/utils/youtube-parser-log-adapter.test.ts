@@ -115,6 +115,32 @@ function isParserWarningPayload(value: unknown): value is ParserWarningPayload {
 }
 
 describe("youtube parser log adapter", () => {
+  it("omits address and URL locations from every structural field while retaining safe tokens", () => {
+    const parserApi = createParserApiFixture();
+    const logger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger, youtubeModule: { Parser: parserApi } });
+    const quotedUrl = JSON.stringify("https://synthetic-quoted.invalid/private-path").replaceAll("/", "\\/");
+    const diagnostic = `SyntheticSafeType synthetic-person@example.invalid 'https://synthetic-parser.invalid/private-path' ${quotedUrl} context=synthetic`;
+    const error = new Error("synthetic private message");
+    error.name = diagnostic;
+    const collection = collectParserWarningsDuring(() => getInstalledParserHandler(parserApi)({
+      error_type: diagnostic, classname: diagnostic, expected: [diagnostic, diagnostic], error,
+    }));
+    for (const output of [JSON.stringify(logger.warn.mock.calls), JSON.stringify(collection.warnings)]) {
+      expect(output).not.toContain("synthetic-person");
+      expect(output).not.toContain(".invalid");
+      expect(output).not.toContain("private-path");
+      expect(output).not.toContain("synthetic private message");
+      expect(output).toContain("SyntheticSafeType");
+      expect(output).toContain("context=synthetic");
+    }
+    for (const value of Object.values(collection.warnings[0]!)) {
+      expect(value).toContain("SyntheticSafeType");
+      expect(value).toContain("context=synthetic");
+      expect(value.length).toBeLessThanOrEqual(256);
+    }
+  });
+
   it("redacts complete quoted credentials before applying diagnostic output limits", () => {
     const parserApi = createParserApiFixture();
     const boundedLogger = createLoggerFixture();
@@ -141,6 +167,19 @@ describe("youtube parser log adapter", () => {
       for (const value of Object.values(warning)) expect(value.length).toBeLessThanOrEqual(256);
     }
     expect(collection.warnings[3]).toEqual({ errorType: "typecheck", className: "TestSafeRenderer", expected: "TestSafeExpected", detail: "" });
+  });
+
+  it("preserves order and repeated labels while sanitizing expected classifications", () => {
+    const parserApi = createParserApiFixture();
+    const boundedLogger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger: boundedLogger, youtubeModule: { Parser: parserApi } });
+    const handler = getInstalledParserHandler(parserApi);
+    const collection = collectParserWarningsDuring(() => handler({
+      error_type: "typecheck", classname: "SyntheticRenderer",
+      expected: ["SyntheticOne", "SyntheticTwo", "SyntheticOne", "password=synthetic-secret", ""],
+    }));
+    expect(collection.warnings[0]?.expected).toBe("SyntheticOne | SyntheticTwo | SyntheticOne | password=[REDACTED] |");
+    expect(JSON.stringify(boundedLogger.warn.mock.calls)).not.toContain("synthetic-secret");
   });
 
   it("bounds and redacts structural diagnostics in both logger and collected warnings", () => {
