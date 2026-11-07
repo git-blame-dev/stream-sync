@@ -21,7 +21,8 @@ function resolveIdValue(value: unknown): string | null {
 }
 
 function resolvePositiveNumber(value: unknown): number | null {
-    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) {
+    if (typeof value !== 'number' && (typeof value !== 'string'
+        || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()))) {
         return null;
     }
     const num = Number(value);

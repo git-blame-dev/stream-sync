@@ -26,6 +26,18 @@ describe("monetization error payload no-fallback behavior", () => {
     expect(coercions).toBe(0);
   });
 
+  it("omits alternate-base strings rather than treating them as decimal quantities", () => {
+    const { createMonetizationErrorPayload } = require("../../../src/utils/monetization-error-utils.ts");
+    for (const [notificationType, field] of numericCases) {
+      for (const value of ["0x10", " 0X10 ", "0b10", "0B10", "0o10", "0O10"]) {
+        const payload = createMonetizationErrorPayload({
+          notificationType, platform: "twitch", timestamp: "2024-01-01T00:00:00.000Z", [field]: value,
+        });
+        expect(payload).not.toHaveProperty(field);
+      }
+    }
+  });
+
   it("preserves positive numbers and trimmed decimal or exponent strings across numeric fields", () => {
     const { createMonetizationErrorPayload } = require("../../../src/utils/monetization-error-utils.ts");
     for (const [notificationType, field] of numericCases) {
