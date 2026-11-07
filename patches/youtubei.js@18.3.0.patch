@@ -211,7 +211,6 @@ index e2d7e16e7f718f2547cbfa280fa20128d6e7d7eb..d1d7d375616f2d8db80dad167c74b9f2
  }
  //# sourceMappingURL=LiveChat.js.map
 \ No newline at end of file
-
 diff --git a/dist/src/parser/classes/VideoViewCount.js b/dist/src/parser/classes/VideoViewCount.js
 --- a/dist/src/parser/classes/VideoViewCount.js
 +++ b/dist/src/parser/classes/VideoViewCount.js
