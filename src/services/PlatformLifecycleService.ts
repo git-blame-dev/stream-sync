@@ -4,7 +4,7 @@ import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { assertPlatformInterface } from '../utils/platform-interface-validator';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
+import { PlatformInitializationSupersededError, type PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -513,7 +513,15 @@ class PlatformLifecycleService {
     async initializePlatformConnection(platformName: string, platformInstance: PlatformInstance, handlers: PlatformEventHandlers, platformConfig: PlatformConfig) {
         const connectCallback = async () => {
 
-            const outcome = await platformInstance.initialize(handlers);
+            let outcome: unknown;
+            try {
+                outcome = await platformInstance.initialize(handlers);
+            } catch (error) {
+                // Instance identity alone cannot distinguish attempts on a reused platform.
+                // Superseded work owns neither current-session cleanup nor health publication.
+                if (error instanceof PlatformInitializationSupersededError) return platformInstance;
+                throw error;
+            }
             if (this.platforms[platformName] !== platformInstance) return platformInstance;
             if (platformName === 'twitch' && !this.isTwitchAuthReady()) {
                 await this.markPlatformFailure(platformName, new Error('Twitch authentication is unavailable'), { expectedInstance: platformInstance });

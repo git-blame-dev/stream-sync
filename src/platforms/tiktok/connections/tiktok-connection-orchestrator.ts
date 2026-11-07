@@ -1,3 +1,9 @@
+// A shared attempt snapshot of the root fence. Only its own setup/recovery may advance it.
+export type TikTokConnectionLifetime = {
+    generation: number;
+    recoveryResult?: { action: string; reason?: string };
+};
+
 type ConnectionLike = {
     isConnecting?: boolean;
     isConnected?: boolean;
@@ -16,6 +22,7 @@ type TikTokOrchestratorPlatform = {
     };
     connection: ConnectionLike | null;
     connectionActive: boolean;
+    connectionGeneration: number;
     retryLock: boolean;
     listenersConfigured: boolean;
     connectingPromise: Promise<unknown> | null;
@@ -34,9 +41,9 @@ type TikTokOrchestratorPlatform = {
         canConnect: boolean;
         reason?: string;
     };
-    setupEventListeners: () => void;
+    setupEventListeners: (lifetime: TikTokConnectionLifetime) => void;
     handleConnectionSuccess: () => Promise<void>;
-    handleConnectionError?: (error: unknown) => void;
+    handleConnectionError?: (error: unknown, lifetime: TikTokConnectionLifetime) => { action: string; reason?: string } | void;
     cleanup: () => void | Promise<void>;
 };
 
@@ -51,30 +58,46 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
         throw new Error('platform is required to create TikTok connection orchestrator');
     }
 
-    const connect = async (_handlers: unknown) => {
-
-        if (platform.connection && platform.connection.isConnecting && !platform.connectionActive) {
-            platform.cleanupEventListeners();
-            platform.connectionStateManager.markDisconnected();
-            platform.connection = null;
-            platform.listenersConfigured = false;
-        }
-
-        const prerequisites = platform.checkConnectionPrerequisites();
-        if (!prerequisites.canConnect) {
-            platform.logger.debug(`Cannot connect: ${prerequisites.reason}`, 'tiktok');
-            return;
-        }
+    let pendingLifetime: TikTokConnectionLifetime | null = null;
+    let pendingPromise: Promise<unknown> | null = null;
+    const connect = async (_handlers: unknown, onAttempt?: (lifetime: TikTokConnectionLifetime) => void) => {
 
         if (platform.connectingPromise) {
+            if (pendingPromise === platform.connectingPromise && pendingLifetime) onAttempt?.(pendingLifetime);
             return platform.connectingPromise;
         }
 
-        if (platform.connection && (platform.connection.isConnecting || platform.connection.isConnected)) {
-            return;
+        const staleConnection = platform.connection?.isConnecting && !platform.connectionActive
+            ? platform.connection : null;
+        if (!staleConnection) {
+            const prerequisites = platform.checkConnectionPrerequisites();
+            if (!prerequisites.canConnect) {
+                platform.logger.debug(`Cannot connect: ${prerequisites.reason}`, 'tiktok');
+                return;
+            }
+            if (platform.connection && (platform.connection.isConnecting || platform.connection.isConnected)) {
+                return;
+            }
         }
 
+        const lifetime: TikTokConnectionLifetime = { generation: platform.connectionGeneration };
+        onAttempt?.(lifetime);
         const connectAttempt = async () => {
+            let connection: ConnectionLike | null = null;
+            if (staleConnection) {
+                platform.cleanupEventListeners();
+                platform.connectionStateManager.markDisconnected();
+                platform.connection = null;
+                platform.listenersConfigured = false;
+                try {
+                    await staleConnection.disconnect?.();
+                } catch (error) {
+                    platform.errorHandler.handleCleanupError(error, 'stale connection disconnect', 'Error retiring stale TikTok connection');
+                }
+                if (lifetime.generation !== platform.connectionGeneration) return;
+                const prerequisites = platform.checkConnectionPrerequisites();
+                if (!prerequisites.canConnect) return;
+            }
             if (platform.connection) {
                 platform.cleanupEventListeners();
             }
@@ -86,12 +109,11 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
                 platform.connectionStateManager.markConnecting();
 
                 platform.connection = platform.connectionStateManager.ensureConnection();
-                platform.setupEventListeners();
-
-                const connection = platform.connection;
+                connection = platform.connection;
+                platform.setupEventListeners(lifetime);
                 await connection.connect();
 
-                if (platform.connection !== connection || connection.isConnected === false) {
+                if (lifetime.generation !== platform.connectionGeneration || platform.connection !== connection || connection.isConnected === false) {
                     throw connection.lastConnectionError instanceof Error
                         ? connection.lastConnectionError
                         : new Error('TikTok upstream disconnected before initialization completed');
@@ -99,8 +121,13 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
 
                 await platform.handleConnectionSuccess();
             } catch (error: unknown) {
+                if (connection && (lifetime.generation !== platform.connectionGeneration || platform.connection !== connection)) {
+                    await connection.disconnect();
+                    throw error;
+                }
                 if (typeof platform.handleConnectionError === 'function') {
-                    platform.handleConnectionError(error);
+                    const recoveryResult = platform.handleConnectionError(error, lifetime);
+                    if (recoveryResult) lifetime.recoveryResult = recoveryResult;
                 } else {
                     platform.connectionStateManager.markError(error);
                     platform.connection = null;
@@ -112,31 +139,36 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
                     );
                 }
                 throw error;
-            } finally {
-                platform.connectingPromise = null;
             }
         };
 
-        platform.connectingPromise = connectAttempt();
+        const connectingPromise = connectAttempt().finally(() => {
+            if (platform.connectingPromise === connectingPromise) platform.connectingPromise = null;
+        });
+        pendingLifetime = lifetime;
+        pendingPromise = connectingPromise;
+        platform.connectingPromise = connectingPromise;
         return platform.connectingPromise;
     };
 
     const disconnect = async () => {
+        const generation = platform.connectionGeneration = (platform.connectionGeneration ?? 0) + 1;
+        const connection = platform.connection;
         platform.connectionActive = false;
-
-        if (platform.connection) {
+        platform.connectingPromise = null;
+        platform.connection = null;
+        platform.cleanupEventListeners();
+        platform.listenersConfigured = false;
+        platform.connectionStateManager.markDisconnected();
+        if (connection) {
             try {
-                await platform.connection.disconnect();
+                await connection.disconnect();
                 platform.logger.info('Successfully disconnected.', 'tiktok');
-            } catch (error: unknown) {
-                platform.errorHandler.handleCleanupError(
-                    error,
-                    'connection disconnect',
-                    `Error during disconnection: ${getErrorMessage(error)}`
-                );
+            } catch (error) {
+                platform.errorHandler.handleCleanupError(error, 'connection disconnect', `Error during disconnection: ${getErrorMessage(error)}`);
             }
         }
-
+        if (generation !== platform.connectionGeneration) return;
         await platform.cleanup();
     };
 

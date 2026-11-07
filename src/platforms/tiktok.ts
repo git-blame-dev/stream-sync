@@ -16,14 +16,14 @@ import { createRetrySystem } from '../utils/retry-system';
 import { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount, normalizeTikTokMessageId } from '../utils/tiktok-data-extraction';
 import { validateNotificationManagerInterface } from '../utils/dependency-validator';
 import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from './tiktok/events/event-normalizer';
-import { createTikTokConnectionOrchestrator } from './tiktok/connections/tiktok-connection-orchestrator';
+import { createTikTokConnectionOrchestrator, type TikTokConnectionLifetime } from './tiktok/connections/tiktok-connection-orchestrator';
 import { cleanupTikTokEventListeners, isTikTokEventListenerSetupCurrent, setupTikTokEventListeners } from './tiktok/events/event-router';
 import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregator';
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
 import { TIKTOK_EVENTS, TIKTOK_CONTROL_EVENTS } from './tiktok/events/transport-events';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { RawPlatformDataLoggingService, type RawEventSink } from '../services/RawPlatformDataLoggingService';
-import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
+import { PlatformInitializationSupersededError, type PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -478,6 +478,8 @@ class TikTokPlatform extends EventEmitter {
             get config() { return { username: platform.config.username ?? '' }; },
             get connection() { return platform.connection; },
             set connection(connection: TikTokConnection | null) { platform.connection = connection; },
+            get connectionGeneration() { return platform._connectionGeneration; },
+            set connectionGeneration(generation: number) { platform._connectionGeneration = generation; },
             get connectionActive() { return platform.connectionActive; },
             set connectionActive(connectionActive: boolean) { platform.connectionActive = connectionActive; },
             get retryLock() { return platform.retryLock; },
@@ -503,9 +505,13 @@ class TikTokPlatform extends EventEmitter {
             get errorHandler() { return platform.errorHandler; },
             cleanupEventListeners: () => platform.cleanupEventListeners(),
             checkConnectionPrerequisites: () => platform.checkConnectionPrerequisites(),
-            setupEventListeners: () => platform.setupEventListeners(),
+            setupEventListeners: (lifetime: TikTokConnectionLifetime) => {
+                platform.retryLock = false;
+                platform._disconnectionInProgress = false;
+                platform.setupEventListeners(lifetime);
+            },
             handleConnectionSuccess: () => platform.handleConnectionSuccess(),
-            handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
+            handleConnectionError: (error: unknown, lifetime: TikTokConnectionLifetime) => platform.handleConnectionError(error, lifetime),
             cleanup: () => platform.cleanup()
         };
     }
@@ -534,7 +540,7 @@ class TikTokPlatform extends EventEmitter {
             _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => platform._handleStandardEvent(eventType, data, { ...options, rawEventLogged: true }),
             _handleStreamEnd: (data?: TikTokRawEvent, connectionGeneration?: number) => platform._handleStreamEnd(data, connectionGeneration),
             handleConnectionIssue: (issue: unknown, isError?: boolean) => platform.handleConnectionIssue(issue, isError),
-            handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
+            handleConnectionError: (error: unknown) => { platform.handleConnectionError(error); },
             handleRetry: (error: unknown) => platform.handleRetry(error),
             handleTikTokGift: (data: TikTokRawEvent) => platform.handleTikTokGift(data),
             handleTikTokFollow: (data: TikTokRawEvent) => platform.handleTikTokFollow(data),
@@ -646,6 +652,7 @@ class TikTokPlatform extends EventEmitter {
             handlersProvided: Object.keys(handlers || {})
         });
         
+        let lifetime = this.captureConnectionLifetime();
         try {
             const incomingHandlers = handlers || {};
             this.handlers = { ...this.handlers, ...incomingHandlers };
@@ -655,7 +662,8 @@ class TikTokPlatform extends EventEmitter {
             }
             
             const startTime = Date.now();
-            await this._connect(this.handlers);
+            await this._connect(this.handlers, attempt => { lifetime = attempt; });
+            if (!this.ownsConnectionLifetime(lifetime)) throw new Error('TikTok connection attempt superseded');
             const connectionTime = Date.now() - startTime;
             
             this.initializationManager.markInitializationSuccess({
@@ -672,10 +680,11 @@ class TikTokPlatform extends EventEmitter {
             };
             
         } catch (error) {
-            let recoveryResult: { action: string; reason?: string } = { action: 'skipped', reason: 'no-retry-system' };
-            if (this.retrySystem) {
-                recoveryResult = this.handleRetry(error);
-            } else {
+            if (!this.ownsConnectionLifetime(lifetime)) throw new PlatformInitializationSupersededError({ cause: error });
+            let recoveryResult: { action: string; reason?: string } = lifetime.recoveryResult ?? { action: 'skipped', reason: 'no-retry-system' };
+            if (!lifetime.recoveryResult && this.retrySystem) {
+                recoveryResult = this.handleRetry(error, lifetime);
+            } else if (!lifetime.recoveryResult) {
                 this.errorHandler.handleConnectionError(
                     error,
                     'connection',
@@ -707,8 +716,16 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _connect(handlers: TikTokHandlers): Promise<unknown> {
-        return this.connectionOrchestrator.connect(handlers);
+    private captureConnectionLifetime(): TikTokConnectionLifetime {
+        return { generation: this._connectionGeneration };
+    }
+
+    private ownsConnectionLifetime(lifetime: TikTokConnectionLifetime): boolean {
+        return lifetime.generation === this._connectionGeneration;
+    }
+
+    async _connect(handlers: TikTokHandlers, onAttempt?: (lifetime: TikTokConnectionLifetime) => void): Promise<unknown> {
+        return this.connectionOrchestrator.connect(handlers, onAttempt);
     }
 
 
@@ -746,11 +763,12 @@ class TikTokPlatform extends EventEmitter {
         };
     }
 
-    setupEventListeners() {
+    setupEventListeners(lifetime?: TikTokConnectionLifetime) {
         const adapter = this._createEventRouterPlatformAdapter();
         if (isTikTokEventListenerSetupCurrent(adapter)) return;
         this.cachedViewerCount = null;
         this._connectionGeneration += 1;
+        if (lifetime) lifetime.generation = this._connectionGeneration;
         this.dataRegistration += 1;
         this._terminalStreamEndEmitted = false;
         setupTikTokEventListeners(adapter);
@@ -797,7 +815,8 @@ class TikTokPlatform extends EventEmitter {
         }
     }
     
-    handleConnectionError(err: unknown): void {
+    handleConnectionError(err: unknown, lifetime = this.captureConnectionLifetime()): { action: string; reason?: string } {
+        if (!this.ownsConnectionLifetime(lifetime)) return { action: 'skipped', reason: 'superseded' };
         const username = this.config.username;
         const details = this._normalizeErrorDetails(err);
         const errorMessage = details.message;
@@ -831,10 +850,11 @@ class TikTokPlatform extends EventEmitter {
             }
         }
 
-        this.handleRetry(err);
+        return this.handleRetry(err, lifetime);
     }
 
-  handleRetry(err: unknown): { action: string; reason?: string } {
+  handleRetry(err: unknown, lifetime = this.captureConnectionLifetime()): { action: string; reason?: string } {
+    if (!this.ownsConnectionLifetime(lifetime)) return { action: 'skipped', reason: 'superseded' };
     this.resetRetriesAfterStableConnection();
     const normalized = this._normalizeConnectionIssue(err);
     const username = this.config.username;
@@ -874,7 +894,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
         this.logger.debug(`Attempting retry for TikTok user '${username}' after error: ${errorMessage}`, 'tiktok');
-        this.queueRetry(err);
+        this.queueRetry(err, lifetime);
         return { action: 'retry-queued' };
     }
     
@@ -1098,7 +1118,8 @@ class TikTokPlatform extends EventEmitter {
         return true;
     }
     
-  queueRetry(error: unknown): { queued: boolean; reason?: string } {
+  queueRetry(error: unknown, lifetime = this.captureConnectionLifetime()): { queued: boolean; reason?: string } {
+        if (!this.ownsConnectionLifetime(lifetime)) return { queued: false, reason: 'superseded' };
         if (!this.retrySystem) {
             return { queued: false, reason: 'no-retry-system' };
         }
@@ -1109,12 +1130,13 @@ class TikTokPlatform extends EventEmitter {
         this.retryLock = true;
 
         const reconnectFn = async () => {
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this.retryLock = false;
             this.isPlannedDisconnection = false;
             try {
-                await this._connect(this.handlers);
+                await this._connect(this.handlers, attempt => { lifetime = attempt; });
             } catch (err) {
-                this.handleRetry(err);
+                if (this.ownsConnectionLifetime(lifetime) && !lifetime.recoveryResult) this.handleRetry(err, lifetime);
             }
         };
 
@@ -1122,7 +1144,9 @@ class TikTokPlatform extends EventEmitter {
             'tiktok',
             error,
             reconnectFn,
-            () => this.cleanup(false)
+            async () => {
+                if (this.ownsConnectionLifetime(lifetime)) await this.cleanup(false, lifetime);
+            }
         );
 
         return { queued: true };
@@ -1134,6 +1158,7 @@ class TikTokPlatform extends EventEmitter {
             return { issueType: 'skipped', retryResult: null, reason: 'disconnection-in-progress' };
         }
         this._disconnectionInProgress = true;
+        const lifetime = this.captureConnectionLifetime();
 
     try {
       this.resetRetriesAfterStableConnection();
@@ -1159,12 +1184,12 @@ class TikTokPlatform extends EventEmitter {
       }
 
       this.connectionActive = false;
-      await this.cleanup(!decision.willReconnect);
-      this.connection = null;
-      this.listenersConfigured = false;
+      await this.cleanup(!decision.willReconnect, lifetime);
+      if (!this.ownsConnectionLifetime(lifetime)) return { issueType: 'skipped', retryResult: null, reason: 'superseded' };
 
       const disconnectionMessage = decision.isStreamNotLive ? 'Stream is not live' : message;
       await this._handleDisconnection(disconnectionMessage, decision.willReconnect, decision.isStreamNotLive);
+      if (!this.ownsConnectionLifetime(lifetime)) return { issueType: 'skipped', retryResult: null, reason: 'superseded' };
 
       let retryResult = null;
       if (decision.shouldDeferReconnect) {
@@ -1178,7 +1203,7 @@ class TikTokPlatform extends EventEmitter {
         };
       } else if (decision.shouldImmediateRetry && this.retrySystem) {
         const errorForRetry = isError ? issue : Object.assign(new Error(`TikTok disconnected: ${disconnectionMessage}`), { code: normalizedIssue.code });
-        retryResult = this.queueRetry(errorForRetry);
+        retryResult = this.queueRetry(errorForRetry, lifetime);
       } else if (decision.skipReason) {
         this.logger.debug(`Skipping retry: ${decision.skipReason}`, 'tiktok');
         retryResult = { queued: false, reason: decision.skipReason };
@@ -1189,7 +1214,7 @@ class TikTokPlatform extends EventEmitter {
 
       return { issueType: decision.issueType, retryResult };
         } finally {
-            this._disconnectionInProgress = false;
+            if (this.ownsConnectionLifetime(lifetime)) this._disconnectionInProgress = false;
         }
     }
     
@@ -1500,7 +1525,15 @@ class TikTokPlatform extends EventEmitter {
         cleanupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
-    async cleanup(cancelRecovery = true) {
+    async cleanup(cancelRecovery = true, lifetime?: TikTokConnectionLifetime) {
+        const generation = ++this._connectionGeneration;
+        // Recovery inherits its own retirement; external cleanup leaves old attempts obsolete.
+        if (lifetime) lifetime.generation = generation;
+        const connection = this.connection;
+        this.connectingPromise = null;
+        this.connection = null;
+        this.connectionActive = false;
+        this.connectionStateManager.markDisconnected();
         this.cleanupEventListeners();
         if (cancelRecovery) {
             this.isPlannedDisconnection = true;
@@ -1508,7 +1541,6 @@ class TikTokPlatform extends EventEmitter {
             this.retrySystem?.cancelConnectionRetry?.('tiktok');
         }
 
-        const connection = this.connection;
         if (connection && typeof connection.disconnect === 'function') {
             const hasStateFlags = ('isConnected' in connection) || ('isConnecting' in connection);
             const shouldDisconnect = hasStateFlags
@@ -1527,6 +1559,8 @@ class TikTokPlatform extends EventEmitter {
             }
         }
         
+        if (generation !== this._connectionGeneration) return;
+
         try {
             const clearedIntervals = this.intervalManager.clearAllIntervals();
             if (clearedIntervals > 0) {
@@ -1546,6 +1580,7 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager.markDisconnected();
         
         await this.cleanupGiftAggregation();
+        if (generation !== this._connectionGeneration) return;
         
         this.connection = null;
         this.connectionActive = false;
@@ -1991,6 +2026,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async _handleConnection() {
+        const lifetime = this.captureConnectionLifetime();
         try {
             this._terminalStreamEndEmitted = false;
             const eventData = this.eventFactory.createConnection();
@@ -2000,12 +2036,14 @@ class TikTokPlatform extends EventEmitter {
                 type: PlatformEvents.CHAT_CONNECTED,
                 data: eventData
             });
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this.handlers.onConnection?.({
                 platform: 'tiktok',
                 status: 'connected',
                 timestamp: eventData.timestamp,
                 willReconnect: false
             });
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: true,
@@ -2013,11 +2051,13 @@ class TikTokPlatform extends EventEmitter {
                 metadata: eventData.metadata
             });
         } catch (error) {
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this._handleError(error, { operation: 'handleConnection' });
         }
     }
 
     async _handleDisconnection(reason: string, willReconnect: boolean | null = null, streamEnded = this._terminalStreamEndEmitted) {
+        const lifetime = this.captureConnectionLifetime();
         try {
             const reconnectFlag = willReconnect !== null ? willReconnect : !!(!this.isPlannedDisconnection && this.config.enabled);
             const eventData = this.eventFactory.createDisconnection(reason, reconnectFlag);
@@ -2027,6 +2067,7 @@ class TikTokPlatform extends EventEmitter {
                 type: PlatformEvents.CHAT_DISCONNECTED,
                 data: eventData
             });
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this.handlers.onConnection?.({
                 platform: 'tiktok',
                 status: reconnectFlag ? 'reconnecting' : 'disconnected',
@@ -2034,6 +2075,7 @@ class TikTokPlatform extends EventEmitter {
                 willReconnect: reconnectFlag,
                 error: { message: reason }
             });
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             if (streamEnded && this._terminalStreamEndEmitted) return;
             if (streamEnded) this._terminalStreamEndEmitted = true;
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
@@ -2046,6 +2088,7 @@ class TikTokPlatform extends EventEmitter {
                 metadata: eventData.metadata
             });
         } catch (error) {
+            if (!this.ownsConnectionLifetime(lifetime)) return;
             this._handleError(error, { operation: 'handleDisconnection', reason });
         }
     }
@@ -2075,6 +2118,8 @@ class TikTokPlatform extends EventEmitter {
             });
         }
 
+        if (connectionGeneration !== this._connectionGeneration) return;
+
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             this.logger.debug('Skipping stream-end handling: disconnection already in progress', 'tiktok');
@@ -2103,7 +2148,7 @@ class TikTokPlatform extends EventEmitter {
       this.connection = null;
       await this._handleDisconnection(disconnectionReason, decision.willReconnect);
         } finally {
-            this._disconnectionInProgress = false;
+            if (connectionGeneration === this._connectionGeneration) this._disconnectionInProgress = false;
         }
     }
 
