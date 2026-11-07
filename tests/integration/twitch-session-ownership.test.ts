@@ -10,6 +10,7 @@ import type { AddressInfo } from 'node:net';
 import { TwitchPlatform } from '../../src/platforms/twitch';
 import { TwitchApiClient } from '../../src/utils/api-clients/twitch-api-client';
 import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
+import { RetrySystem } from '../../src/utils/retry-system';
 import { TwitchEventSub } from '../../src/platforms/twitch-eventsub';
 import { secrets } from '../../src/core/secrets';
 import { noOpLogger } from '../helpers/mock-factories';
@@ -941,4 +942,51 @@ test('installed ws CONNECTING disposal retains an error sink until close', async
         accepted.forEach(socket => socket.destroy());
         await new Promise<void>(resolve => server.close(() => resolve()));
     }
+});
+
+test.each([false, true])('post-initialize validation retires EventSub with replacement=%s', async replaceDuringRetirement => {
+    const auth = { isReady: () => true, getUserId: () => 'test-postcheck-user', refreshTokens: async () => true };
+    class SyntheticApiClient extends TwitchApiClient {
+        constructor() { super(auth, { clientId: 'test-client' }, noOpLogger, {
+            enhancedHttpClient: { get: async () => ({ data: { data: [{ id: 'test-postcheck-broadcaster' }] } }) }
+        }); }
+    }
+    const retry = Object.assign(new RetrySystem({ logger: noOpLogger }), { isConnected: (_platform: string) => false });
+    const platform = new TwitchPlatform({ enabled: true, channel: 'test-postcheck-channel', clientId: 'test-client' }, {
+        logger: noOpLogger, twitchAuth: auth, TwitchApiClient: SyntheticApiClient, WebSocketCtor: TestSocket,
+        axios: {
+            get: async () => ({ data: { data: [] } }), delete: async () => ({ data: {} }),
+            post: async () => ({ data: { data: [{ id: 'test-postcheck-sub', status: 'enabled' }] } })
+        },
+        retrySystem: retry
+    });
+    let eventSub: TwitchEventSub | undefined;
+    try {
+        const starting = platform.initialize();
+        await flush();
+        eventSub = platform.eventSub as unknown as TwitchEventSub;
+        // This observer runs after initializeEventSub's await, before the platform's post-check.
+        const closed = eventSub.initialize().then(() => TestSocket.sockets[0]!.close());
+        TestSocket.sockets[0]!.welcome('test-postcheck-session');
+        await closed;
+        if (replaceDuringRetirement) {
+            const replacement = platform.initialize();
+            await flush();
+            TestSocket.sockets[1]!.welcome('test-postcheck-replacement');
+            expect(await replacement).toEqual({ state: 'ready' });
+            expect(await starting).toBeUndefined();
+            expect(platform.isConnected).toBe(true);
+            expect((platform.eventSub as unknown) === eventSub).toBe(false);
+        } else {
+            expect(await starting).toMatchObject({ state: 'recovering' });
+            expect(platform.eventSub).toBeNull();
+            await flush();
+            retry.cancelConnectionRetry('twitch');
+            expect(getTimerCount()).toBe(0);
+        }
+        expect(eventSub.ws).toBeNull();
+        expect(eventSub.reconnectTimeout).toBeNull();
+        expect(eventSub.listenerCount('gift')).toBe(0);
+        expect(eventSub.cleanupInterval).toBeNull();
+    } finally { await platform.cleanup(); await eventSub?.cleanup(); retry.dispose(); }
 });

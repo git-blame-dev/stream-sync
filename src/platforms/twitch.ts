@@ -521,10 +521,17 @@ class TwitchPlatform extends EventEmitter {
         } catch (error) {
             if (!initializationIsCurrent()) return;
             this._logPlatformError('Failed to initialize Twitch platform', error, 'platform-init');
+            const retiringEventSub = this.eventSub;
             this._clearEventSubWiringState();
             this.eventSub = null;
             this.isConnected = false;
             this.isConnecting = false;
+            try {
+                await retiringEventSub?.cleanup?.();
+            } catch (cleanupError) {
+                this.errorHandler.handleCleanupError(cleanupError, 'failed initialization');
+            }
+            if (!initializationIsCurrent()) return;
             if (!isRetryableStartupError(error)) {
                 const failedDuringRecovery = this.recoveryInFlight;
                 this.recoveryInFlight = false;
