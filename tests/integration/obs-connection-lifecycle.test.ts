@@ -12,6 +12,8 @@ import {
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 
 describe("OBS Connection Lifecycle Integration", () => {
+  const ownedObsManagers: ReturnType<typeof createOBSConnectionManager>[] = [];
+  const ownedViewerSystems: ViewerCountSystem[] = [];
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
   let obsManager: ReturnType<typeof createOBSConnectionManager>;
   let obsObserver: InstanceType<typeof OBSViewerCountObserver>;
@@ -32,11 +34,13 @@ describe("OBS Connection Lifecycle Integration", () => {
       },
     });
 
+    ownedObsManagers.push(obsManager);
     viewerCountSystem = new ViewerCountSystem({
       platforms: {},
       config: testConfig,
       logger: noOpLogger,
     });
+    ownedViewerSystems.push(viewerCountSystem);
     obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, {
       config: testConfig,
     });
@@ -45,19 +49,20 @@ describe("OBS Connection Lifecycle Integration", () => {
   });
 
   afterEach(async () => {
-    if (viewerCountSystem?.isPolling) {
-      viewerCountSystem.stopPolling();
+    const errors: unknown[] = [];
+    try {
+      for (const system of ownedViewerSystems.splice(0)) {
+        try { system.stopPolling(); } catch (error) { errors.push(error); }
+        try { await system.cleanup(); } catch (error) { errors.push(error); }
+      }
+      for (const manager of ownedObsManagers.splice(0)) {
+        try { manager.dispose(); } catch (error) { errors.push(error); }
+        try { await manager.disconnect(); } catch (error) { errors.push(error); }
+      }
+    } finally {
+      try { vi.clearAllMocks(); } finally { vi.restoreAllMocks(); }
     }
-
-    if (viewerCountSystem) {
-      await viewerCountSystem.cleanup();
-    }
-
-    obsManager?.dispose();
-    await obsManager?.disconnect();
-
-    vi.clearAllMocks();
-    vi.restoreAllMocks();
+    if (errors.length) throw new AggregateError(errors, "OBS lifecycle test cleanup failed");
   });
 
   describe("OBS Observer System", () => {
@@ -83,10 +88,11 @@ describe("OBS connection manager reconnect ownership integration", () => {
   });
 
   afterEach(() => {
-    resetOBSConnectionManager();
-    useRealTimers();
-    vi.clearAllMocks();
-    vi.restoreAllMocks();
+    try { resetOBSConnectionManager(); }
+    finally {
+      try { useRealTimers(); }
+      finally { try { vi.clearAllMocks(); } finally { vi.restoreAllMocks(); } }
+    }
   });
 
   test("ConnectionClosed during in-flight connect does not start overlapping reconnect attempt", async () => {
@@ -138,9 +144,11 @@ describe("OBS connection manager reconnect ownership integration", () => {
       expect(manager.getConnectionState().isConnected).toBe(true);
       expect(mockOBS.connect).toHaveBeenCalledTimes(1);
     } finally {
-      manager.dispose();
-      await manager.disconnect();
-      await Promise.allSettled([firstConnect, ensured]);
+      try {
+        try { manager.dispose(); } finally { await manager.disconnect(); }
+      } finally {
+        await Promise.allSettled([firstConnect, ensured]);
+      }
     }
     expect(mockOBS.off.mock.calls).toEqual(ownedHandlers);
     expect(handlers.size).toBe(0);

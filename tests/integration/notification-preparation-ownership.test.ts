@@ -15,8 +15,17 @@ const gift = {
 const cleanups: Array<() => Promise<void>> = [];
 const restorers: Array<() => void> = [];
 afterEach(async () => {
-  try { for (const restore of restorers.splice(0)) restore(); }
-  finally { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); }
+  const errors: unknown[] = [];
+  try {
+    for (const restore of restorers.splice(0)) {
+      try { restore(); } catch (error) { errors.push(error); }
+    }
+  } finally {
+    for (const cleanup of cleanups.splice(0).reverse()) {
+      try { await cleanup(); } catch (error) { errors.push(error); }
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, "Notification preparation test cleanup failed");
 });
 
 async function fixture() {

@@ -2,6 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { validateUserVisibleContent, validateGiftData, validateNotificationData, expectValidNotification, expectNoTechnicalArtifacts, expectValidUserFeedback } from './behavior-validation';
 
 describe('behavior-validation content contracts', () => {
+    it.each([NaN, Infinity, -Infinity])('rejects nonfinite gift amount %s', amount => {
+        expect(() => validateGiftData({ username: 'synthetic-viewer', amount, currency: 'coins' })).toThrow();
+    });
+
     it('validates user-visible content and input data contracts', () => {
         expect(() => validateUserVisibleContent('Thanks test-user for the gift')).not.toThrow();
         expect(() => validateUserVisibleContent(123)).toThrow('User-visible content must be a string');

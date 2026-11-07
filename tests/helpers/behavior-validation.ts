@@ -58,7 +58,7 @@ const validateGiftData = (giftData: unknown): void => {
         throw new Error('Gift data must include a valid username');
     }
 
-    if (typeof giftRecord.amount !== 'number' || giftRecord.amount <= 0) {
+    if (typeof giftRecord.amount !== 'number' || !Number.isFinite(giftRecord.amount) || giftRecord.amount <= 0) {
         throw new Error('Gift amount must be a positive number');
     }
 

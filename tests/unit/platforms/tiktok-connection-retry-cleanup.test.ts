@@ -5,9 +5,15 @@ import { createTikTokLifetimeFixture, flushConnectorSetup } from "../../helpers/
 describe("TikTokPlatform connection recovery", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(async () => {
-    for (const fixture of fixtures.splice(0)) await fixture.cleanup();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
+    const errors: unknown[] = [];
+    try {
+      for (const fixture of fixtures.splice(0)) {
+        try { await fixture.cleanup(); } catch (error) { errors.push(error); }
+      }
+    } finally {
+      try { vi.restoreAllMocks(); } finally { vi.useRealTimers(); }
+    }
+    if (errors.length) throw new AggregateError(errors, "TikTok recovery test cleanup failed");
   });
 
   const fixtures: ReturnType<typeof createTikTokLifetimeFixture>[] = [];
@@ -150,10 +156,11 @@ describe("TikTokPlatform connection recovery", () => {
       platform.cleanupEventListeners();
     } finally {
       release();
-      await pending;
-      await current.cleanup();
-      append.mockRestore();
-      mkdir.mockRestore();
+      try {
+        try { await pending; } finally { await current.cleanup(); }
+      } finally {
+        try { append.mockRestore(); } finally { mkdir.mockRestore(); }
+      }
     }
   });
 

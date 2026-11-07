@@ -736,7 +736,6 @@ it("exposes oauth-flow helper functions", () => {
 
   it("presents a usable manual authorization URL without retaining its parameters in diagnostic sinks", async () => {
     const logger = createLogger({ console: { enabled: true }, file: { enabled: true, directory: tempDir } }, { operatorCaptureEnabled: true });
-    const capture = captureStdout();
     let generatedUrl = '';
     try {
       const result = await runOAuthFlow({ clientId: 'synthetic-client-id', tokenStorePath, logger, persistTokens: false, skipBrowserOpen: true }, {
@@ -746,7 +745,7 @@ it("exposes oauth-flow helper functions", () => {
       });
       await logger.flush();
       expect(result?.accessToken).toBe('synthetic-access-token');
-      expect(capture.output.join('')).toContain(generatedUrl);
+      expect(stdout.output.join('')).toContain(generatedUrl);
       const state = new URL(generatedUrl).searchParams.get('state');
       expect(state).toBeTruthy();
       const history = JSON.stringify(logger.getOperatorLogSource()?.history());
@@ -756,7 +755,7 @@ it("exposes oauth-flow helper functions", () => {
         expect(diagnostic).not.toContain('client_id=');
         expect(diagnostic).not.toContain('synthetic-access-token');
       }
-    } finally { await logger.flush(); capture.restore(); }
+    } finally { await logger.flush(); }
   });
 
   it("continues automatic authorization when the terminal output fails", async () => {

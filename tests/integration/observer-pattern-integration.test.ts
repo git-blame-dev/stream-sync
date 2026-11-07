@@ -94,6 +94,7 @@ const createTimeProvider = () => ({
 
 describe("Observer Pattern Integration", () => {
   const ownedObsManagers: OBSConnectionManager[] = [];
+  const ownedViewerSystems: ViewerCountSystem[] = [];
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
   let platforms: {
     youtube: {
@@ -141,23 +142,25 @@ describe("Observer Pattern Integration", () => {
       timeProvider: createTimeProvider(),
       config: testConfig,
     });
+    ownedViewerSystems.push(viewerCountSystem);
     await viewerCountSystem.initialize();
   });
 
   afterEach(async () => {
+    const errors: unknown[] = [];
     try {
-      if (viewerCountSystem) {
-        viewerCountSystem.stopPolling();
-        await viewerCountSystem.cleanup();
+      for (const system of ownedViewerSystems.splice(0)) {
+        try { system.stopPolling(); } catch (error) { errors.push(error); }
+        try { await system.cleanup(); } catch (error) { errors.push(error); }
       }
       for (const obsManager of ownedObsManagers.splice(0)) {
-        obsManager.dispose();
-        await obsManager.disconnect();
+        try { obsManager.dispose(); } catch (error) { errors.push(error); }
+        try { await obsManager.disconnect(); } catch (error) { errors.push(error); }
       }
     } finally {
-      vi.clearAllMocks();
-      vi.restoreAllMocks();
+      try { vi.clearAllMocks(); } finally { vi.restoreAllMocks(); }
     }
+    if (errors.length) throw new AggregateError(errors, "Observer integration cleanup failed");
   });
 
   describe("Observer Registration and Management", () => {

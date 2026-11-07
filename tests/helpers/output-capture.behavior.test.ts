@@ -3,6 +3,36 @@ import { describe, expect, it } from 'bun:test';
 import { captureStderr, captureStdout } from './output-capture';
 
 describe('output-capture behavior', () => {
+    it('rejects overlapping captures per stream while allowing separate streams and reopening', () => {
+        const originalStdout = process.stdout.write;
+        const originalStderr = process.stderr.write;
+        const stdout = captureStdout();
+        const stderr = captureStderr();
+        const unexpectedCaptures: Array<ReturnType<typeof captureStdout>> = [];
+        try {
+            expect(() => { unexpectedCaptures.push(captureStdout()); }).toThrow();
+            expect(() => { unexpectedCaptures.push(captureStderr()); }).toThrow();
+            process.stdout.write('synthetic stdout');
+            process.stderr.write('synthetic stderr');
+            expect(stdout.output).toEqual(['synthetic stdout']);
+            expect(stderr.output).toEqual(['synthetic stderr']);
+        } finally {
+            for (const capture of unexpectedCaptures.reverse()) capture.restore();
+            stderr.restore();
+            stdout.restore();
+        }
+        const reopened = captureStdout();
+        try {
+            stdout.restore();
+            process.stdout.write('synthetic reopened');
+            expect(reopened.output).toEqual(['synthetic reopened']);
+        } finally {
+            reopened.restore();
+        }
+        expect(process.stdout.write).toBe(originalStdout);
+        expect(process.stderr.write).toBe(originalStderr);
+    });
+
     it('supports both write callback signatures and idempotent restoration', () => {
         const originalWrite = process.stdout.write;
         const capture = captureStdout();

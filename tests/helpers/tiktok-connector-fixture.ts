@@ -62,14 +62,21 @@ function createTikTokLifetimeFixture(
         },
         async cleanup() {
             const connecting = platform.connectingPromise?.catch(() => {});
-            await platform.cleanup();
-            retry.dispose();
-            for (const client of clients) client.disconnect();
-            // Drain cancellation observers and retry-owned cleanup before timer restoration.
-            await flushConnectorSetup();
-            await connecting;
-            await flushConnectorSetup();
-            platform.removeAllListeners();
+            const errors: unknown[] = [];
+            try { await platform.cleanup(); } catch (error) { errors.push(error); }
+            try { retry.dispose(); } catch (error) { errors.push(error); }
+            for (const client of clients) {
+                try { client.disconnect(); } catch (error) { errors.push(error); }
+            }
+            try {
+                // Drain cancellation observers and retry-owned cleanup before timer restoration.
+                await flushConnectorSetup();
+                await connecting;
+                await flushConnectorSetup();
+            } finally {
+                platform.removeAllListeners();
+            }
+            if (errors.length) throw new AggregateError(errors, 'TikTok fixture cleanup failed');
         },
     };
 }

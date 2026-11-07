@@ -17,10 +17,17 @@ import { createOBSGoalsManager } from '../../src/obs/goals';
 import { createConfigFixture } from '../helpers/config-fixture';
 import { noOpLogger } from '../helpers/mock-factories';
 
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+const cleanups: Array<() => Promise<unknown> | void> = [];
+afterEach(async () => {
+    const errors: unknown[] = [];
+    for (const cleanup of cleanups.splice(0).reverse()) {
+        try { await cleanup(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Chat admission test cleanup failed');
+});
 async function fixture(maxQueueSize = 100) {
     const dir = await mkdtemp(join(tmpdir(), 'synthetic-admission-'));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const config = createConfigFixture({ general: { envFileReadEnabled: false },
         commands: { wave: '!synthetic-wave,Synthetic Media,5000', other: '!synthetic-other,Synthetic Media,5000', bye: '!synthetic-bye,Synthetic Media,5000' },
         greetings: { command: '!synthetic-wave' }, farewell: { command: '!synthetic-bye' },
@@ -30,13 +37,16 @@ async function fixture(maxQueueSize = 100) {
     const bus = new EventBus();
     const tracking = new UserTrackingService();
     const cooldown = new CommandCooldownService({ config, logger: noOpLogger });
+    cleanups.push(() => cooldown.dispose());
     const vfx = new VFXCommandService(config, bus);
     let afterControlRename = () => {};
     const controls = await OperatorControlService.create({ fs: { readFile, mkdir, writeFile, unlink, rename: async (from, to) => { await rename(from, to); afterControlRename(); } }, filePath: join(dir, 'controls.json'), defaults: Object.fromEntries(OPERATOR_CONTROL_KEYS.map(key => [key, true])) as Record<typeof OPERATOR_CONTROL_KEYS[number], boolean> });
     const goals = createOBSGoalsManager({ isConnected: () => false }, { config, logger, updateTextSource: async () => {} });
     const queue = new DisplayQueue({ call: async () => ({}) }, { ...config, autoProcess: false, maxQueueSize }, constants, bus,
         { operatorControls: controls, goalsManager: goals, sourcesManager: { updateTextSource: async () => {}, clearTextSource: async () => {} } });
+    cleanups.push(() => queue.stop());
     const manager = new NotificationManager({ config, logger: noOpLogger, constants, eventBus: bus, displayQueue: queue, vfxCommandService: { getVFXConfig: (key, message) => vfx.getVFXConfig(key, message) } });
+    cleanups.push(() => manager.donationSpamDetector?.destroy?.());
     const router = new ChatNotificationRouter({ config, logger: noOpLogger, runtime: {
         config, displayQueue: queue,
         userTrackingService: {
@@ -51,7 +61,6 @@ async function fixture(maxQueueSize = 100) {
         }, vfxCommandService: vfx,
         prepareFarewellNotification: (platform, username, data) => manager.prepareNotification('farewell', platform, { ...data, username })
     } });
-    cleanups.push(async () => { cooldown.dispose(); manager.donationSpamDetector?.destroy?.(); await queue.stop(); await rm(dir, { recursive: true, force: true }); });
     const send = (message: string, userId = 'synthetic-user', platform = 'twitch', username = userId) => router.handleChatMessage(platform, {
         username, userId, message, timestamp: '2026-01-01T00:00:00.000Z'
     });

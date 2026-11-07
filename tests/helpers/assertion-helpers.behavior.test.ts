@@ -71,6 +71,25 @@ const createFactoryMock = () => {
 };
 
 describe('assertion-helpers behavior', () => {
+    it.each([NaN, Infinity, -Infinity])('rejects nonfinite retained gift and stream values %s', value => {
+        expect(() => expectValidGiftData(createGiftNotification({ giftCount: value }))).toThrow();
+        expect(() => expectValidGiftData(createGiftNotification({ amount: value }))).toThrow();
+        expect(() => expectValidStreamData({ streamId: 'synthetic-stream', title: '', viewerCount: value, isLive: false, platform: 'twitch' })).toThrow();
+        expect(() => expectValidGiftNotification(createGiftNotification({ amount: value, displayMessage: `Synthetic gift ${value} coins` }))).toThrow();
+    });
+
+    it.each([NaN, Infinity, -Infinity, -1])('rejects invalid explicit minimum gift amount %s', minAmount => {
+        expect(() => expectValidGiftNotification(createGiftNotification(), { minAmount })).toThrow();
+    });
+
+    it('preserves zero data values and enforces finite gift amount thresholds', () => {
+        expect(() => expectValidGiftData(createGiftNotification({ giftCount: 0, amount: 0 }))).not.toThrow();
+        expect(() => expectValidStreamData({ streamId: 'synthetic-stream', title: '', viewerCount: 0, isLive: false, platform: 'twitch' })).not.toThrow();
+        expect(() => expectValidGiftNotification(createGiftNotification(), { minAmount: 0 })).not.toThrow();
+        expect(() => expectValidGiftNotification(createGiftNotification(), { minAmount: 10 })).not.toThrow();
+        expect(() => expectValidGiftNotification(createGiftNotification(), { minAmount: 11 })).toThrow('below minimum');
+    });
+
     it('compares actual unified outcomes including falsy and deeply nested values', () => {
         const validation = (isValid: boolean) => ({ validationSource: 'centralized_validator', isValid });
         expect(() => expectUnifiedBehavior({ scenario: 'token_validation', results: [validation(false), validation(false)], expectedOutcome: true })).toThrow();

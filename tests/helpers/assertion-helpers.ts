@@ -933,7 +933,7 @@ const expectValidGiftData = (giftData: unknown): void => {
         throw new Error('Invalid gift data: giftType must be a non-empty string');
     }
     
-    if (typeof giftRecord.giftCount !== 'number' || giftRecord.giftCount < 0) {
+    if (typeof giftRecord.giftCount !== 'number' || !Number.isFinite(giftRecord.giftCount) || giftRecord.giftCount < 0) {
         throw new Error('Invalid gift data: giftCount must be a non-negative number');
     }
     
@@ -941,7 +941,7 @@ const expectValidGiftData = (giftData: unknown): void => {
         throw new Error('Invalid gift data: username must be a non-empty string');
     }
 
-    if (typeof giftRecord.amount !== 'number' || giftRecord.amount < 0) {
+    if (typeof giftRecord.amount !== 'number' || !Number.isFinite(giftRecord.amount) || giftRecord.amount < 0) {
         throw new Error('Invalid gift data: amount must be a non-negative number');
     }
 
@@ -971,7 +971,7 @@ const expectValidStreamData = (streamData: unknown): void => {
         throw new Error('Invalid stream data: title must be a string');
     }
     
-    if (typeof streamRecord.viewerCount !== 'number' || streamRecord.viewerCount < 0) {
+    if (typeof streamRecord.viewerCount !== 'number' || !Number.isFinite(streamRecord.viewerCount) || streamRecord.viewerCount < 0) {
         throw new Error('Invalid stream data: viewerCount must be a non-negative number');
     }
     
@@ -1374,12 +1374,17 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
         }
     });
     
-    if (typeof giftNotification.amount !== 'number' || giftNotification.amount <= 0) {
+    if (typeof giftNotification.amount !== 'number' || !Number.isFinite(giftNotification.amount) || giftNotification.amount <= 0) {
         throw new Error('Gift amount must be positive');
     }
     
-    if (expectedData.minAmount && giftNotification.amount < expectedData.minAmount) {
-        throw new Error(`Gift amount ${giftNotification.amount} is below minimum ${expectedData.minAmount}`);
+    if (expectedData.minAmount !== undefined) {
+        if (!Number.isFinite(expectedData.minAmount) || expectedData.minAmount < 0) {
+            throw new Error('Minimum gift amount must be a finite non-negative number');
+        }
+        if (giftNotification.amount < expectedData.minAmount) {
+            throw new Error(`Gift amount ${giftNotification.amount} is below minimum ${expectedData.minAmount}`);
+        }
     }
     
     if (typeof giftNotification.currency !== 'string' || !giftNotification.currency.trim()) {

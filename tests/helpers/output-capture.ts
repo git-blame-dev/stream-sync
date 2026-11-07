@@ -1,6 +1,9 @@
 type WriteCallback = (error?: Error | null) => void;
 
+const activeCaptures = new WeakSet<NodeJS.WriteStream>();
+
 const captureOutput = (stream: NodeJS.WriteStream) => {
+    if (activeCaptures.has(stream)) throw new Error('Output stream already has an active capture');
     const originalWrite = stream.write;
     const output: string[] = [];
     stream.write = ((chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | WriteCallback, callback?: WriteCallback) => {
@@ -9,6 +12,7 @@ const captureOutput = (stream: NodeJS.WriteStream) => {
         writeCallback?.();
         return true;
     }) as typeof stream.write;
+    activeCaptures.add(stream);
     let restored = false;
     return {
         output,
@@ -16,6 +20,7 @@ const captureOutput = (stream: NodeJS.WriteStream) => {
             if (restored) return;
             restored = true;
             stream.write = originalWrite;
+            activeCaptures.delete(stream);
         }
     };
 };
