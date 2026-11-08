@@ -7,6 +7,7 @@ import { safeSetTimeout } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
 import { requestNeuralTts } from './neural-tts-diagnostics';
+import { recoverNeuralTts } from './neural-tts-recovery';
 
 const VFX_EVENTS = {
     EFFECT_COMPLETED: 'vfx:effect-completed',
@@ -420,7 +421,9 @@ class DisplayQueueEffects {
             redirect: 'error',
             signal: AbortSignal.timeout(NEURAL_TTS_HEALTH_TIMEOUT_MS)
         });
-        if (!health.ok) {
+        if (health.status === 503) {
+            await recoverNeuralTts(this.outputFetch, root, { signal: this.controller.signal });
+        } else if (!health.ok) {
             throw new Error(`Neural TTS service is not ready (HTTP ${health.status})`);
         }
     }

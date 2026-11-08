@@ -63,8 +63,9 @@ describe('display queue with degraded neural TTS', () => {
                 notificationDelay: async () => {},
                 fetch: async (input, init) => {
                     const path = new URL(String(input)).pathname;
-                    const text = init?.body ? (JSON.parse(String(init.body)) as { text: string }).text : '';
+                    const text = init?.body ? (JSON.parse(String(init.body)) as { text?: string }).text ?? '' : '';
                     requests.push(`${path}:${text}`);
+                    if (path === '/v1/synthesis/session') return new Response(null, { status: 503 });
                     if (!failed && path === failingPath) {
                         failed = true;
                         events.push('tts:503');
@@ -104,7 +105,7 @@ describe('display queue with degraded neural TTS', () => {
                     'started:synthetic-degraded-follow', 'vfx:started'
                 ]);
                 expect(requests).toEqual(failingPath === '/health'
-                    ? ['/health:']
+                    ? ['/health:', '/v1/synthesis/session:']
                     : ['/health:', '/v1/prepare:synthetic first speech']);
 
                 bus.emit('vfx:effect-completed', { correlationId });
@@ -121,6 +122,7 @@ describe('display queue with degraded neural TTS', () => {
                 ]);
                 expect(requests).toEqual([
                     '/health:',
+                    ...(failingPath === '/health' ? ['/v1/synthesis/session:'] : []),
                     ...(failingPath === '/v1/prepare' ? ['/v1/prepare:synthetic first speech'] : []),
                     '/health:', '/v1/prepare:synthetic next speech', '/v1/speak:synthetic next speech'
                 ]);

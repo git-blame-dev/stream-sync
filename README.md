@@ -93,6 +93,10 @@ running Stream Sync (for example, invoke the Linux launcher through WSL from Win
 Stream Sync attaches to a healthy service before attempting automatic startup and
 holds its own shared lease. Keep the configured endpoint on loopback. Notification
 speech uses `/v1/prepare` and `/v1/speak`, with success after playback drains.
+If health reports unavailable, Stream Sync requests Neural's existing worker
+recovery through a temporary synthesis session, waits up to 120 seconds, then
+releases only that session. Failed speech is not replayed; subsequent notifications
+can recover and proceed. Recovery never kills the shared service or changes providers.
 
 To receive YouTube subscriber alerts through StreamElements, set `enabled = true`
 in `[streamelements]` and supply `STREAMELEMENTS_JWT_TOKEN` in `.env`. The JWT

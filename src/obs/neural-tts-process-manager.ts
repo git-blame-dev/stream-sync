@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { logger as defaultLogger } from '../core/logging';
 import type { AppLogger } from '../core/logger/types';
 import { safeSetTimeout } from '../utils/timeout-validator';
+import { recoverNeuralTts } from './neural-tts-recovery';
 
 const DEFAULT_NEURAL_TTS_ENDPOINT = 'http://127.0.0.1:8765';
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
@@ -141,7 +142,7 @@ export class NeuralTtsProcessManager {
         this.fetch = options.fetch || globalThis.fetch.bind(globalThis);
         this.spawn = options.spawn || ((command, spawnOpts) => defaultSpawn(command, spawnOpts));
         this.delay = options.delay || defaultDelay;
-        this.now = options.now || (() => Date.now());
+        this.now = options.now || (() => performance.now());
         this.clientId = options.clientId || `stream-sync-${crypto.randomUUID()}`;
         this.probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
         this.warmupTimeoutMs = options.warmupTimeoutMs ?? DEFAULT_WARMUP_TIMEOUT_MS;
@@ -166,10 +167,16 @@ export class NeuralTtsProcessManager {
             this.logger.info('Neural TTS service already running; attaching shared lease', 'neural-tts-process-manager');
             await this.acquireLease(root);
             if (!initialProbe.ready) {
-                const ready = await this.waitForReady(root);
-                if (!ready) {
+                try {
+                    if (initialProbe.status !== 503) throw new Error('Neural TTS health unavailable');
+                    await recoverNeuralTts(this.fetch, root, {
+                        timeoutMs: this.warmupTimeoutMs, probeTimeoutMs: this.probeTimeoutMs,
+                        pollIntervalMs: this.pollIntervalMs, now: this.now, delay: this.delay
+                    });
+                    return;
+                } catch {
                     this.logger.warn(
-                        `Neural TTS warmup timed out after ${this.warmupTimeoutMs}ms; continuing in degraded mode`,
+                        'Neural TTS recovery unavailable or timed out; continuing in degraded mode',
                         'neural-tts-process-manager'
                     );
                 }
@@ -300,7 +307,7 @@ export class NeuralTtsProcessManager {
         }
     }
 
-    private async probeHealth(root: string): Promise<{ reachable: boolean; ready: boolean }> {
+    private async probeHealth(root: string): Promise<{ reachable: boolean; ready: boolean; status?: number }> {
         try {
             const response = await this.fetch(`${root}/health`, {
                 method: 'GET',
@@ -310,7 +317,7 @@ export class NeuralTtsProcessManager {
             if (response.status === 200) {
                 return { reachable: true, ready: true };
             }
-            return { reachable: true, ready: false };
+            return { reachable: true, ready: false, status: response.status };
         } catch {
             return { reachable: false, ready: false };
         }

@@ -33,6 +33,24 @@ function createEffects(options: {
 }
 
 describe('display queue speech output', () => {
+    it('recovers an unavailable worker before admitting new speech and releases only its recovery session', async () => {
+        const operations: string[] = [];
+        let healthCalls = 0;
+        const session = 'a'.repeat(64);
+        const { effects } = createEffects({ fetch: async (input, init) => {
+            const route = new URL(String(input)).pathname;
+            operations.push(route);
+            if (route === '/health') return new Response(null, { status: ++healthCalls === 1 ? 503 : 200 });
+            if (route === '/v1/synthesis/session') return Response.json({ session_id: session });
+            if (route === '/v1/synthesis/release') expect(JSON.parse(String(init?.body))).toEqual({ session_id: session });
+            return new Response(null, { status: 200 });
+        } });
+
+        await effects.setTTSText('Synthetic recovery notification');
+
+        expect(operations).toEqual(['/health', '/v1/synthesis/session', '/health', '/v1/synthesis/release', '/v1/speak']);
+    });
+
     it('checks readiness and posts neural speech with the configured voice', async () => {
         const requests: Array<{ url: string; init?: RequestInit }> = [];
         const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -58,6 +76,49 @@ describe('display queue speech output', () => {
         expect(textUpdates).toEqual([]);
     });
 
+    it('releases recovery admission after presentation cancellation without speaking', async () => {
+        const operations: string[] = [];
+        let healthCalls = 0;
+        const { effects } = createEffects({ fetch: async (input, init) => {
+            const route = new URL(String(input)).pathname;
+            operations.push(route);
+            if (route === '/v1/synthesis/session') return Response.json({ session_id: 'c'.repeat(64) });
+            if (route === '/health') {
+                if (++healthCalls === 2) effects.cancelActive();
+                return new Response(null, { status: 503 });
+            }
+            expect(init?.signal?.aborted).toBe(false);
+            return new Response(null, { status: 200 });
+        } });
+        await expect(effects.setTTSText('Synthetic cancelled notification')).rejects.toThrow();
+        expect(operations).toEqual(['/health', '/v1/synthesis/session', '/health', '/v1/synthesis/release']);
+    });
+
+    it('recovers for the next notification without replaying a failed speech request', async () => {
+        const spoken: string[] = [];
+        let crashed = false;
+        const { effects } = createEffects({ fetch: async (input, init) => {
+            const route = new URL(String(input)).pathname;
+            if (route === '/health') return new Response(null, { status: crashed ? 503 : 200 });
+            if (route === '/v1/synthesis/session') {
+                crashed = false;
+                return Response.json({ session_id: 'd'.repeat(64) });
+            }
+            if (route === '/v1/speak') {
+                spoken.push(JSON.parse(String(init?.body)).text);
+                if (spoken.length === 1) {
+                    crashed = true;
+                    return new Response(null, { status: 500 });
+                }
+            }
+            return new Response(null, { status: 200 });
+        } });
+        await expect(effects.setTTSText('Synthetic failed notification')).rejects.toThrow('HTTP 500');
+        effects.beginPresentation();
+        await effects.setTTSText('Synthetic next notification');
+        expect(spoken).toEqual(['Synthetic failed notification', 'Synthetic next notification']);
+    });
+
     it('fails explicitly when the service is not ready and does not fall back', async () => {
         const requests: string[] = [];
         const fetch = async (input: RequestInfo | URL) => {
@@ -66,9 +127,9 @@ describe('display queue speech output', () => {
         };
         const { effects, textUpdates, clearedSources } = createEffects({ fetch });
 
-        await expect(effects.setTTSText('fixture')).rejects.toThrow('not ready (HTTP 503)');
+        await expect(effects.setTTSText('fixture')).rejects.toThrow('recovery unavailable (HTTP 503)');
 
-        expect(requests).toEqual(['http://127.0.0.1:8765/health']);
+        expect(requests).toEqual(['http://127.0.0.1:8765/health', 'http://127.0.0.1:8765/v1/synthesis/session']);
         expect(clearedSources).toEqual([]);
         expect(textUpdates).toEqual([]);
     });

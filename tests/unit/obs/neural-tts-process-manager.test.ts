@@ -259,6 +259,7 @@ describe('NeuralTtsProcessManager', () => {
                 }
                 return new Response(JSON.stringify({ ready: true }), { status: 200 });
             }
+            if (url.endsWith('/v1/synthesis/session')) return Response.json({ session_id: 'a'.repeat(64) });
             if (url.endsWith('/v1/lease/acquire')) {
                 return new Response(
                     JSON.stringify({ active_clients: 1, active_jobs: 0 }),
@@ -301,12 +302,14 @@ describe('NeuralTtsProcessManager', () => {
         expect(requests.map((r) => [r.method, r.url])).toEqual([
             ['GET', 'http://127.0.0.1:8765/health'],
             ['POST', 'http://127.0.0.1:8765/v1/lease/acquire'],
-            ['GET', 'http://127.0.0.1:8765/health']
+            ['POST', 'http://127.0.0.1:8765/v1/synthesis/session'],
+            ['GET', 'http://127.0.0.1:8765/health'],
+            ['POST', 'http://127.0.0.1:8765/v1/synthesis/release']
         ]);
 
         await manager.stop();
 
-        expect(requests.slice(3).map((r) => [r.method, r.url])).toEqual([
+        expect(requests.slice(5).map((r) => [r.method, r.url])).toEqual([
             ['POST', 'http://127.0.0.1:8765/v1/lease/release']
         ]);
         expect(requests.some((r) => r.url.endsWith('/v1/shutdown'))).toBe(false);
@@ -681,6 +684,8 @@ describe('NeuralTtsProcessManager', () => {
                 await readinessGate;
                 return new Response(null, { status: 200 });
             }
+            if (path === '/v1/synthesis/session') return Response.json({ session_id: 'a'.repeat(64) });
+            if (path === '/v1/synthesis/release') return Response.json({ released: true, retired: true });
             if (path === '/v1/lease/acquire') return Response.json({ active_clients: 1, active_jobs: 0 });
             if (path === '/v1/lease/release') return Response.json({ active_clients: 0, active_jobs: 0, should_shutdown: false });
             throw new Error(`Unexpected synthetic neural request: ${path}`);
@@ -689,12 +694,12 @@ describe('NeuralTtsProcessManager', () => {
         const starting = h.start();
         try {
             await withTimeout(readinessProbe, 2000);
-            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health']);
+            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/v1/synthesis/session', '/health']);
             expect(h.runtime.isStarted).toBe(false);
             releaseReadiness();
             await starting;
             expect(h.runtime.isStarted).toBe(true);
-            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health']);
+            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/v1/synthesis/session', '/health', '/v1/synthesis/release']);
         } finally {
             releaseReadiness();
             try {
@@ -704,7 +709,7 @@ describe('NeuralTtsProcessManager', () => {
                 finally { fetch.mockRestore(); }
             }
         }
-        expect(requests).toEqual(['/health', '/v1/lease/acquire', '/health', '/v1/lease/release']);
+        expect(requests).toEqual(['/health', '/v1/lease/acquire', '/v1/synthesis/session', '/health', '/v1/synthesis/release', '/v1/lease/release']);
         expect(leaseBodies).toHaveLength(2);
         expect(leaseBodies[0]).toEqual({ client_id: expect.any(String) });
         expect(leaseBodies[1]).toEqual(leaseBodies[0]);
