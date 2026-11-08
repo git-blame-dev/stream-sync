@@ -85,6 +85,15 @@ cp .env.example .env
 
 Edit `config.ini` from [`config.example.ini`](config.example.ini) and `.env` from [`.env.example`](.env.example) before starting. Keep secrets in `.env`; do not commit local credentials, logs, token stores, or generated data files.
 
+For local speech, configure `[obs] neuralTtsCommand` with the explicit launcher
+from the matching Neural TTS installation, as shown in `config.example.ini`.
+The launcher supplies the Qwen worker arguments; bare `neural-tts serve` does not
+discover its configuration. Use absolute paths and the command syntax of the host
+running Stream Sync (for example, invoke the Linux launcher through WSL from Windows).
+Stream Sync attaches to a healthy service before attempting automatic startup and
+holds its own shared lease. Keep the configured endpoint on loopback. Notification
+speech uses `/v1/prepare` and `/v1/speak`, with success after playback drains.
+
 To receive YouTube subscriber alerts through StreamElements, set `enabled = true`
 in `[streamelements]` and supply `STREAMELEMENTS_JWT_TOKEN` in `.env`. The JWT
 scopes the account; copy it while the YouTube account is selected in the
