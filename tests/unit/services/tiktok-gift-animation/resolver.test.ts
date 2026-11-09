@@ -1,9 +1,8 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import fsp, { access, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { watch, type FSWatcher } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
@@ -503,33 +502,40 @@ test('caller abort during actual native extraction closes the ZIP pipeline and d
 }, 30000);
 
 test('dispose at the native private-metadata boundary prevents a late published entry', async () => {
-    let workWatcher: FSWatcher | undefined;
-    let watcherClosed: Promise<void> | undefined;
+    const written = deferred();
+    const release = deferred();
+    const h = await harness();
+    const realWriteFile = fsp.writeFile.bind(fsp);
+    // Complete the real private write, then hold its return until disposal has
+    // closed admission. A filesystem notification can arrive after publication.
+    const write = spyOn(fsp, 'writeFile').mockImplementation(async (file, data, options) => {
+        await realWriteFile(file, data, options);
+        if (basename(String(file)) === 'metadata.json') {
+            written.resolve();
+            await release.promise;
+        }
+    });
+    const attempt = h.resolver.resolveFromNotificationData(notification());
     let disposal: Promise<void> | undefined;
-    let observedMetadata = false;
-    const bytes = archive();
-    const h = await harness({ downloadArchive: async (_url, file) => {
-        // Attach before the fake external download completes, not by racing a
-        // parent-directory creation event against extraction/validation.
-        workWatcher = watch(dirname(file), (_event, entry) => {
-            if (String(entry) === 'metadata.json' && !observedMetadata) {
-                observedMetadata = true;
-                disposal = h.resolver.dispose();
-            }
-        });
-        watcherClosed = new Promise<void>(done => workWatcher!.once('close', done));
-        workWatcher.on('error', () => undefined);
-        await writeFile(file, bytes, { flag: 'wx' });
-        return { bytes: bytes.length };
-    } });
     try {
+        await Promise.race([written.promise, attempt.then(() => {
+            throw new Error('Synthetic metadata boundary was not reached');
+        })]);
+        disposal = h.resolver.dispose();
+        let retired = false;
+        void disposal.then(() => { retired = true; });
+        await yieldTurn();
+        expect(retired).toBe(false);
         expect(await h.resolver.resolveFromNotificationData(notification())).toBeNull();
-        expect(observedMetadata).toBe(true);
+        release.resolve();
+        expect(await attempt).toBeNull();
         await disposal;
         expect(await readdir(h.directory)).toEqual([]);
     } finally {
-        workWatcher?.close();
-        await watcherClosed;
+        release.resolve();
+        await attempt;
+        await disposal;
+        write.mockRestore();
     }
 });
 
