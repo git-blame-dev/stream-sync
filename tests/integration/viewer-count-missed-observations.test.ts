@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { ViewerCountSystem } from '../../src/utils/viewer-count';
 import { TwitchViewerCountProvider } from '../../src/utils/viewer-count-providers';
@@ -29,10 +29,10 @@ afterEach(() => {
     pendingBoundary = undefined;
     expect(unresolved, 'viewer-count test left an asynchronous boundary pending').toBeUndefined();
 });
-// Flush the real in-process event bus and observer continuations without advancing polling time.
-async function drainEvents() {
-    pendingBoundary = 'event-loop-drain';
-    await new Promise<void>(resolve => setImmediate(resolve));
+// Join promises returned by the real owners, including pollPlatform's finally.
+async function joinOperations(operations: Promise<unknown>[]) {
+    pendingBoundary = 'operation-completion';
+    await Promise.all(operations);
     pendingBoundary = undefined;
 }
 
@@ -49,9 +49,15 @@ test('Twitch offline polling restores OBS after an online event was missed durin
     const store = new ViewerCountSystem({ platforms: { twitch: platform }, logger,
         config: { general: { viewerCountPollingIntervalMs: 60000 }, twitch: { enabled: true } } });
     const { texts } = observeCounts(store, 'twitch');
+    const polls = spyOn(store, 'pollPlatform'); // Observe return promises without replacing the implementation.
+    const joinPolls = () => joinOperations(polls.mock.results.map(result => {
+        if (result.type !== 'return') throw new Error('Viewer poll did not return its completion promise');
+        return result.value;
+    }));
     try {
         store.startPolling();
-        await drainEvents();
+        expect(polls).toHaveBeenCalledTimes(1);
+        await joinPolls();
         await store.updateStreamStatus('twitch', false);
         expect(store.pollingHandles.twitch).toBeDefined();
         expect(texts.at(-1)).toBe('0');
@@ -59,18 +65,19 @@ test('Twitch offline polling restores OBS after an online event was missed durin
         // The transport misses stream.online. Helix is now the only source of recovery.
         live = true;
         advanceTimersByTime(59999);
-        await drainEvents();
+        expect(polls).toHaveBeenCalledTimes(1);
         expect(requests).toBe(offlineRequests);
         advanceTimersByTime(1);
-        await drainEvents();
+        expect(polls).toHaveBeenCalledTimes(2);
+        await joinPolls();
         expect(requests).toBe(offlineRequests + 1);
         expect(store.getViewerCountSnapshot('twitch')).toMatchObject({ count: 23, latestOutcome: 'complete' });
         expect(texts.at(-1)).toBe('23');
         store.stopPolling();
         advanceTimersByTime(60000);
-        await drainEvents();
+        expect(polls).toHaveBeenCalledTimes(2);
         expect(requests).toBe(offlineRequests + 1);
-    } finally { pendingBoundary = 'store-cleanup'; await store.cleanup();
+    } finally { polls.mockRestore(); pendingBoundary = 'store-cleanup'; await store.cleanup();
         pendingBoundary = 'platform-cleanup'; await platform.cleanup();
         pendingBoundary = undefined; useRealTimers(); }
 });
@@ -89,10 +96,22 @@ for (const invalid of ['count', 'timestamp'] as const) {
         platform.connectionActive = true;
         const store = new ViewerCountSystem({ platforms: { tiktok: platform }, logger,
             config: { general: { viewerCountPollingIntervalMs: 60000 } } });
+        // Ingress reaches these adapters synchronously; retain the real store-operation promises.
+        const updates: Promise<unknown>[] = [];
         const router = new PlatformEventRouter({ eventBus: bus, runtime: {
-            updateViewerCount: (name, count) => store.updateViewerCount(name, count)
+            updateViewerCount: (name, count) => {
+                const update = store.updateViewerCount(name, count);
+                updates.push(update);
+                return update;
+            }
         }, config: {}, notificationManager: {}, logger });
-        const unbind = wireStreamStatusHandlers({ eventBus: bus, viewerCountSystem: store, logger });
+        const unbind = wireStreamStatusHandlers({ eventBus: bus, viewerCountSystem: {
+            updateStreamStatus: (...args) => {
+                const update = store.updateStreamStatus(...args);
+                updates.push(update);
+                return update;
+            }
+        }, logger });
         const { texts } = observeCounts(store, 'tiktok');
         const statusEvents: unknown[] = [];
         const unsubscribeStatus = bus.subscribe('platform:event', event => {
@@ -104,19 +123,19 @@ for (const invalid of ['count', 'timestamp'] as const) {
         try {
             platform.setupEventListeners();
             connection.emit(platform.WebcastEvent.ROOM_USER, valid);
-            await drainEvents();
+            await joinOperations(updates.splice(0));
             expect(texts.at(-1)).toBe('17');
             const complete = store.getViewerCountSnapshot('tiktok');
             setSystemTime(new Date('2026-01-03T00:00:00.000Z'));
             connection.emit(platform.WebcastEvent.ROOM_USER, invalid === 'count'
                 ? { ...valid, viewerCount: null } : { viewerCount: 25 });
-            await drainEvents();
+            await joinOperations(updates.splice(0));
             expect(store.getViewerCountSnapshot('tiktok')).toEqual({ ...complete, latestOutcome: 'unavailable' });
             expect(texts.at(-1)).toBe('—');
             expect(statusEvents).toEqual([{ isLive: true, status: 'unavailable',
                 timestamp: '2026-01-03T00:00:00.000Z' }]);
             connection.emit(platform.WebcastEvent.ROOM_USER, { ...valid, viewerCount: 0 });
-            await drainEvents();
+            await joinOperations(updates.splice(0));
             expect(store.getViewerCountSnapshot('tiktok')).toMatchObject({ count: 0, latestOutcome: 'complete' });
             expect(texts.at(-1)).toBe('0');
             expect(store.getViewerCountSnapshot('tiktok').lastCompleteAt).toBe(Date.parse('2026-01-03T00:00:00.000Z'));
@@ -128,7 +147,7 @@ for (const invalid of ['count', 'timestamp'] as const) {
             const writes = texts.length;
             await retired(invalid === 'count' ? { ...valid, viewerCount: null } : { viewerCount: 25 });
             await retired({ ...valid, viewerCount: 99 });
-            await drainEvents();
+            await joinOperations(updates.splice(0));
             expect(store.getViewerCountSnapshot('tiktok')).toEqual(recovered);
             expect(texts).toHaveLength(writes);
             expect(statusEvents).toHaveLength(1);
