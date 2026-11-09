@@ -89,5 +89,8 @@
     "ws": "^8.22.0",
     "yauzl": "3.4.0",
     "youtubei.js": "18.3.0"
+  },
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }
