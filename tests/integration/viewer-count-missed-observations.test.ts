@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { ViewerCountSystem } from '../../src/utils/viewer-count';
 import { TwitchViewerCountProvider } from '../../src/utils/viewer-count-providers';
@@ -22,9 +22,18 @@ function observeCounts(store: ViewerCountSystem, platform: string) {
     return { texts, observer };
 }
 
+let pendingBoundary: string | undefined;
+afterEach(() => {
+    // A native test timeout omits its await site; expose only a fixed category.
+    const unresolved = pendingBoundary;
+    pendingBoundary = undefined;
+    expect(unresolved, 'viewer-count test left an asynchronous boundary pending').toBeUndefined();
+});
 // Flush the real in-process event bus and observer continuations without advancing polling time.
 async function drainEvents() {
+    pendingBoundary = 'event-loop-drain';
     await new Promise<void>(resolve => setImmediate(resolve));
+    pendingBoundary = undefined;
 }
 
 test('Twitch offline polling restores OBS after an online event was missed during disconnection', async () => {
@@ -61,7 +70,9 @@ test('Twitch offline polling restores OBS after an online event was missed durin
         advanceTimersByTime(60000);
         await drainEvents();
         expect(requests).toBe(offlineRequests + 1);
-    } finally { await store.cleanup(); await platform.cleanup(); useRealTimers(); }
+    } finally { pendingBoundary = 'store-cleanup'; await store.cleanup();
+        pendingBoundary = 'platform-cleanup'; await platform.cleanup();
+        pendingBoundary = undefined; useRealTimers(); }
 });
 
 for (const invalid of ['count', 'timestamp'] as const) {
@@ -121,8 +132,10 @@ for (const invalid of ['count', 'timestamp'] as const) {
             expect(store.getViewerCountSnapshot('tiktok')).toEqual(recovered);
             expect(texts).toHaveLength(writes);
             expect(statusEvents).toHaveLength(1);
-        } finally { unsubscribeStatus(); unbind(); router.dispose(); await store.cleanup(); await platform.cleanup();
-            lifecycle.dispose(); bus.removeAllListeners(); useRealTimers(); }
+        } finally { unsubscribeStatus(); unbind(); router.dispose();
+            pendingBoundary = 'store-cleanup'; await store.cleanup();
+            pendingBoundary = 'platform-cleanup'; await platform.cleanup();
+            pendingBoundary = undefined; lifecycle.dispose(); bus.removeAllListeners(); useRealTimers(); }
     });
 }
 
