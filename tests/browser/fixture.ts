@@ -1,6 +1,8 @@
 import './runtime';
 import { test as base, expect } from '@playwright/test';
 import { createServer, type ServerResponse } from 'node:http';
+import { connect, type Socket } from 'node:net';
+import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -51,19 +53,39 @@ async function createBackend(assetsRoot: string, root: string) {
       assetsRoot, runtimeAssetRoots: [root], logger, eventBus: bus,
       operatorControls: controls, operatorAppearance: appearance,
       operatorLogs: logs,
-      createServer: listener => createServer((req, res) => {
-        if (req.url === '/api/v1/logs/events') {
-          logCursors.push(String(req.headers['last-event-id'] ?? ''));
-          logStreams.add(res);
-          res.once('close', () => logStreams.delete(res));
-        }
-        if (req.url === '/gui/events') {
-          if (disconnected) { res.writeHead(503).end(); return; }
-          streams.add(res);
-          res.once('close', () => streams.delete(res));
-        }
-        listener(req, res);
-      }),
+      createServer: listener => {
+        // Browsers may preconnect without sending an HTTP request. Node's
+        // graceful HTTP close does not retire these sockets.
+        const unused = new Set<Socket>();
+        let closing = false;
+        const server = createServer((req, res) => {
+          unused.delete(req.socket);
+          if (req.url === '/api/v1/logs/events') {
+            logCursors.push(String(req.headers['last-event-id'] ?? ''));
+            logStreams.add(res);
+            res.once('close', () => logStreams.delete(res));
+          }
+          if (req.url === '/gui/events') {
+            if (disconnected) { res.writeHead(503).end(); return; }
+            streams.add(res);
+            res.once('close', () => streams.delete(res));
+          }
+          listener(req, res);
+        });
+        server.on('connection', socket => {
+          if (closing) { socket.destroy(); return; }
+          unused.add(socket);
+          socket.once('close', () => unused.delete(socket));
+        });
+        const close = server.close.bind(server);
+        server.close = ((callback?: (error?: Error) => void) => {
+          closing = true;
+          close(callback);
+          for (const socket of unused) socket.destroy();
+          return server;
+        }) as typeof server.close;
+        return server;
+      },
     });
   }
   async function start() {
@@ -77,6 +99,11 @@ async function createBackend(assetsRoot: string, root: string) {
   return {
     eventBus: bus,
     mediaRoot: root,
+    async preconnect() {
+      const socket = connect(port, '127.0.0.1');
+      await once(socket, 'connect');
+      return socket;
+    },
     get url() { return `http://127.0.0.1:${port}`; },
     get controls() { return controls; },
     get appearance() { return appearance; },

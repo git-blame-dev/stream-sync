@@ -179,3 +179,16 @@ test('operator distinguishes mixed config from explicit on/off and restores conf
   await expect(follow).toHaveJSProperty('indeterminate', true);
   await expect.poll(() => backend.controls.overriddenKeys).toEqual([]);
 });
+
+test('backend restart retires a speculative TCP connection before its first HTTP request', async ({ backend }) => {
+  const socket = await backend.preconnect();
+  let restarted = false;
+  const restarting = backend.restart().then(() => { restarted = true; });
+  try {
+    await expect.poll(() => restarted).toBe(true);
+    await expect.poll(() => socket.destroyed).toBe(true);
+  } finally {
+    socket.destroy();
+    await restarting;
+  }
+});
